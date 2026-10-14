@@ -33,7 +33,7 @@ def banner():
 def pretty(n):
     i = info(n); col = {"running": G, "PAUSED": Y, "stopped": D}[i["st"]]
     extra = f"  {RED}{i['status'][:60]}{R}" if i["status"] else ""
-    return f"{B}{n}{R}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
+    return f"{B}{n}{R}{' [RE]' if 'MODE="re"' in rd(i['s']+'/project.env', 2000) else ''}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
 
 def attach(n):
     i = info(n); logf = f"{i['s']}/loop.log"
@@ -93,10 +93,11 @@ def new_project():
     banner(); print(f"{B}New project{R}\n")
     n = ask("name (short, no spaces):").replace(" ", "-")
     if not n: return
-    wd = ask("path to the code folder:", os.getcwd())
+    wd = ask("path to the code folder (for reverse engineering: a folder for the findings):", os.getcwd())
+    re_mode = ask("Reverse-engineering project using REA? (y/N)", "n").lower().startswith("y")
     sh("setup", stdout=subprocess.DEVNULL)
     print(f"\n{G}Starting planning chat.{R} Answer its questions; when you approve the plan, exit the chat (ctrl+c or /exit).\n"); time.sleep(1.5)
-    sh("plan", n, os.path.expanduser(wd))
+    sh("plan", n, os.path.expanduser(wd), *(["--re"] if re_mode else []))
     if os.path.exists(f"{HOME}/projects/{n}") and info(n)["hasplan"]:
         if ask("Plan written. Start the autonomous loop now? (y/n)", "y").lower().startswith("y"):
             sh("start", n); attach(n); input("enter to continue")

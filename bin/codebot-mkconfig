@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Build config/opencode-re.json: base config + REA MCP server + agent 'codebot-re' that only sees whitelisted rea tools."""
+import json, os, re, shutil, subprocess, sys
+HOME = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+cfgd = f"{HOME}/config"
+rea = shutil.which("rea") or sys.exit("rea CLI not found on PATH (install: npm i -g rea-agents)")
+allf = f"{cfgd}/rea-tools-all.txt"
+
+def list_tools():
+    p = subprocess.Popen([rea, "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    send = lambda m: (p.stdin.write(json.dumps(m) + "\n"), p.stdin.flush())
+    send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "codebot", "version": "1"}}})
+    p.stdout.readline(); send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    names = sorted(t["name"] for t in json.loads(p.stdout.readline())["result"]["tools"]); p.terminate(); return names
+
+if "--refresh" in sys.argv or not os.path.exists(allf):
+    open(allf, "w").write("\n".join(list_tools()) + "\n")
+alltools = open(allf).read().split()
+white = [re.sub(r"\s*#.*", "", l).strip() for l in open(f"{cfgd}/rea-tools.txt")]
+white = [w for w in white if w]
+unknown = [w for w in white if w not in alltools]
+if unknown: sys.exit(f"unknown REA tools in rea-tools.txt: {unknown}")
+
+c = json.load(open(f"{cfgd}/opencode.json"))
+c["mcp"] = {"rea": {"type": "local", "command": [rea, "mcp"], "enabled": True, "timeout": 60000}}
+base = c["agent"]["codebot"]
+tools = dict(base["tools"])
+for t in alltools:
+    tools[f"rea_{t}"] = t in white
+c["agent"] = {"codebot-re": {**base, "description": "Local reverse-engineering agent (REA)", "tools": tools,
+    "prompt": base["prompt"] + " For reverse-engineering tasks use the rea_* tools and the rea CLI; base every claim on evidence you retrieved."}}
+c["default_agent"] = "codebot-re"
+b = c["permission"]["bash"]
+# REA/adb commands that launch processes, change devices or alter REA/system config: static analysis only by default
+for pat in ["rea capture*", "rea observe*", "rea setup*", "rea update*", "rea uninstall*", "adb *", "gdb *", "lldb *", "strace *", "ltrace *"]:
+    b[pat] = "deny"
+json.dump(c, open(f"{cfgd}/opencode-re.json", "w"), indent=2)
+print(f"wrote config/opencode-re.json: {len(white)} of {len(alltools)} rea tools enabled ({', '.join(white)})")

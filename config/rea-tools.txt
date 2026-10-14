@@ -1,0 +1,12 @@
+# REA MCP tools exposed to reverse-engineering projects (one per line, without the rea_ prefix).
+# Every tool costs context tokens (shown in ~tokens). The full set is 170 tools / ~530k tokens, far too big for a 32k window.
+# Anything not listed here is still reachable through the `rea` CLI (bash) with --token-limit paging.
+# After editing, run: codebot re-config
+open_binary                 # ~900  active-target session for native/archive workflows
+close_binary                # ~600
+binary_overview             # ~1600 format, segments, procedure counts
+search_procedures           # ~1700 find functions by name/regex
+procedure_pseudo_code       # ~1600 decompile one function
+procedure_callers           # ~1600
+procedure_callees           # ~1600
+search_strings              # ~2100 find strings, then use xrefs/callers to locate users

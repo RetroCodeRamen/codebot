@@ -13,10 +13,26 @@ export OPENCODE_CONFIG="$CODEBOT_HOME/config/opencode.json"
 THINK="${THINK:-on}"; [[ "$THINK" == off ]] && THINK_VARIANT=nothink || THINK_VARIANT=""
 mkdir -p "$CODEBOT_HOME/logs" "$CODEBOT_HOME/projects"
 
+# per-project mode: code (default) or re (reverse engineering with REA)
+oc_setup() { # sets OC_CONFIG / OC_AGENT for the current project ($MODE from project.env)
+  if [[ "${MODE:-code}" == re ]]; then
+    command -v rea >/dev/null || die "rea CLI not found (npm i -g rea-agents)"
+    if [[ ! -f "$CODEBOT_HOME/config/opencode-re.json" || "$CODEBOT_HOME/config/rea-tools.txt" -nt "$CODEBOT_HOME/config/opencode-re.json" \
+          || "$CODEBOT_HOME/config/opencode.json" -nt "$CODEBOT_HOME/config/opencode-re.json" ]]; then
+      "$CODEBOT_HOME/bin/codebot-mkconfig" >/dev/null || die "could not build opencode-re.json"
+    fi
+    OC_CONFIG="$CODEBOT_HOME/config/opencode-re.json"; OC_AGENT=codebot-re
+  else OC_CONFIG="$CODEBOT_HOME/config/opencode.json"; OC_AGENT=codebot; fi
+}
+render_prompt() { # plan|work
+  local f="$CODEBOT_HOME/prompts/$1.md"
+  if [[ "${MODE:-code}" == re ]]; then render <(cat "$f" "$CODEBOT_HOME/prompts/re-$1.md"); else render "$f"; fi
+}
+
 die() { echo "codebot: $*" >&2; exit 1; }
 sdir() { echo "$CODEBOT_HOME/projects/$1"; }
 need_proj() { [[ -n "${1:-}" && -d "$(sdir "$1")" ]] || die "unknown project '${1:-}' (see: codebot list)"; }
-load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; }
+load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; MODE=code; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; oc_setup; }
 alive() { # pidfile; for loop.pid also confirm the pid is really a codebot loop (pid reuse after reboot)
   [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null || return 1
   [[ "$1" != *loop.pid ]] || tr '\0' ' ' < "/proc/$(cat "$1")/cmdline" 2>/dev/null | grep -q '__loop'; }
@@ -85,14 +101,17 @@ tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md
 cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
 
 cmd_plan() {
-  local name="${1:-}"; [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir]"
+  local name="" wd_arg="" re=0 a
+  for a in "$@"; do case "$a" in --re) re=1;; *) if [[ -z "$name" ]]; then name="$a"; else wd_arg="$a"; fi;; esac; done
+  [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir] [--re]"
   S="$(sdir "$name")"; NAME="$name"
   if [[ ! -d "$S" ]]; then
-    local wd; wd="$(readlink -f "${2:-$PWD}")"; [[ -d "$wd" ]] || die "no such dir: $wd"
+    local wd; wd="$(readlink -f "${wd_arg:-$PWD}")"; [[ -d "$wd" ]] || die "no such dir: $wd"
     mkdir -p "$S"; echo "WORKDIR=\"$wd\"" > "$S/project.env"; touch "$S/PROGRESS.md" "$S/ANSWERS.md"
   fi
-  source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; ensure_ollama
-  cd "$RUNDIR" && exec "$OPENCODE_BIN" --agent codebot --prompt "$(render "$CODEBOT_HOME/prompts/plan.md")" "$RUNDIR"
+  (( re )) && ! grep -q '^MODE=' "$S/project.env" && echo 'MODE="re"' >> "$S/project.env"
+  load_proj "$name"; ensure_ollama
+  cd "$RUNDIR" && exec env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" --agent "$OC_AGENT" --prompt "$(render_prompt plan)" "$RUNDIR"
 }
 
 cmd_start() {
@@ -101,6 +120,9 @@ cmd_start() {
   alive "$S/loop.pid" && die "$NAME is already running"
   [[ "${2:-}" == --keep ]] || rm -f "$S/PAUSE" "$S/STATUS"
   touch "$S/.active"
+  if [[ "${2:-}" != --keep || ! -f "$S/env.snap" ]]; then # remember the launching shell's environment (JAVA_HOME, GHIDRA_INSTALL_DIR, PATH...) for the loop
+    ( umask 077; export -p | grep -vE '^declare -[a-zA-Z-]+ (INVOCATION_ID|JOURNAL_STREAM|SYSTEMD_EXEC_PID|MANAGERPID|MAINPID|LISTEN_[A-Z]+|NOTIFY_SOCKET|SHLVL|OLDPWD|PWD|_|BASHOPTS|SHELLOPTS|BASH_[A-Z_]+|PPID|UID|EUID|TERM_PROGRAM_VERSION)=' > "$S/env.snap" )
+  fi
   [[ -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
   if [[ ! -f "$S/.git-prepped" ]]; then
@@ -139,7 +161,9 @@ verify_gate() { # 0 = ok / no verify script
   local v; v="$(verify_script)"; [[ -n "$v" ]] || return 0
   local out; out="$(cd "$RUNDIR" && timeout 900 bash "$v" 2>&1)"; local rc=$?
   (( rc == 0 )) && return 0
-  VERIFY_OUT="$(printf '%s' "$out" | tail -c 1500)"; return 1
+  VERIFY_OUT="$(printf '%s' "$out" | tail -c 1200)"
+  [[ -n "${VERIFY_OUT//[[:space:]]/}" ]] || VERIFY_OUT="verify.sh printed nothing and exited $rc. It checks the following; make every check true: $(grep -v '^#' "$v" | head -c 700)"
+  return 1
 }
 
 tidy_memory() { # condense lessons.md with the model; restore on any sanity failure
@@ -155,6 +179,7 @@ tidy_memory() { # condense lessons.md with the model; restore on any sanity fail
 }
 
 cmd___loop() {
+  S="$(sdir "$1")"; [[ -f "$S/env.snap" ]] && source <(sed "s/^declare -x /declare -gx /" "$S/env.snap") 2>/dev/null
   load_proj "$1"; local iter stall=0 verify_fails=0 t0=$SECONDS notified_block=0 pid; finished=0
   iter=$(cat "$S/iter.count" 2>/dev/null || echo 0)
   [[ -f "$S/started.at" ]] || date +%s > "$S/started.at"
@@ -191,8 +216,8 @@ Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or:
     if (( $(wc -c < "$CODEBOT_HOME/memory/lessons.md") > LESSONS_MAX )); then echo "(condensing lessons.md)"; tidy_memory >> "$S/loop.log" 2>&1; fi
     iter=$((iter+1)); echo "$iter" > "$S/iter.count"; local before after; before="$(state_hash)"
     echo "=== iteration $iter $(date '+%F %T') | tasks left: $(tasks_left) ==="
-    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout "$ITER_TIMEOUT" "$OPENCODE_BIN" run --auto --thinking ${THINK_VARIANT:+--variant "$THINK_VARIANT"} --agent codebot --dir "$RUNDIR" --title "$NAME #$iter" \
-      "$(render "$CODEBOT_HOME/prompts/work.md")" >> "$S/loop.log" 2>&1 < /dev/null &
+    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout "$ITER_TIMEOUT" env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" run --auto --thinking ${THINK_VARIANT:+--variant "$THINK_VARIANT"} --agent "$OC_AGENT" --dir "$RUNDIR" --title "$NAME #$iter" \
+      "$(render_prompt work)" >> "$S/loop.log" 2>&1 < /dev/null &
     pid=$!; echo $pid > "$S/iter.pid"
     # small models sometimes keep rambling after finishing: once STATUS appears, give it 20s then end the iteration
     local seen=0
@@ -268,6 +293,7 @@ UNIT
   systemctl --user daemon-reload && systemctl --user enable codebot.service codebot.timer >/dev/null 2>&1 && systemctl --user start codebot.timer \
     && echo "installed: loops that die or survive a reboot are restarted (checked at login and every 5 min)"
 }
+cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
 cmd_tidy() { ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
@@ -279,11 +305,12 @@ case "$c" in
   setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
+  re-config) cmd_re_config;;
   install-service) cmd_install_service;;
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   *) cat <<USAGE
 codebot - local ralph-loop coding agent
-  plan <name> [workdir]   interactive planning session (writes PLAN.md)
+  plan <name> [workdir] [--re]   interactive planning session (--re = reverse-engineering project using REA)
   start <name>            run the autonomous loop in the background
   pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
   resume <name>           continue after pause
@@ -293,6 +320,7 @@ codebot - local ralph-loop coding agent
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
   tidy                    condense memory/lessons.md
+  re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         auto-restart active loops after reboot/login
   (phone) publish pause|resume|stop|status|<answer> to <ntfy topic>-reply
   setup | notify-test     start ollama / send test ntfy message
