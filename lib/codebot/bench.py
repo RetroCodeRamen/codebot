@@ -84,16 +84,18 @@ def summarize_turns(trace):
     if not turns: return {"turns": 0}
     gen = [e for e in turns if e.get("gtok") and e.get("gen_ms")]; pro = [e for e in turns if e.get("ptok") and e.get("prompt_ms")]
     first = [e for e in turns if e.get("n") == 1 and e.get("ptok") and e.get("est_prompt")]; later = [e for e in turns if (e.get("n") or 0) > 1 and e.get("ptok") and e.get("est_prompt")]
-    reuse = lambda es: round(statistics.mean(max(0.0, 1 - e["ptok"] / e["est_prompt"]) for e in es), 2) if es else None
+    cold = [e["ptok"] / (e["prompt_ms"] / 1000) for e in first if e.get("prompt_ms")]             # tokens/s of a cold prompt = the baseline for "what re-evaluating everything costs"
+    cold_tps = statistics.median(cold) if cold else None
+    reuse = lambda es: round(statistics.mean(max(0.0, 1 - e["prompt_ms"] / (e["ptok"] / cold_tps * 1000)) for e in es if e.get("prompt_ms") is not None), 2) if es and cold_tps else None
     return {"turns": len(turns), "ok": sum(1 for e in turns if e.get("kind") == "ok"), "malformed": sum(1 for e in turns if e.get("kind") == "malformed"),
-            "action_errors": sum(1 for e in turns if e.get("kind") == "action_error"),
+            "action_errors": sum(1 for e in turns if e.get("kind") == "action_error"), "truncated": sum(1 for e in turns if e.get("kind") == "truncated"),
             "schema_failure_rate": round(sum(1 for e in turns if e.get("kind") == "malformed") / len(turns), 3),
             "prompt_ms": _stat([e["prompt_ms"] for e in turns if e.get("prompt_ms") is not None]), "gen_ms": _stat([e["gen_ms"] for e in turns if e.get("gen_ms") is not None]),
             "load_ms_total": sum(e.get("load_ms") or 0 for e in turns), "wall_s": _stat([e["secs"] for e in turns if e.get("secs") is not None]),
             "gen_tok_per_s": round(statistics.mean(e["gtok"] / (e["gen_ms"] / 1000) for e in gen), 2) if gen else None,
             "prompt_tok_per_s": round(statistics.mean(e["ptok"] / (e["prompt_ms"] / 1000) for e in pro), 1) if pro else None,
             "evaluated_prompt_tokens": {"first_turn_mean": round(statistics.mean(e["ptok"] for e in first)) if first else None, "later_turn_mean": round(statistics.mean(e["ptok"] for e in later)) if later else None},
-            "cache_reuse_first_turn": reuse(first), "cache_reuse_later_turns": reuse(later),
+            "cold_prompt_tok_per_s": round(cold_tps, 1) if cold_tps else None, "cache_reuse_first_turn": reuse(first), "cache_reuse_later_turns": reuse(later),
             "max_est_prompt_tokens": max((e.get("est_prompt") or 0) for e in turns), "num_ctx": next((e["num_ctx"] for e in turns if e.get("num_ctx")), None),
             "truncated_contexts": sum(e.get("truncated", 0) for e in ends), "schema_fallbacks": sum(1 for e in trace if e.get("event") == "schema_fallback")}
 
@@ -132,8 +134,8 @@ def render_md(res, run, plan_info=None):
     if t.get("turns"):
         L += [f"- **Per turn** ({t['turns']} model turns): prompt processing mean {t['prompt_ms']['mean']} ms (p50 {t['prompt_ms']['p50']}, p95 {t['prompt_ms']['p95']}); generation mean {t['gen_ms']['mean']} ms (p50 {t['gen_ms']['p50']}, p95 {t['gen_ms']['p95']}); wall mean {t['wall_s']['mean']} s; model load total {t['load_ms_total']} ms.",
               f"- **Speed:** generation {t['gen_tok_per_s']} tok/s, prompt processing {t['prompt_tok_per_s']} tok/s (tokens actually evaluated).",
-              f"- **KV cache reuse:** first turn of an attempt {t['cache_reuse_first_turn']}, later turns {t['cache_reuse_later_turns']} (fraction of the prompt NOT re-evaluated; evaluated tokens first/later: {t['evaluated_prompt_tokens']}).",
-              f"- **Schema:** {t['malformed']} malformed of {t['turns']} replies ({int(100 * t['schema_failure_rate'])}% failure; the server-side grammar fallbacks: {t['schema_fallbacks']}); {t['action_errors']} valid-JSON actions refused by validation/policy.",
+              f"- **KV cache reuse:** first turn of an attempt {t['cache_reuse_first_turn']}, later turns {t['cache_reuse_later_turns']} (fraction of the prompt NOT re-evaluated, from prompt-processing time vs a cold {t['cold_prompt_tok_per_s']} tok/s; prompt tokens first/later: {t['evaluated_prompt_tokens']}).",
+              f"- **Schema:** {t['malformed']} malformed of {t['turns']} replies ({int(100 * t['schema_failure_rate'])}% failure; grammar fallbacks to the flat schema: {t['schema_fallbacks']}); {t['truncated']} replies cut off by the token limit; {t['action_errors']} valid-JSON actions refused by validation/policy.",
               f"- **Context:** largest prompt estimated {t['max_est_prompt_tokens']} tokens of {t['num_ctx']}; {t['truncated_contexts']} truncations."]
     g = r["guard"]; L += [f"- **Baseline guard:** {g['rejected_total']} checks rejected {g['by_actor'] or ''} {g['verdicts'] or ''} {g['details'] or ''}"]
     lad = r["ladder"]; L += [f"- **Ladder steps fired ({len(lad['escalations'])}):** " + ("; ".join(lad["escalations"]) or "none"), f"- **Blocked:** " + ("; ".join(f"{p['id']}: {p['blocked_question']}" for p in r["tasks"] if p["status"] == "blocked") or "none"),

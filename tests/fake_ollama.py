@@ -19,12 +19,16 @@ class FakeOllama:
                     self.send_response(400); self.end_headers(); self.wfile.write(b'{"error":"cannot compile schema"}'); return
                 s = outer.script
                 reply = s(body["messages"], body) if callable(s) else (s.pop(0) if s else {"why": "done", "action": "finish", "summary": "script exhausted"})
+                reason = "stop"
+                if isinstance(reply, tuple): reply, reason = reply                      # (text, "length") simulates a reply cut off by the token limit
                 content = reply if isinstance(reply, str) else json.dumps(reply)
-                n_prompt = 100
-                if outer.cache:      # evaluated tokens = the part of the prompt after the common prefix with the previous request
-                    text = "".join(m["content"] for m in body["messages"]); k = len(os.path.commonprefix([text, outer.last_text])); outer.last_text = text
-                    n_prompt = max(5, int((len(text) - k) / 3.0)) + 25
-                out = {"message": {"role": "assistant", "content": content}, "prompt_eval_count": n_prompt, "eval_count": 20, "prompt_eval_duration": 2_000_000_000, "eval_duration": 1_000_000_000, "load_duration": 0, "total_duration": 3_000_000_000, "done": True}
+                total, evaluated, dur = 100, 100, 2_000_000_000
+                if outer.cache:      # real semantics: prompt_eval_count = TOTAL prompt tokens; the duration reflects only what was really evaluated
+                    text = "".join(m["content"] for m in body["messages"]); total = max(5, int(len(text) / 3.0)) + 25
+                    if outer.cache == "hybrid": k = len(outer.last_text) if text.startswith(outer.last_text) else 0      # recurrent layers: only an append-only extension can reuse
+                    else: k = len(os.path.commonprefix([text, outer.last_text]))
+                    outer.last_text = text; evaluated = max(5, int((len(text) - k) / 3.0)) + 25; dur = evaluated * 40_000_000     # 25 tok/s
+                out = {"message": {"role": "assistant", "content": content}, "prompt_eval_count": total, "eval_count": 20, "prompt_eval_duration": dur, "eval_duration": 1_000_000_000, "load_duration": 0, "total_duration": 3_000_000_000, "done": True, "done_reason": reason}
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(out).encode())
         self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()

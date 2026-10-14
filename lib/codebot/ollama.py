@@ -29,7 +29,7 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
             st = {"prompt_tokens": out.get("prompt_eval_count", 0), "gen_tokens": out.get("eval_count", 0), "prompt_ms": ms("prompt_eval_duration"),
                   "gen_ms": ms("eval_duration"), "load_ms": ms("load_duration"), "total_ms": ms("total_duration")}
             audit.log(proj, "model_request", endpoint=base_url(proj).split("//")[1], model=body["model"], secs=round(time.time() - t0, 1), **st)
-            return {"content": msg.get("content", ""), "secs": round(time.time() - t0, 1), **st}
+            return {"content": msg.get("content", ""), "secs": round(time.time() - t0, 1), "done_reason": out.get("done_reason", ""), **st}
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:300]
             last = ModelError(f"HTTP {e.code}: {detail}")

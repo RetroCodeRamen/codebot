@@ -85,37 +85,49 @@ class TestPreflight(BenchHome):
     def status(self, items, frag): return next(s for n, s, d in items if frag in n)
 
     def test_all_pass_against_a_well_behaved_server(self):
-        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS()); items = self.run_pf(fake)
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
         self.assertFalse([i for i in items if i[1] == "FAIL"], items)
-        self.assertEqual(self.status(items, "KV cache"), "PASS"); self.assertEqual(self.status(items, "grammar"), "PASS")
-        r = json.load(open(os.path.join(self.home, "logs", "tokenizer_ratio.json"))); self.assertGreater(r["chars_per_token"], 1.5)
+        self.assertEqual(self.status(items, "KV cache reused across turns"), "PASS"); self.assertEqual(self.status(items, "grammar"), "PASS")
+        self.assertEqual(self.status(items, "(info) same prefix"), "WARN")                      # a hybrid model cannot reuse a prefix that diverges early; reported, not failed
+        self.assertIn("NOT re-evaluated", next(d for n, s_, d in items if "KV cache reused" in n))
+        r = json.load(open(os.path.join(self.home, "logs", "tokenizer_ratio.json"))); self.assertGreater(r["chars_per_token"], 1.5); self.assertGreater(r["cold_prompt_tps"], 10)
         self.assertIn("PREFLIGHT OK", preflight.render(items))
 
     def test_fails_when_the_server_ignores_the_schema(self):
-        fake = FakeOllama(lambda m, b: "Sure! The ocean is vast and blue.", cache=True, ps=self.GOOD_PS()); items = self.run_pf(fake)
+        fake = FakeOllama(lambda m, b: "Sure! The ocean is vast and blue.", cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
         self.assertEqual(self.status(items, "grammar"), "FAIL"); self.assertIn("PREFLIGHT FAILED", preflight.render(items))
 
     def test_fails_when_the_cache_is_not_reused(self):
         fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=False, ps=self.GOOD_PS()); items = self.run_pf(fake)
-        self.assertEqual(self.status(items, "KV cache"), "FAIL")
+        self.assertEqual(self.status(items, "KV cache reused across turns"), "FAIL")
+    def test_prefix_caching_servers_pass_the_info_check_too(self):
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="prefix", ps=self.GOOD_PS()); items = self.run_pf(fake)
+        self.assertEqual(self.status(items, "(info) same prefix"), "PASS")
+    def test_a_reply_cut_off_by_the_token_limit_is_not_a_schema_failure(self):
+        cut = ('{\n  "why": "The ocean is vast and', "length")
+        fake = FakeOllama(lambda m, b: cut if "ocean" in m[-1]["content"] else A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
+        g = next((s_, d) for n, s_, d in items if "grammar" in n); self.assertEqual(g[0], "PASS"); self.assertIn("cut off", g[1])
+    def test_prose_that_merely_stops_is_a_schema_failure(self):
+        fake = FakeOllama(lambda m, b: ("Lovely ocean prose with no JSON at all", "stop"), cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
+        self.assertEqual(self.status(items, "grammar"), "FAIL")
 
     def test_fails_when_the_server_runs_a_different_context(self):
-        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS(ctx=4096)); items = self.run_pf(fake)
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(ctx=4096)); items = self.run_pf(fake)
         self.assertEqual(self.status(items, "configured context"), "FAIL")
 
     def test_keep_alive_check_is_timezone_safe(self):
         for tz in (-4, 0, 5):
-            fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS(mins=29, tz=tz)); items = self.run_pf(fake)
+            fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(mins=29, tz=tz)); items = self.run_pf(fake)
             self.assertEqual(self.status(items, "stays loaded"), "PASS", tz); fake.stop(); self.fake = None
-            fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS(mins=2, tz=tz)); items = self.run_pf(fake)
+            fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(mins=2, tz=tz)); items = self.run_pf(fake)
             self.assertEqual(self.status(items, "stays loaded"), "FAIL", tz); fake.stop(); self.fake = None
     def test_fails_when_the_model_will_unload_soon(self):
-        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS(mins=2)); items = self.run_pf(fake)
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(mins=2)); items = self.run_pf(fake)
         self.assertEqual(self.status(items, "stays loaded"), "FAIL")
 
     def test_fails_when_configs_disagree(self):
         with open(os.path.join(self.home, "config", "Modelfile"), "w") as f: f.write("FROM x\nPARAMETER num_ctx 8192\n")
-        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache=True, ps=self.GOOD_PS()); items = self.run_pf(fake)
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
         self.assertEqual(self.status(items, "num_ctx explicit"), "FAIL")
 
     def test_unreachable_server(self):
@@ -132,14 +144,15 @@ class TestPreflight(BenchHome):
 
 class TestTurnStats(unittest.TestCase):
     def turn(self, **kw): return {"event": "turn", "task": "T1", "n": 1, "kind": "ok", "ptok": 1000, "gtok": 50, "prompt_ms": 40000, "gen_ms": 10000, "load_ms": 0, "secs": 50, "est_prompt": 1100, "num_ctx": 32768, **kw}
+    # real server semantics: ptok is the TOTAL prompt size; prompt_ms shows what was really evaluated (a cold turn evaluates ~25 tok/s)
     def test_aggregation(self):
-        tr = [self.turn(), self.turn(n=2, ptok=60, prompt_ms=2000, est_prompt=1300), self.turn(n=3, kind="malformed", ptok=70, est_prompt=1400), self.turn(n=4, kind="action_error", ptok=70, est_prompt=1500),
+        tr = [self.turn(), self.turn(n=2, ptok=1100, prompt_ms=2000, est_prompt=1300), self.turn(n=3, kind="malformed", ptok=1150, prompt_ms=1500, est_prompt=1400), self.turn(n=4, kind="action_error", ptok=1200, prompt_ms=1000, est_prompt=1500), self.turn(n=5, kind="truncated", ptok=1250, prompt_ms=900, est_prompt=1500),
               {"event": "attempt_end", "truncated": 1}, {"event": "schema_fallback"}]
         s = bench.summarize_turns(tr)
-        self.assertEqual((s["turns"], s["ok"], s["malformed"], s["action_errors"]), (4, 2, 1, 1)); self.assertEqual(s["schema_failure_rate"], 0.25)
-        self.assertEqual(s["prompt_ms"]["p50"], 40000); self.assertEqual(s["gen_ms"]["mean"], 10000); self.assertEqual(s["gen_tok_per_s"], 5.0)
+        self.assertEqual((s["turns"], s["ok"], s["malformed"], s["action_errors"], s["truncated"]), (5, 2, 1, 1, 1)); self.assertEqual(s["schema_failure_rate"], 0.2)
+        self.assertEqual(s["prompt_ms"]["p50"], 1500); self.assertEqual(s["prompt_ms"]["p95"], 40000); self.assertEqual(s["gen_ms"]["mean"], 10000); self.assertEqual(s["gen_tok_per_s"], 5.0)
         self.assertEqual((s["truncated_contexts"], s["schema_fallbacks"], s["max_est_prompt_tokens"]), (1, 1, 1500))
-        self.assertGreater(s["cache_reuse_later_turns"], 0.9); self.assertLess(s["cache_reuse_first_turn"], 0.2)
+        self.assertEqual(s["cold_prompt_tok_per_s"], 25.0); self.assertEqual(s["cache_reuse_first_turn"], 0.0); self.assertGreater(s["cache_reuse_later_turns"], 0.9)
     def test_no_turns(self): self.assertEqual(bench.summarize_turns([]), {"turns": 0})
 
 class TestCollectFromANativeRun(BenchHome):

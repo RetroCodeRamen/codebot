@@ -217,8 +217,13 @@ def run_attempt(proj, task, attempt, last_error, variant="", model=None, tempera
         try:
             a = json.loads(raw); validate_shape(a)
         except (ValueError, ActionError) as e:
-            bad += 1; kind = "malformed"; stats["malformed"] += 1
-            result = f"Your reply was rejected: {e}. Reply with exactly one JSON action object."
+            if resp.get("done_reason") == "length":      # structurally valid so far, but it hit the token limit: a size problem, not a format problem
+                bad += 1; kind = "truncated"; stats["truncated_replies"] = stats.get("truncated_replies", 0) + 1; a = None
+                result = (f"Your reply was CUT OFF at the {num_predict}-token limit, so nothing was applied. Do less per step: write a file in smaller parts "
+                          f"(a short write_file, then several edit_file calls) and keep every string short.")
+            else:
+                bad += 1; kind = "malformed"; stats["malformed"] += 1
+                result = f"Your reply was rejected: {e}. Reply with exactly one JSON action object."
         else:
             key = json.dumps({k: v for k, v in a.items() if k != "why"}, sort_keys=True)
             recent = (recent + [key])[-5:]
@@ -232,7 +237,7 @@ def run_attempt(proj, task, attempt, last_error, variant="", model=None, tempera
                      "result": result[:160], "ptok": resp["prompt_tokens"], "gtok": resp["gen_tokens"], "prompt_ms": resp["prompt_ms"], "gen_ms": resp["gen_ms"],
                      "load_ms": resp["load_ms"], "secs": resp["secs"], "est_prompt": est, "num_ctx": n_ctx})
         if ended == "stuck repeating the same action": break
-        if kind == "malformed" and bad >= 3: ended = "too many malformed replies"; break
+        if kind in ("malformed", "truncated") and bad >= 3: ended = "too many malformed replies" if kind == "malformed" else "too many cut-off replies"; break
         messages.append({"role": "assistant", "content": raw}); messages.append({"role": "user", "content": "RESULT:\n" + result[:3000]})
         if ctx.finished: ended = "finished"; break
         if est_tokens(proj, messages) > ctx_cap: messages = compact(messages)

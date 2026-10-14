@@ -59,6 +59,14 @@ class TestValidation(Base):
     def test_three_malformed_replies_abort(self):
         out = self.attempt(["x", "{", "[]"]); self.assertEqual(out["ended"], "too many malformed replies"); self.assertIsNone(self.file("a.py"))
 
+    def test_a_reply_cut_off_by_the_token_limit_is_its_own_kind_and_tells_the_model_what_to_do(self):
+        cut = ('{"why": "write it", "action": "write_file", "path": "a.py", "content": "def add(a, b):\\n    return a +', "length")
+        self.attempt([cut, A("write_file", path="a.py", content=ADD), A("finish", summary="s")])
+        self.assertEqual(self.file("a.py"), ADD); self.assertTrue(any("CUT OFF" in r and "smaller parts" in r for r in self.results()))
+        ends = [json.loads(l) for l in open(os.path.join(self.state, "trace.jsonl")) if '"attempt_end"' in l]; self.assertEqual(ends[-1]["truncated_replies"], 1); self.assertEqual(ends[-1]["malformed"], 0)
+    def test_repeated_cut_offs_end_the_attempt(self):
+        out = self.attempt([('{"why": "x", "action": "write_file", "path": "a.py", "content": "abc', "length")] * 3); self.assertEqual(out["ended"], "too many cut-off replies")
+
     def test_missing_field_is_rejected(self):
         self.attempt([{"why": "x", "action": "write_file", "path": "a.py"}, A("finish", summary="s")])
         self.assertIsNone(self.file("a.py")); self.assertTrue(any("missing: content" in r for r in self.results()))
