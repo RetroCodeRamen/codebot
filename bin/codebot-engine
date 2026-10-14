@@ -7,8 +7,8 @@ from codebot import engine, tasks as T
 
 def main():
     ap = argparse.ArgumentParser(prog="codebot-engine")
-    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit", "mode-info", "prompt-template", "modes"])
-    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--quick", action="store_true"); ap.add_argument("--json", action="store_true")
+    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit", "mode-info", "prompt-template", "modes", "report"])
+    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--quick", action="store_true"); ap.add_argument("--json", action="store_true"); ap.add_argument("--short", action="store_true"); ap.add_argument("--write", action="store_true")
     ap.add_argument("--home"); ap.add_argument("--fresh", action="store_true")
     a = ap.parse_intermixed_args()
     if a.cmd == "modes":
@@ -28,6 +28,14 @@ def main():
     elif a.cmd == "plan-op":
         from codebot import planops
         print(json.dumps(planops.apply(proj, json.loads(a.op_json), a.actor)))
+    elif a.cmd == "report":
+        from codebot import report
+        r = report.build(proj)
+        if r is None: print(f"{proj.name} is not an engine project (no tasks.json): freeze it to get reports", file=sys.stderr); sys.exit(2)
+        if a.write: print(report.write(proj, r))
+        elif a.json: print(json.dumps(r))
+        elif a.short: print(report.short(r))
+        else: print(report.markdown(r))
     elif a.cmd == "mode-info":
         from codebot import modes
         try: m = modes.load(proj.home, proj.mode); print(json.dumps({k: v for k, v in m.items() if k != "chain"}))

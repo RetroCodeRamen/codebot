@@ -200,7 +200,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | I | F9 evidence-backed memory | **done** (14 tests) |
 | J | F10 sandbox and audit | **done** (21 tests incl. 9 against real Docker) |
 | K | F11 modes | todo |
-| L | F12 morning report | todo |
+| L | F12 morning report | **done** (12 tests + supervisor push test) |
 | M | Grill-me live test | blocked on RE test finishing (model busy) |
 
 ## Notes and learnings (updated as work proceeds)
@@ -319,3 +319,12 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   is for. `codebot-ui` now lists modes from the folder and asks for target paths when the mode wants them.
   Not done: the legacy opencode path still builds its REA MCP config with `bin/codebot-mkconfig` (named in re/mode.json, so it is data, but
   the builder itself is REA-specific); a new MCP-based mode would need its own builder script.
+- L: `report.py`. Built only from the harness's own records: tasks.json (done / blocked with the exact question / waiting on which
+  blocker), attempts.jsonl (attempts, rungs, tamper and interrupted events, check + worker time; `worker_secs` is now recorded),
+  plan.log (escalations, model replans accepted vs refused and why, weak checks), checkpoints + git (per-task commits scored for review:
+  files outside the task's `files:` hint, build/config/script files, mostly-deletion and large diffs, binary/mode-only changes), the
+  lessons store (added / pruned since the run started), and the audit report (chain, sandbox, warnings). `codebot report <name>` prints
+  markdown (`--short`, `--json`, `--send`); `--write` saves `projects/<name>/report-<date>-<HHMM>.md`. The supervisor sends it once when
+  the run first goes idle waiting on you, and again at COMPLETE or a budget stop, via the existing notify path (so NTFY_ENABLED=0 silences
+  it and the file is still written). The push text leads with `N/M tasks verified`, then blocked questions, the first thing to review,
+  and the safety line, capped at 1200 chars. Legacy (non-frozen) projects return a clear message instead of a report.

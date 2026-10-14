@@ -72,7 +72,7 @@ def project_menu(n):
     while True:
         banner(); print(pretty(n)); line(); i = info(n)
         print(f" {B}e{R} edit/re-run planning chat   {B}g{R} go (start loop + watch)   {B}w{R} watch live   {B}p{R} pause/resume\n"
-              f" {B}a{R} answer a question   {B}x{R} stop   {B}l{R} full log   {B}b{R} back")
+              f" {B}a{R} answer a question   {B}x{R} stop   {B}l{R} full log   {B}r{R} morning report   {B}u{R} audit (offline proof)   {B}b{R} back")
         k = ask("›").lower()
         if k == "b": return
         elif k == "e": sh("plan", n)
@@ -88,6 +88,8 @@ def project_menu(n):
             if a: sh("answer", n, a)
         elif k == "x": sh("stop", n); time.sleep(1)
         elif k == "l": os.system(f"less +G -R '{i['s']}/loop.log'")
+        elif k == "r": sh("report", n); input("enter to continue")
+        elif k == "u": sh("audit", n, "--probe"); input("enter to continue")
 
 def new_project():
     banner(); print(f"{B}New project{R}\n")

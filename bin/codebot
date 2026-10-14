@@ -205,6 +205,13 @@ has_blocked() { # engine projects keep blocked tasks in tasks.json; legacy proje
   else [[ -s "$S/STATUS" ]] && head -c 7 "$S/STATUS" | grep -q BLOCKED; fi
 }
 
+send_report() { # morning report: saved as projects/<name>/report-*.md, summary pushed through notify
+  local path; path="$(eng report --write 2>/dev/null)" || return 0
+  notify "codebot: $NAME morning report" "$(eng report --short 2>/dev/null)
+
+Full report: $path" default memo
+}
+
 # supervisor for projects frozen with per-task checks: the harness (not the model) decides what happens next
 loop_engine() {
   local ev kind pid out="$S/.step.out" blocked_seen="" idle_note="" vfails=0 idle="${IDLE_POLL:-15}"
@@ -233,7 +240,7 @@ loop_engine() {
 (The run continues with other tasks. You can also answer from your phone via $NTFY_TOPIC-reply, e.g. \"$tid: your guidance\")" urgent sos 1; fi ;;
       done_with_blocked|stalled)
         if [[ "$idle_note" != "$(jq -c .counts <<< "$ev")" ]]; then idle_note="$(jq -c .counts <<< "$ev")"
-          notify "codebot: $NAME waiting on you" "Everything it can do is done. $(jq -r '.counts.blocked' <<< "$ev") blocked task(s) need an answer: codebot answer $NAME \"T#: guidance\"" high hourglass 1; fi
+          notify "codebot: $NAME waiting on you" "Everything it can do is done. $(jq -r '.counts.blocked' <<< "$ev") blocked task(s) need an answer: codebot answer $NAME \"T#: guidance\"" high hourglass 1; send_report; fi
         phone_tick; sleep "$idle" ;;
       all_done)
         if ! verify_gate; then
@@ -249,9 +256,9 @@ loop_engine() {
         fi
         local mins=$(( ($(date +%s) - $(cat "$S/started.at" 2>/dev/null || date +%s)) / 60 ))
         notify "codebot: $NAME COMPLETE" "$(tasks_done) of $(( $(tasks_done) + $(tasks_left) )) tasks verified by their own locked checks. $iter attempts, $mins min total. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last commit: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
-        finished=1; rm -f "$S/.active" ;;
+        send_report; finished=1; rm -f "$S/.active" ;;
       budget) notify "codebot: $NAME stopped by a budget" "$(jq -r '.kind + ": " + .message' <<< "$ev"). $(tasks_done) tasks done, $(tasks_left) left." high warning
-        finished=1; rm -f "$S/.active" ;;
+        send_report; finished=1; rm -f "$S/.active" ;;
       *) notify "codebot: $NAME engine error" "$(jq -r '.error // "unexpected output"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
     esac
   done
@@ -386,6 +393,7 @@ cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
 cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" render_prompt "${2:-plan}"; }
 cmd_freeze() { need_proj "${1:-}"; "$CODEBOT_HOME/bin/codebot-engine" freeze "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_engine() { local sub="${1:-}"; need_proj "${2:-}"; "$CODEBOT_HOME/bin/codebot-engine" "$sub" "$2" --home "$CODEBOT_HOME" "${@:3}"; }
+cmd_report() { load_proj "${1:-}"; if [[ "${2:-}" == --send ]]; then send_report; echo "report saved and pushed"; else eng report "${@:2}"; fi; }
 cmd_modes() { "$ENGINE" modes x --home "$CODEBOT_HOME"; }
 cmd_audit() { need_proj "${1:-}"; "$ENGINE" audit "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_tidy() {   # evidence-backed memory needs no model: prune lessons that correlate with failure and regenerate lessons.md
@@ -401,7 +409,7 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|__loop) "cmd_$c" "$@";;
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|report|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -420,6 +428,7 @@ codebot - local ralph-loop coding agent
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
   prompt <name> [plan|work] [quick]   print the exact prompt the model receives
+  report <name> [--send|--short|--json]   morning report: done, blocked (with the exact question), diffs to review, lessons, time, safety
   audit <name> [--probe]  what ran, what changed, proof of offline operation (--probe tests the sandbox network live)
   freeze <name> [--allow-unchecked]   lock per-task checks and create tasks.json (needs a `check:` per task in PLAN.md)
   tidy                    condense memory/lessons.md

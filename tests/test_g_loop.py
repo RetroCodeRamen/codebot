@@ -84,6 +84,10 @@ class TestSupervisor(LoopBase):
         self.assertIn("2 of 2 tasks verified by their own locked checks", done)
         self.assertEqual([t["status"] for t in self.data()["tasks"]], ["done", "done"])
         self.assertFalse(os.path.exists(os.path.join(self.state, ".active")))
+        reps = [m for m in self.ntfy.msgs if "morning report" in m["title"]]
+        self.assertGreaterEqual(len(reps), 2, self.ntfy.titles())                                  # once when it went idle waiting on you, once at the end
+        self.assertIn("1 blocked and waiting on you", reps[0]["body"]); self.assertIn("BLOCKED T2:", reps[0]["body"]); self.assertIn("2/2 tasks verified", reps[-1]["body"])
+        self.assertTrue(any(f.startswith("report-") for f in os.listdir(self.state)))
         eg = [json.loads(l) for l in open(os.path.join(self.home, "logs", "egress.jsonl"))]
         self.assertTrue(any(e["purpose"] == "notification" and e["dest"].startswith("127.0.0.1:") and e["project"] == self.name for e in eg))
         self.assertTrue(any(e["purpose"] == "phone-poll" for e in eg))

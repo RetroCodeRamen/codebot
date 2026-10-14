@@ -125,7 +125,7 @@ def step(proj, fresh=False):
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "task": task["id"], "findings": tamper2})
         res = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
         passed = res["rc"] == 0 and not tamper2
-        rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"),
+        rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"), "worker_secs": w.get("secs"),
                "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
                "files": G.changed_files(proj.rundir)}
         packed = []                                    # lessons the worker's context actually contained this attempt
