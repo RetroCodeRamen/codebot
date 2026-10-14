@@ -7,20 +7,22 @@ from codebot import engine, tasks as T
 
 def main():
     ap = argparse.ArgumentParser(prog="codebot-engine")
-    ap.add_argument("cmd", choices=["freeze", "step", "status", "render"])
+    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset"])
     ap.add_argument("project"); ap.add_argument("--allow-unchecked", action="store_true")
-    ap.add_argument("--home")
+    ap.add_argument("--home"); ap.add_argument("--fresh", action="store_true")
     a = ap.parse_args()
     proj = Project(a.project, a.home)
     if a.cmd == "freeze":
         d = engine.freeze_project(proj, a.allow_unchecked or bool(proj.get("ALLOW_UNCHECKED")))
         print(f"frozen {proj.name}: {len(d['tasks'])} tasks, checks locked in checks.lock")
     elif a.cmd == "step":
-        print(json.dumps(engine.step(proj)))
+        print(json.dumps(engine.step(proj, fresh=a.fresh)))
     elif a.cmd == "status":
         s = T.TaskStore(proj)
         if not s.exists(): print(json.dumps({"frozen": False})); return
         d = s.load(); print(json.dumps({"frozen": True, "counts": T.counts(d)}))
+    elif a.cmd == "reset":
+        print("reset to " + str(engine.reset(proj)))
     elif a.cmd == "render":
         s = T.TaskStore(proj); T.render_plan(proj, s.load()); print("PLAN.md re-rendered")
 

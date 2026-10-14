@@ -187,7 +187,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 |------|---------|--------|
 | A | Baseline, tests harness, tasks.json, freeze, engine skeleton | **done** (9 tests) |
 | B | F1 locked checks | **done** (10 tests) |
-| C | F2 git checkpoints | todo |
+| C | F2 git checkpoints | **done** (7 tests) |
 | D | F6 controlled replanning | todo |
 | E | F3 budgets and stuck detection | todo |
 | F | F5 adaptive sizing | todo |
@@ -211,3 +211,8 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   everything is restored from `checks/.frozen`. `tasks.json` has a sha + known-good copy written on every harness
   save, so a worker editing it directly (mark tasks done, rewrite a check) is detected and rolled back. This is
   detection + undo; the F10 sandbox later makes the state dir read-only so the edit cannot happen at all.
+- C: `gitops.py`. The first step makes a baseline commit of everything already in the code dir (reuses HEAD when the
+  tree is clean), so `reset --hard` + `clean -fd` (never `-x`) cannot destroy pre-existing user files or ignored
+  venvs/caches. Verified task = commit `codebot: T3 <title>` + tag `codebot/<project>/T3` + `checkpoints.json`.
+  `step --fresh` resets first (the primitive the ladder uses). Not yet done: the legacy bash path still lets the
+  model commit; engine projects commit only after the harness verifies.

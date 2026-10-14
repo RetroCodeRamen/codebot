@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, subprocess, time
-from . import tasks as T, checks as C
+from . import tasks as T, checks as C, gitops as G
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -46,8 +46,9 @@ def run_worker(proj, task, attempt, last_error):
     except subprocess.TimeoutExpired:
         return {"rc": 124, "secs": round(time.time() - t0, 1), "tail": "[worker timed out]"}
 
-def step(proj):
-    """One attempt. Returns an event dict for the supervisor (bash loop) to act on."""
+def step(proj, fresh=False):
+    """One attempt. Returns an event dict for the supervisor (bash loop) to act on.
+    fresh=True: reset the code dir to the last verified checkpoint before the worker runs."""
     store = T.TaskStore(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
     with store.locked():
@@ -65,6 +66,8 @@ def step(proj):
         if not task.get("check"):
             if not proj.get("ALLOW_UNCHECKED", None, str):
                 return {"event": "error", "task": task["id"], "error": "task has no check"}
+        G.ensure_baseline(proj)
+        if fresh: G.reset_to_last_good(proj)
         task["status"] = "running"; task["attempts"] += 1; attempt = task["attempts"]
         store.save(data)
         last = (task["history"][-1].get("out_tail") or "") if task["history"] else ""
@@ -82,7 +85,12 @@ def step(proj):
                "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed}
         task["history"].append({**rec, "out_tail": res["out"][-1500:]})
         task["status"] = "done" if passed else "pending"
+        if passed: task["commit"] = G.checkpoint(proj, task)
         store.save(data)
         append_jsonl(proj.p("attempts.jsonl"), rec)
-    return {"event": "task_done" if passed else "task_failed", "task": task["id"], "attempt": attempt,
+    return {"event": "task_done" if passed else "task_failed", "task": task["id"], "attempt": attempt, "fresh": fresh,
             "check_rc": res["rc"], "tamper": tamper2, "out_tail": res["out"][-400:]}
+
+def reset(proj):
+    """Manual/ladder primitive: code dir back to the last verified checkpoint."""
+    G.ensure_baseline(proj); return G.reset_to_last_good(proj)
