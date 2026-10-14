@@ -38,6 +38,17 @@ Safety nets:
 - **Stall detection**: 3 iterations with no change -> BLOCKED ping. Per-iteration timeout 45 min. Iteration cap 300.
 - Finished iterations are ended automatically 20 s after STATUS appears (the small model likes to ramble).
 
+## Control and answers from your phone
+Subscribe to the ntfy topic for progress pushes (they carry Pause / Resume / Status buttons). To talk back,
+publish to `<your topic>-reply` (the ntfy app: subscribe to it too, then send a message):
+`pause`, `resume`, `stop`, `status`, or any other text = the answer to a pending BLOCKED question.
+The topic name is the only secret; for stronger protection set `NTFY_TOKEN` (and use a protected topic on a
+self-hosted ntfy).
+
+## Survives reboots and crashes
+`codebot install-service` (already run) adds a systemd user service. At login it restarts every loop that was
+still active, keeping any pending BLOCKED question. Loops that finished or that you stopped stay stopped.
+
 ## Memory / expertise
 `memory/expertise.md` (curated, edit freely) and `memory/lessons.md` (agent appends; auto-condensed when over
 `LESSONS_MAX` bytes, backups in `memory/.archive/`). Config/prompts/memory are git-versioned.

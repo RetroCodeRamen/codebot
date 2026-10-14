@@ -16,11 +16,44 @@ die() { echo "codebot: $*" >&2; exit 1; }
 sdir() { echo "$CODEBOT_HOME/projects/$1"; }
 need_proj() { [[ -n "${1:-}" && -d "$(sdir "$1")" ]] || die "unknown project '${1:-}' (see: codebot list)"; }
 load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; }
-alive() { [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null; }
+alive() { # pidfile; for loop.pid also confirm the pid is really a codebot loop (pid reuse after reboot)
+  [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null || return 1
+  [[ "$1" != *loop.pid ]] || tr '\0' ' ' < "/proc/$(cat "$1")/cmdline" 2>/dev/null | grep -q '__loop'; }
 
-notify() { # title message priority tags
-  curl -s -m 15 -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" \
+NTFY_TOKEN="${NTFY_TOKEN:-}"
+ntfy_auth() { [[ -n "$NTFY_TOKEN" ]] && echo "Authorization: Bearer $NTFY_TOKEN" || echo "X-Codebot: 1"; }
+notify() { # title message priority tags [buttons=1]
+  local acts=()
+  if [[ "${5:-}" == 1 ]]; then
+    local r="$NTFY_SERVER/$NTFY_TOPIC-reply"
+    acts=(-H "Actions: http, Pause, $r, method=POST, body=pause, clear=false; http, Resume, $r, method=POST, body=resume, clear=false; http, Status, $r, method=POST, body=status, clear=false")
+  fi
+  curl -s -m 15 -H "$(ntfy_auth)" -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" "${acts[@]}" \
     -d "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1 || echo "(ntfy send failed)" >&2
+}
+
+# phone control: poll <topic>-reply. words pause/resume/stop/status act on the loop; anything else answers a BLOCKED question.
+PHONE_LAST=$(date +%s); PHONE_T=0
+phone_tick() { # call often; polls at most every 20s
+  (( SECONDS - PHONE_T >= 20 )) || return 0; PHONE_T=$SECONDS
+  local msgs m t txt
+  msgs="$(curl -s -m 10 -H "$(ntfy_auth)" "$NTFY_SERVER/$NTFY_TOPIC-reply/json?poll=1&since=$PHONE_LAST" 2>/dev/null)" || return 0
+  while IFS= read -r m; do
+    [[ -n "$m" ]] || continue
+    [[ "$(jq -r '.event // empty' <<< "$m" 2>/dev/null)" == message ]] || continue
+    t=$(jq -r '.time' <<< "$m"); txt=$(jq -r '.message' <<< "$m")
+    (( t > PHONE_LAST )) || continue; PHONE_LAST=$t
+    echo "(phone: $txt)"
+    case "$(tr 'A-Z' 'a-z' <<< "$txt" | xargs)" in
+      pause)  "$0" pause "$NAME" >/dev/null; notify "codebot: $NAME paused" "Model unloaded. Send 'resume' to continue." low pause_button 1;;
+      resume) "$0" resume "$NAME" >/dev/null; notify "codebot: $NAME resumed" "Back to work." low arrow_forward 1;;
+      stop)   notify "codebot: $NAME stopping" "Loop stopped from phone." default stop_button; "$0" stop "$NAME" >/dev/null & ;;
+      status) notify "codebot: $NAME status" "$(tasks_done) done / $(tasks_left) left. $([[ -f "$S/PAUSE" ]] && echo PAUSED || echo running). $(head -c 200 "$S/STATUS" 2>/dev/null)" low information_source 1;;
+      *) if [[ -s "$S/STATUS" ]] && head -c 7 "$S/STATUS" | grep -q BLOCKED; then
+           "$0" answer "$NAME" "$txt" >/dev/null; notify "codebot: $NAME" "Got your answer, continuing." low speech_balloon 1
+         else notify "codebot: $NAME" "Nothing is waiting for an answer. Commands: pause, resume, stop, status." low question; fi;;
+    esac
+  done <<< "$msgs"
 }
 
 ensure_ollama() {
@@ -64,7 +97,8 @@ cmd_start() {
   load_proj "${1:-}"
   [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
   alive "$S/loop.pid" && die "$NAME is already running"
-  rm -f "$S/PAUSE" "$S/STATUS"
+  rm -f "$S/PAUSE"; [[ "${2:-}" == --keep ]] || rm -f "$S/STATUS"
+  touch "$S/.active"
   ensure_ollama
   if [[ ! -f "$S/.git-prepped" ]]; then
     if git -C "$WORKDIR" rev-parse HEAD >/dev/null 2>&1; then
@@ -111,9 +145,9 @@ cmd___loop() {
   echo $$ > "$S/loop.pid"
   trap 'finished=2' TERM INT
   trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
-  notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR" low rocket
+  notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR. Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
   while (( iter < MAX_ITERATIONS )) && [[ $finished == 0 ]]; do
-    if [[ -f "$S/PAUSE" ]]; then sleep 5; continue; fi
+    if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
     local st=""; [[ -f "$S/STATUS" ]] && st="$(head -c 1500 "$S/STATUS")"
     if [[ "$st" == DONE* ]]; then
       if ! verify_gate; then
@@ -124,14 +158,14 @@ cmd___loop() {
         echo "(verify failed, attempt $verify_fails)"; continue
       fi
       notify "codebot: $NAME COMPLETE" "$(tasks_done) tasks done in $iter iterations, $(( (SECONDS-t0)/60 )) min. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
-      finished=1; break
+      finished=1; rm -f "$S/.active"; break
     elif [[ "$st" == BLOCKED* ]]; then
       if (( ! notified_block )); then
         notify "codebot: $NAME needs you" "$st
 
-Reply with: codebot answer $NAME \"your answer\"" urgent sos; notified_block=1
+Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or: codebot answer $NAME \"...\"" urgent sos 1; notified_block=1
       fi
-      sleep 10; continue
+      phone_tick; sleep 10; continue
     fi
     notified_block=0
     if [[ "$(tasks_left)" == 0 ]]; then echo "DONE" > "$S/STATUS"; continue; fi
@@ -145,7 +179,7 @@ Reply with: codebot answer $NAME \"your answer\"" urgent sos; notified_block=1
     local seen=0
     while kill -0 "$pid" 2>/dev/null; do
       if [[ -s "$S/STATUS" ]]; then (( seen++ >= 4 )) && { kill -TERM -- "-$pid" 2>/dev/null; pkill -TERM -P "$pid" 2>/dev/null; break; }; fi
-      sleep 5
+      phone_tick; sleep 5
     done
     wait "$pid" 2>/dev/null; rm -f "$S/iter.pid"
     [[ $finished == 2 ]] && break
@@ -157,7 +191,7 @@ Reply with: codebot answer $NAME \"your answer\"" urgent sos; notified_block=1
     fi
   done
   if [[ $finished == 0 ]]; then
-    notify "codebot: $NAME hit iteration cap" "Stopped after $iter iterations with $(tasks_left) tasks left." high warning; finished=1
+    notify "codebot: $NAME hit iteration cap" "Stopped after $iter iterations with $(tasks_left) tasks left." high warning; finished=1; rm -f "$S/.active"
   fi
 }
 
@@ -174,12 +208,36 @@ cmd_answer() { load_proj "${1:-}"; shift; [[ -n "${*:-}" ]] || die "usage: codeb
   rm -f "$S/STATUS"; echo "recorded; loop will continue"; }
 cmd_stop() { load_proj "${1:-}"; if alive "$S/loop.pid"; then local p; p=$(cat "$S/loop.pid"); touch "$S/PAUSE"
     [[ -f "$S/iter.pid" ]] && kill -TERM -- "-$(cat "$S/iter.pid")" 2>/dev/null; kill -TERM "$p"; sleep 1; kill -9 "$p" 2>/dev/null
-    rm -f "$S/loop.pid" "$S/iter.pid" "$S/PAUSE"; "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1; echo "stopped $NAME"; else echo "$NAME not running"; fi; }
+    rm -f "$S/loop.pid" "$S/iter.pid" "$S/PAUSE" "$S/.active"; "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1; echo "stopped $NAME"; else echo "$NAME not running"; fi; }
 cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
 cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
 cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
   alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
   echo "$NAME: $s | done $(tasks_done) / left $(tasks_left) | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
+cmd_resume_all() { # run at login: restart loops that were active when the machine went down
+  for d in "$CODEBOT_HOME"/projects/*/; do
+    [[ -f "$d/.active" ]] || continue; local n; n=$(basename "$d")
+    alive "$d/loop.pid" && continue
+    echo "resuming $n after restart"; cmd_start "$n" --keep
+  done
+}
+cmd_install_service() {
+  local u="$HOME/.config/systemd/user"; mkdir -p "$u"
+  cat > "$u/codebot.service" <<UNIT
+[Unit]
+Description=codebot: resume active loops after login/reboot
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=$CODEBOT_HOME/bin/codebot resume-all
+
+[Install]
+WantedBy=default.target
+UNIT
+  systemctl --user daemon-reload && systemctl --user enable codebot.service && echo "installed: loops active at shutdown restart at next login"
+}
 cmd_tidy() { ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
@@ -190,6 +248,8 @@ c="${1:-help}"; shift || true
 case "$c" in
   setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
+  resume-all) cmd_resume_all;;
+  install-service) cmd_install_service;;
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   *) cat <<USAGE
 codebot - local ralph-loop coding agent
@@ -203,6 +263,8 @@ codebot - local ralph-loop coding agent
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
   tidy                    condense memory/lessons.md
+  install-service         auto-restart active loops after reboot/login
+  (phone) publish pause|resume|stop|status|<answer> to <ntfy topic>-reply
   setup | notify-test     start ollama / send test ntfy message
 USAGE
 ;;
