@@ -12,7 +12,7 @@ class Clock:
 class TestConfigs(unittest.TestCase):
     def test_gpu_config_is_skipped_without_a_driver_and_runs_with_one(self):
         no = TB.configs(gpu=False, have_profiles=True); self.assertIn("no NVIDIA driver", no[-1]["skip"]); self.assertIn("nvidia-driver", no[-1]["skip"])
-        yes = TB.configs(gpu=True, have_profiles=True); self.assertEqual(yes[-1]["options"], {"num_thread": 4, "num_gpu": 99}); self.assertNotIn("skip", yes[-1])
+        yes = TB.configs(gpu=True, have_profiles=True); self.assertEqual(yes[-1]["options"], {"num_thread": 4, "num_gpu": 0}); self.assertNotIn("skip", yes[-1])
     def test_power_saver_is_skipped_when_unavailable(self):
         self.assertIn("not available", [c for c in TB.configs(gpu=False, have_profiles=False) if "power-saver" in c["name"]][0]["skip"])
     def test_the_thread_variants_are_present(self):

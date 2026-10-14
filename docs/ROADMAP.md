@@ -369,7 +369,7 @@ harness now drives it (`bench.plan_auto`): after each round it runs `check-plan`
 
 ### Machine facts measured while doing this
 llama.cpp already runs `n_threads = 4` of 8 (the physical cores), so setting `num_thread 4` is a no-op; the package sits at 90-93 C under load with the CPU clocked down; `powerprofilesctl` is available
-(profile `balanced`); there is **no NVIDIA kernel driver** (`nvidia-smi` fails) so there is no GPU offload; the private Ollama already ships the CUDA libraries, so installing the driver would enable it.
+(profile `balanced`); there was **no NVIDIA kernel driver** at that time, so no GPU offload (installed later, see the 2026-10-14 sweep below); the private Ollama already ships the CUDA libraries, so installing the driver would enable it.
 `codebot bench --thermal` (built, tested, not yet run for real) measures the options.
 
 ### Bench run `bench-fixed-2` (finished, 8.0 min wall)
@@ -398,3 +398,17 @@ llama.cpp already runs `n_threads = 4` of 8 (the physical cores), so setting `nu
 _Note: the run printed `loop_died` because the bench misread a loop that exited normally after COMPLETE; fixed (`bench.classify`, tested) and the report above is regenerated
 from the stored data. This suite is easy: the largest prompt was 1.7k of 32k tokens and nothing failed, so it validates the pipeline but never exercised the ladder, the baseline
 guard or a blocked task._
+
+### Thermal sweep, 2026-10-14, NVIDIA driver 595-open installed (4 min per config, cooldown to 72 C first, steady state = second half)
+
+The default (Ollama auto-fit) now offloads about 35% of the layers to the RTX 3050 Ti (`ollama ps`: 65%/35% CPU/GPU, 7.1 GB loaded at 32k context). Forcing `num_gpu=99` fails with a CUDA out-of-memory error (4 GB VRAM), so that config was replaced by CPU-only (`num_gpu=0`) as the comparison.
+
+| config | req/min steady | gen tok/s | cold prompt tok/s | temp steady (max) | CPU MHz |
+|---|---|---|---|---|---|
+| 4 threads, GPU auto-offload (default) | 6.26 | 9.1 | 348 | 91.0 (93) | 2887 |
+| 3 threads | 5.47 | 7.9 | 337 | 91.2 (94) | 2645 |
+| 2 threads | 4.35 | 6.4 | 324 | 91.1 (93) | 2047 |
+| 4 threads + power-saver profile | 3.39 | 5.2 | 259 | 65.2 (67) | 1167 |
+| CPU only, 4 threads (`num_gpu=0`) | 1.82 | 6.8 | 36 | 90.9 (95) | 3268 |
+
+Findings: GPU offload is 3.4x the throughput of CPU-only (cold prompt about 10x, generation +34%) but does not run cooler, since the CPU still does 65% of the work. Fewer threads only lose speed at the same ~91 C. Power-saver is the only config that runs cool (65 C) at 54% of the default throughput. The thermal guard (pause at 92 C) is bypassed in the sweep itself (`THERMAL_GUARD=0`). Not yet tried: smaller `num_ctx` to leave VRAM for more GPU layers.

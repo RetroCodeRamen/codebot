@@ -27,7 +27,9 @@ def configs(gpu=None, have_profiles=None):
     gpu = gpu_available() if gpu is None else gpu; have_profiles = bool(shutil.which("powerprofilesctl")) if have_profiles is None else have_profiles
     out = [{"name": "4 threads (current default)", "options": {"num_thread": 4}}, {"name": "3 threads", "options": {"num_thread": 3}}, {"name": "2 threads", "options": {"num_thread": 2}}]
     out.append({"name": "4 threads + power-saver profile", "options": {"num_thread": 4}, "profile": "power-saver"} if have_profiles else {"name": "power-saver profile", "skip": "powerprofilesctl is not available"})
-    out.append({"name": "GPU offload (num_gpu=99) + 4 threads", "options": {"num_thread": 4, "num_gpu": 99}} if gpu else
+    # With a driver, the default configs above already use Ollama's auto-fit GPU offload. Forcing num_gpu=99 defeats the auto-fit and runs out of the 4 GB VRAM,
+    # so the comparison that matters is CPU only (num_gpu=0).
+    out.append({"name": "CPU only (num_gpu=0) + 4 threads", "options": {"num_thread": 4, "num_gpu": 0}} if gpu else
                {"name": "GPU offload (3050 Ti)", "skip": "no NVIDIA driver loaded (nvidia-smi fails); install nvidia-driver-580-open and reboot to test this"})
     return out
 
@@ -61,7 +63,8 @@ def run_config(proj, cfg, minutes=4.0, cool_to=72, abort_at=97, sample_every=5, 
             tt = reader()
             if tt is not None and tt >= abort_at: aborted = f"aborted at {tt} C (limit {abort_at})"; break
             started = clock() - t0
-            r = chat(proj, _prompt(), schema=worker.action_schema(), temperature=0.1, num_predict=70, timeout=900, options=cfg["options"])
+            try: r = chat(proj, _prompt(), schema=worker.action_schema(), temperature=0.1, num_predict=70, timeout=900, options=cfg["options"])
+            except ollama.ModelError as e: return {"name": cfg["name"], "skipped": f"model failed to run with this config: {str(e)[:200]}"}   # keep the sweep going; the profile is restored by finally
             reqs.append({"t": started, "prompt_tps": r["prompt_tokens"] / max(0.001, r["prompt_ms"] / 1000), "gen_tps": r["gen_tokens"] / max(0.001, r["gen_ms"] / 1000),
                          "secs": r["secs"], "ptok": r["prompt_tokens"], "gtok": r["gen_tokens"]})
         stop.set(); th.join(timeout=5)
