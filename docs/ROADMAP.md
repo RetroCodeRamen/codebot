@@ -192,7 +192,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | E | F3 budgets and stuck detection | **done** (12 tests) |
 | F | F5 adaptive sizing | **done** (16 tests) |
 | G | F4 escalation ladder | **done** (18 tests + supervisor integration) |
-| H | F7+F8 native worker | todo |
+| H | F7+F8 native worker | **done** (32 tests against a fake Ollama; real-model run pending) |
 | I | F9 evidence-backed memory | todo |
 | J | F10 sandbox and audit | todo |
 | K | F11 modes | todo |
@@ -259,3 +259,18 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   had been started via systemd-run, because the agent was not in the process group the pause signalled, so the model kept
   generating at ~380% CPU. Pause/stop now terminate the whole process TREE (`kill_tree`) as well as the group. Also: a paused
   project must mean zero CPU; verify with `ollama ps` and `pgrep llama-server` after pausing.
+- H: `ollama.py`, `packer.py`, `worker.py`, `sandbox.py` (policy only; bwrap comes in J), `splitter.py`, `tests/fake_ollama.py`.
+  Each turn is ONE action constrained by a JSON schema (`anyOf` of per-action objects; if the server rejects it
+  with HTTP 400 the worker falls back to a flat schema), thinking off. Validation before anything lands: path
+  must stay inside the code dir (realpath, symlinks, .git, the state dir are refused), writes/edits are syntax-checked
+  (py compile, json, bash -n, node --check) and applied atomically, `edit_file` needs exactly one match, malformed
+  or unknown actions are bounced back with the reason (3 strikes ends the attempt), 3 repeats of the same action warn
+  and 5 abort. `run` goes through a denylist (sudo, network tools, history-rewriting git, package installs, the
+  harness state dir). The packer builds the whole prompt: task, the frozen check script + fixtures, last check
+  output, human answers, GRILL.md decisions, goal, previous attempts, lessons, a repo+symbol map, and the files the
+  task names or the check/error mention, inside CONTEXT_BUDGET (default 8k of the 32k window); history is compacted
+  when the conversation outgrows WORKER_CONTEXT_TOKENS. `replan` and `note_lesson` are actions (replan goes through
+  planops; lessons go to the raw log for F9). Model-driven splitter plugs into sizing with mechanical fallback.
+  NOT yet verified: the real ornith:9b obeying the anyOf grammar and actually solving a task. That is the smoke test
+  (step N) and needs the machine to be cool. Known limit until J: `run` is policy-checked, not isolated (a clever
+  command could still read outside the project); bwrap closes that.

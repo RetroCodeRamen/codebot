@@ -1,5 +1,5 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
-import json, os, re, subprocess, time
+import json, os, re, subprocess, sys, time
 from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
@@ -24,8 +24,14 @@ def freeze_project(proj, allow_unchecked=False):
                                        "tasks": len(tasks)})
     return data
 
+LIBDIR = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+
 def _worker_cmd(proj):
-    return proj.get("WORKER_CMD")
+    """WORKER_CMD overrides; WORKER=native runs the built-in constrained-output worker."""
+    cmd = proj.get("WORKER_CMD")
+    if cmd: return cmd
+    if proj.get("WORKER") == "native": return f"{sys.executable} -m codebot.worker"
+    return None
 
 def run_worker(proj, task, attempt, last_error, extra_env=None):
     """Pluggable worker. Contract: runs in the code dir, gets the task via env/file, may edit code; its exit
@@ -37,7 +43,8 @@ def run_worker(proj, task, attempt, last_error, extra_env=None):
     with open(efile, "w") as f: f.write(last_error or "")
     env = dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_TASK_ID=task["id"], CODEBOT_ATTEMPT=str(attempt),
                CODEBOT_LAST_ERROR_FILE=efile, CODEBOT_RUNDIR=proj.rundir, CODEBOT_STATE=proj.state,
-               CODEBOT_CHECKS=C.checks_dir(proj), CODEBOT_ANSWERS_FILE=proj.p("ANSWERS.md"), **(extra_env or {}))
+               CODEBOT_CHECKS=C.checks_dir(proj), CODEBOT_ANSWERS_FILE=proj.p("ANSWERS.md"), CODEBOT_HOME=proj.home,
+               CODEBOT_PROJECT=proj.name, PYTHONPATH=LIBDIR + os.pathsep + os.environ.get("PYTHONPATH", ""), **(extra_env or {}))
     t0 = time.time()
     try:
         r = subprocess.run(cmd, shell=True, cwd=proj.rundir, env=env, capture_output=True, text=True,

@@ -45,4 +45,5 @@ class Project:
 def now(): return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 def append_jsonl(path, obj):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "a") as f: f.write(json.dumps(obj, ensure_ascii=False) + "\n")

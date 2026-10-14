@@ -1,5 +1,5 @@
 """Adaptive task sizing: split tasks that keep failing, remember what size works on this machine, tell the planner."""
-import fcntl, json, os, re, shlex, subprocess
+import fcntl, json, os, re, shlex, subprocess, sys
 from . import planops, tasks as T
 from .config import now, append_jsonl
 
@@ -40,18 +40,23 @@ def mechanical_split(task):
     return None
 
 def propose(proj, task, last_error=""):
-    """SPLIT_CMD (a hook: reads CODEBOT_TASK_FILE, prints JSON {"subtasks":[...],"fixtures":{...}}) else mechanical."""
+    """SPLIT_CMD (a hook: reads CODEBOT_TASK_FILE, prints JSON {"subtasks":[...],"fixtures":{...}}); with WORKER=native the
+    model-driven splitter is the default hook and the mechanical splitter is the fallback."""
     cmd = proj.get("SPLIT_CMD")
+    if not cmd and proj.get("WORKER") == "native" and proj.get("SPLITTER", "auto") != "mechanical":
+        cmd = f"{sys.executable} -m codebot.splitter"
     if cmd:
         tfile = proj.p(".split_task.json")
         with open(tfile, "w") as f: json.dump({"task": task, "error": last_error}, f)
         try:
             r = subprocess.run(cmd, shell=True, cwd=proj.rundir, capture_output=True, text=True, timeout=1800,
-                               env=dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_STATE=proj.state, CODEBOT_RUNDIR=proj.rundir))
+                               env=dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_STATE=proj.state, CODEBOT_RUNDIR=proj.rundir,
+                                        CODEBOT_HOME=proj.home, CODEBOT_PROJECT=proj.name,
+                                        PYTHONPATH=os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + os.pathsep + os.environ.get("PYTHONPATH", "")))
             prop = json.loads(r.stdout)
             if isinstance(prop, dict) and prop.get("subtasks"): return prop
         except (subprocess.TimeoutExpired, ValueError, OSError): pass
-        return None
+        if proj.get("SPLIT_CMD"): return None             # an explicit hook that fails means "no split", not "guess"
     return mechanical_split(task)
 
 def auto_split(proj, tid, last_error="", actor="harness"):
