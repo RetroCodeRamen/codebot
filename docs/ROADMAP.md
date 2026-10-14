@@ -186,7 +186,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | Step | Feature | Status |
 |------|---------|--------|
 | A | Baseline, tests harness, tasks.json, freeze, engine skeleton | **done** (9 tests) |
-| B | F1 locked checks | todo |
+| B | F1 locked checks | **done** (10 tests) |
 | C | F2 git checkpoints | todo |
 | D | F6 controlled replanning | todo |
 | E | F3 budgets and stuck detection | todo |
@@ -207,3 +207,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   (`- [ ] T1. title` lines, so the bash counters keep working). The bash loop is not yet switched over; that happens
   once the ladder (G) defines every event it must handle. Lesson: close files in library code (ResourceWarnings
   flagged leaks immediately).
+- B: tamper is a failed attempt even if the real check would pass (a worker that touches the locks gets no credit);
+  everything is restored from `checks/.frozen`. `tasks.json` has a sha + known-good copy written on every harness
+  save, so a worker editing it directly (mark tasks done, rewrite a check) is detected and rolled back. This is
+  detection + undo; the F10 sandbox later makes the state dir read-only so the edit cannot happen at all.

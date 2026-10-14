@@ -51,8 +51,9 @@ def step(proj):
     store = T.TaskStore(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
     with store.locked():
+        tamper = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
         data = store.load()
-        tamper = C.verify(proj, data) if C.is_frozen(proj) else []
+        tamper += C.verify(proj, data) if C.is_frozen(proj) else []
         if tamper:
             C.restore(proj, data, tamper)
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "findings": tamper})
@@ -69,8 +70,9 @@ def step(proj):
         last = (task["history"][-1].get("out_tail") or "") if task["history"] else ""
     w = run_worker(proj, task, attempt, last)
     with store.locked():
+        tamper2 = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
         data = store.load(); task = T.get(data, task["id"])
-        tamper2 = C.verify(proj, data) if C.is_frozen(proj) else []
+        tamper2 += C.verify(proj, data) if C.is_frozen(proj) else []
         if tamper2:
             C.restore(proj, data, tamper2)
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "task": task["id"], "findings": tamper2})
