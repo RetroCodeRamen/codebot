@@ -255,3 +255,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   repair task, max 3). `codebot start` auto-freezes a PLAN.md that carries `check:` lines. The integration test runs
   the real bash loop against a fake ntfy server. Replaced the interim "stuck -> block" from E and the AUTO_SPLIT_AFTER
   option from F (the ladder owns that now).
+- Operational finding (user hit it, PC overheating): `codebot pause` did not kill the in-flight iteration of a loop that
+  had been started via systemd-run, because the agent was not in the process group the pause signalled, so the model kept
+  generating at ~380% CPU. Pause/stop now terminate the whole process TREE (`kill_tree`) as well as the group. Also: a paused
+  project must mean zero CPU; verify with `ollama ps` and `pgrep llama-server` after pausing.

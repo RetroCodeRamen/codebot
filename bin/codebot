@@ -304,10 +304,17 @@ Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or:
   fi
 }
 
+kill_tree() { # TERM a process and every descendant (process groups are not reliable under systemd-run)
+  local p="$1" c; for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$c"; done; kill -TERM "$p" 2>/dev/null; return 0
+}
+kill_iter() { # stop the step/iteration the loop is currently running, if any
+  [[ -f "$S/iter.pid" ]] || return 0
+  local p; p="$(cat "$S/iter.pid")"; kill -TERM -- "-$p" 2>/dev/null; kill_tree "$p"
+}
 cmd_pause() {
   load_proj "${1:-}"; touch "$S/PAUSE"
   if [[ "${2:-}" == --soft ]]; then echo "paused after the current iteration finishes"; return; fi
-  if [[ -f "$S/iter.pid" ]]; then kill -TERM -- "-$(cat "$S/iter.pid")" 2>/dev/null; pkill -TERM -P "$(cat "$S/iter.pid")" 2>/dev/null; fi
+  kill_iter
   "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1
   echo "paused: iteration stopped, model unloaded (RAM freed). resume: codebot resume $NAME"
 }
@@ -317,7 +324,7 @@ cmd_answer() { load_proj "${1:-}"; shift; [[ -n "${*:-}" ]] || die "usage: codeb
   { echo; echo "## $(date '+%F %T') (answer to: $(head -c 300 "$S/STATUS" 2>/dev/null))"; echo "$*"; } >> "$S/ANSWERS.md"
   rm -f "$S/STATUS"; echo "recorded; loop will continue"; }
 cmd_stop() { load_proj "${1:-}"; if alive "$S/loop.pid"; then local p; p=$(cat "$S/loop.pid"); touch "$S/PAUSE"
-    [[ -f "$S/iter.pid" ]] && kill -TERM -- "-$(cat "$S/iter.pid")" 2>/dev/null; kill -TERM "$p"; sleep 1; kill -9 "$p" 2>/dev/null
+    kill_iter; kill -TERM "$p"; sleep 1; kill -9 "$p" 2>/dev/null
     rm -f "$S/loop.pid" "$S/iter.pid" "$S/PAUSE" "$S/.active"; "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1; echo "stopped $NAME"; else echo "$NAME not running"; fi; }
 cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
 cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
