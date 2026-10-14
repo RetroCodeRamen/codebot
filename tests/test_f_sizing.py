@@ -51,11 +51,12 @@ class TestSplit(Base):
         self.set_env(SPLIT_CMD=self.worker("print('not json at all')"))
         self.assertFalse(Z.auto_split(self.proj(), "T1")["ok"])
 
-    def test_auto_split_after_k_failures_in_step(self):
-        self.set_env(AUTO_SPLIT_AFTER=2, STUCK_SAME_FAILURE=99, WORKER_CMD=self.worker("pass"))
-        e1 = engine.step(self.proj()); e2 = engine.step(self.proj())
-        self.assertEqual(e1["event"], "task_failed"); self.assertEqual(e2["event"], "task_split"); self.assertEqual(e2["children"], ["T1.1", "T1.2"])
-        e3 = engine.step(self.proj()); self.assertEqual(e3["task"], "T1.1")             # children run first
+    def test_ladder_splits_a_task_that_keeps_failing(self):
+        self.set_env(STUCK_SAME_FAILURE=99, STUCK_NO_PROGRESS=99, WORKER_CMD=self.worker("pass"))
+        ev = [engine.step(self.proj()) for _ in range(4)]
+        self.assertEqual([e["event"] for e in ev], ["task_failed", "task_failed", "task_failed", "task_split"])  # rung 1 x2, rung 2 x2, then split
+        self.assertEqual(ev[3]["children"], ["T1.1", "T1.2"])
+        self.assertEqual(engine.step(self.proj())["task"], "T1.1")                       # children run first
 
 class TestStats(Base):
     def test_outcomes_are_recorded_by_size_and_type(self):

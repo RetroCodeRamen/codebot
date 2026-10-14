@@ -67,7 +67,7 @@ phone_tick() { # call often; polls at most every 20s
       resume) "$0" resume "$NAME" >/dev/null; notify "codebot: $NAME resumed" "Back to work." low arrow_forward 1;;
       stop)   notify "codebot: $NAME stopping" "Loop stopped from phone." default stop_button; "$0" stop "$NAME" >/dev/null & ;;
       status) notify "codebot: $NAME status" "$(tasks_done) done / $(tasks_left) left. $([[ -f "$S/PAUSE" ]] && echo PAUSED || echo running). $(head -c 200 "$S/STATUS" 2>/dev/null)" low information_source 1;;
-      *) if [[ -s "$S/STATUS" ]] && head -c 7 "$S/STATUS" | grep -q BLOCKED; then
+      *) if has_blocked; then
            "$0" answer "$NAME" "$txt" >/dev/null; notify "codebot: $NAME" "Got your answer, continuing." low speech_balloon 1
          else notify "codebot: $NAME" "Nothing is waiting for an answer. Commands: pause, resume, stop, status." low question; fi;;
     esac
@@ -120,6 +120,9 @@ cmd_start() {
   load_proj "${1:-}"
   [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
   alive "$S/loop.pid" && die "$NAME is already running"
+  if [[ ! -f "$S/tasks.json" ]] && grep -qE '^[[:space:]]+[-*][[:space:]]*check:' "$S/PLAN.md"; then
+    echo "plan has per-task checks: freezing them (engine mode)"; "$ENGINE" freeze "$NAME" --home "$CODEBOT_HOME" || die "freeze failed: every task needs a check: line"
+  fi
   [[ "${2:-}" == --keep ]] || rm -f "$S/PAUSE" "$S/STATUS"
   touch "$S/.active"
   if [[ "${2:-}" != --keep || ! -f "$S/env.snap" ]]; then # remember the launching shell's environment (JAVA_HOME, GHIDRA_INSTALL_DIR, PATH...) for the loop
@@ -180,6 +183,65 @@ tidy_memory() { # condense lessons.md with the model; restore on any sanity fail
   echo "lessons condensed: $(wc -c < "$bak") -> $n bytes (backup: $bak)"
 }
 
+ENGINE="$CODEBOT_HOME/bin/codebot-engine"
+eng() { "$ENGINE" "$1" "$NAME" --home "$CODEBOT_HOME" "${@:2}"; }
+has_blocked() { # engine projects keep blocked tasks in tasks.json; legacy projects use STATUS
+  if [[ -f "$S/tasks.json" ]]; then [[ "$(jq '[.tasks[]|select(.status=="blocked")]|length' "$S/tasks.json" 2>/dev/null)" -gt 0 ]]
+  else [[ -s "$S/STATUS" ]] && head -c 7 "$S/STATUS" | grep -q BLOCKED; fi
+}
+
+# supervisor for projects frozen with per-task checks: the harness (not the model) decides what happens next
+loop_engine() {
+  local ev kind pid out="$S/.step.out" blocked_seen="" idle_note="" vfails=0 idle="${IDLE_POLL:-15}"
+  notify "codebot: $NAME started" "$(tasks_left) tasks to do (engine mode, per-task checks locked). Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
+  while [[ $finished == 0 ]]; do
+    if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
+    iter=$((iter+1)); echo "$iter" > "$S/iter.count"
+    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout $(( ITER_TIMEOUT + ${CHECK_TIMEOUT:-600} * 2 + 300 )) \
+      "$ENGINE" step "$NAME" --home "$CODEBOT_HOME" > "$out" 2>> "$S/loop.log" < /dev/null &
+    pid=$!; echo $pid > "$S/iter.pid"
+    while kill -0 "$pid" 2>/dev/null; do phone_tick; sleep 3; done
+    wait "$pid" 2>/dev/null; rm -f "$S/iter.pid"
+    [[ $finished == 2 ]] && break
+    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "(step interrupted by pause)" >> "$S/loop.log"; continue; fi
+    ev="$(tail -n1 "$out" 2>/dev/null)"; kind="$(jq -r '.event // "error"' <<< "$ev" 2>/dev/null || echo error)"
+    echo "[engine] $(date '+%T') $kind $(jq -c 'del(.out_tail,.question,.tamper)' <<< "$ev" 2>/dev/null)" | tee -a "$S/loop.log" >/dev/null
+    case "$kind" in
+      task_done|task_failed) [[ "$(jq -r '.tamper|length' <<< "$ev")" -gt 0 ]] && notify "codebot: $NAME tamper detected" "A worker touched locked files ($(jq -c '.tamper' <<< "$ev")). They were restored and the attempt failed." high warning
+        [[ "$kind" == task_done && "${NOTIFY_EACH_TASK:-0}" == 1 ]] && notify "codebot: $NAME" "$(jq -r .task <<< "$ev") verified ($(tasks_done) done, $(tasks_left) left)" min white_check_mark ;;
+      task_split) notify "codebot: $NAME split a task" "$(jq -r .task <<< "$ev") kept failing, so it was split into $(jq -r '.children|join(", ")' <<< "$ev")." low scissors ;;
+      task_blocked)
+        local tid; tid="$(jq -r .task <<< "$ev")"
+        if [[ "$blocked_seen" != *" $tid "* ]]; then blocked_seen="$blocked_seen $tid "
+          notify "codebot: $NAME needs you ($tid)" "$(jq -r .question <<< "$ev")
+
+(The run continues with other tasks. You can also answer from your phone via $NTFY_TOPIC-reply, e.g. \"$tid: your guidance\")" urgent sos 1; fi ;;
+      done_with_blocked|stalled)
+        if [[ "$idle_note" != "$(jq -c .counts <<< "$ev")" ]]; then idle_note="$(jq -c .counts <<< "$ev")"
+          notify "codebot: $NAME waiting on you" "Everything it can do is done. $(jq -r '.counts.blocked' <<< "$ev") blocked task(s) need an answer: codebot answer $NAME \"T#: guidance\"" high hourglass 1; fi
+        phone_tick; sleep "$idle" ;;
+      all_done)
+        if ! verify_gate; then
+          vfails=$((vfails+1))
+          { echo; echo "## FINAL VERIFY FAILED ($(date '+%F %T')), attempt $vfails"; echo "$VERIFY_OUT"; } >> "$S/PROGRESS.md"
+          if (( vfails >= 3 )); then
+            notify "codebot: $NAME finished but final verification fails" "All task checks pass but $(verify_script) still fails after $vfails repair tasks. Last output: ${VERIFY_OUT:0:400}" urgent warning
+            finished=1; rm -f "$S/.active"; break
+          fi
+          eng plan-op "$(jq -nc --arg c "$(cat "$(verify_script)")" --arg n "final_verify_$vfails.sh" --arg o "${VERIFY_OUT:0:600}" \
+             '{op:"add_task", title:"Make the final verification script pass", check:("bash $CODEBOT_CHECKS/"+$n), fixtures:{($n):$c}, reason:("final verify.sh failed: "+$o)}')" --actor harness >/dev/null
+          continue
+        fi
+        local mins=$(( ($(date +%s) - $(cat "$S/started.at" 2>/dev/null || date +%s)) / 60 ))
+        notify "codebot: $NAME COMPLETE" "$(tasks_done) of $(( $(tasks_done) + $(tasks_left) )) tasks verified by their own locked checks. $iter attempts, $mins min total. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last commit: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
+        finished=1; rm -f "$S/.active" ;;
+      budget) notify "codebot: $NAME stopped by a budget" "$(jq -r '.kind + ": " + .message' <<< "$ev"). $(tasks_done) tasks done, $(tasks_left) left." high warning
+        finished=1; rm -f "$S/.active" ;;
+      *) notify "codebot: $NAME engine error" "$(jq -r '.error // "unexpected output"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
+    esac
+  done
+}
+
 cmd___loop() {
   S="$(sdir "$1")"; [[ -f "$S/env.snap" ]] && source <(sed "s/^declare -x /declare -gx /" "$S/env.snap") 2>/dev/null
   load_proj "$1"; local iter stall=0 verify_fails=0 t0=$SECONDS notified_block=0 pid; finished=0
@@ -188,6 +250,7 @@ cmd___loop() {
   echo $$ > "$S/loop.pid"
   trap 'finished=2' TERM INT
   trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
+  if [[ -f "$S/tasks.json" ]]; then loop_engine; return; fi      # frozen project: the engine owns the state machine
   notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR. Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
   while (( iter < MAX_ITERATIONS )) && [[ $finished == 0 ]]; do
     if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
@@ -250,6 +313,7 @@ cmd_pause() {
 }
 cmd_resume() { load_proj "${1:-}"; alive "$S/loop.pid" || die "loop not running; use: codebot start $NAME"; ensure_ollama; rm -f "$S/PAUSE"; echo "resumed $NAME"; }
 cmd_answer() { load_proj "${1:-}"; shift; [[ -n "${*:-}" ]] || die "usage: codebot answer <name> <text>"
+  if [[ -f "$S/tasks.json" ]]; then eng answer "$*" | jq -r 'if .released then "recorded; " + .released + " unblocked and back on the ladder" else "recorded (no blocked task was waiting)" end'; return; fi
   { echo; echo "## $(date '+%F %T') (answer to: $(head -c 300 "$S/STATUS" 2>/dev/null))"; echo "$*"; } >> "$S/ANSWERS.md"
   rm -f "$S/STATUS"; echo "recorded; loop will continue"; }
 cmd_stop() { load_proj "${1:-}"; if alive "$S/loop.pid"; then local p; p=$(cat "$S/loop.pid"); touch "$S/PAUSE"

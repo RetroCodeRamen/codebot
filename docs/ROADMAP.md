@@ -191,7 +191,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | D | F6 controlled replanning | **done** (22 tests) |
 | E | F3 budgets and stuck detection | **done** (12 tests) |
 | F | F5 adaptive sizing | **done** (16 tests) |
-| G | F4 escalation ladder | todo |
+| G | F4 escalation ladder | **done** (18 tests + supervisor integration) |
 | H | F7+F8 native worker | todo |
 | I | F9 evidence-backed memory | todo |
 | J | F10 sandbox and audit | todo |
@@ -241,3 +241,17 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   `{{SIZING}}` = e.g. "S: 100% first-try ... Cut tasks to size M or smaller." (default "no history: size S").
   Planner format now requires `check:`, `files:`, `size:` per task and tells it to write silent-check-proof
   checks and fixture tests into `checks/`; this prompt change is untested with the real model (step M).
+- G: `ladder.py` + the rewritten `engine.step`. Rungs per task: 1 retry with the error (2 tries) -> 2 reset to last good +
+  retry fresh (2) -> 3 split (immediate) -> 4 alternate prompt/temperature (2; env CODEBOT_VARIANT=alt,
+  CODEBOT_TEMPERATURE) -> 5 larger local model (only if ESCALATE_MODEL is set; env CODEBOT_MODEL) -> 6 blocked.
+  LADDER_TRIES overrides. A stuck signal (E) skips ahead one rung instead of blocking; only the hard attempt cap
+  blocks outright. Unavailable rungs (no split possible, no big model) are skipped and logged. Blocked tasks ask a
+  specific question (task, title, last error, the exact `codebot answer` command) and the run moves on; dependents
+  report `stalled`. `answer` (CLI or phone) returns the task to rung 1 with a fresh attempt budget (`attempts_base`)
+  and "T2: ..." prefixes pick the task. A step killed by pause/crash is refunded, not charged.
+  Supervisor: `loop_engine` in bin/codebot (chosen when tasks.json exists; legacy projects untouched). It handles
+  pause/phone, pushes (blocked = urgent, tamper, split, budget, COMPLETE with verified counts), idles waiting for an
+  answer instead of exiting, and runs the legacy project-level verify.sh as a final gate (failure becomes a frozen
+  repair task, max 3). `codebot start` auto-freezes a PLAN.md that carries `check:` lines. The integration test runs
+  the real bash loop against a fake ntfy server. Replaced the interim "stuck -> block" from E and the AUTO_SPLIT_AFTER
+  option from F (the ladder owns that now).

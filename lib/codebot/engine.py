@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
-import json, os, subprocess, time
-from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z
+import json, os, re, subprocess, time
+from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -27,7 +27,7 @@ def freeze_project(proj, allow_unchecked=False):
 def _worker_cmd(proj):
     return proj.get("WORKER_CMD")
 
-def run_worker(proj, task, attempt, last_error):
+def run_worker(proj, task, attempt, last_error, extra_env=None):
     """Pluggable worker. Contract: runs in the code dir, gets the task via env/file, may edit code; its exit
     status and any claim of success are ignored: only the frozen check decides."""
     cmd = _worker_cmd(proj)
@@ -37,7 +37,7 @@ def run_worker(proj, task, attempt, last_error):
     with open(efile, "w") as f: f.write(last_error or "")
     env = dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_TASK_ID=task["id"], CODEBOT_ATTEMPT=str(attempt),
                CODEBOT_LAST_ERROR_FILE=efile, CODEBOT_RUNDIR=proj.rundir, CODEBOT_STATE=proj.state,
-               CODEBOT_CHECKS=C.checks_dir(proj))
+               CODEBOT_CHECKS=C.checks_dir(proj), CODEBOT_ANSWERS_FILE=proj.p("ANSWERS.md"), **(extra_env or {}))
     t0 = time.time()
     try:
         r = subprocess.run(cmd, shell=True, cwd=proj.rundir, env=env, capture_output=True, text=True,
@@ -52,9 +52,15 @@ def err_text(task, res):
     if out: return out[-1500:]
     return f"The acceptance check `{task.get('check')}` exited with status {res['rc']} and printed nothing. It is run in the code directory."
 
+def _block(proj, task, why_text, res):
+    task["status"] = "blocked"; task["blocked_question"] = L.question(proj, task, why_text)
+    Z.record(proj, task, "blocked")
+    append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
+                 "reason": task["blocked_question"][:400], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
+
 def step(proj, fresh=False):
-    """One attempt. Returns an event dict for the supervisor (bash loop) to act on.
-    fresh=True: reset the code dir to the last verified checkpoint before the worker runs."""
+    """One attempt at the next task. Returns an event dict for the supervisor (the bash loop) to act on.
+    fresh=True forces a reset to the last verified checkpoint before the worker runs (the ladder does this at rung 2)."""
     store = T.TaskStore(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
     over = B.project_budget(proj)
@@ -66,27 +72,30 @@ def step(proj, fresh=False):
         if tamper:
             C.restore(proj, data, tamper)
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "findings": tamper})
+        for t in data["tasks"]:        # a previous step was killed (pause/crash): that attempt never finished, do not charge it
+            if t["status"] == "running":
+                t["status"] = "pending"; t["attempts"] = max(0, t["attempts"] - 1)
+                append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "interrupted", "task": t["id"]})
         task = T.next_task(data)
         if task is None:
-            c = T.counts(data)
+            c = T.counts(data); store.save(data)
             if c["pending"] == 0 and c["running"] == 0:
                 return {"event": "all_done" if c["blocked"] == 0 else "done_with_blocked", "counts": c, "tamper": tamper}
             return {"event": "stalled", "counts": c, "tamper": tamper, "note": "remaining tasks wait on blocked ones"}
-        if not task.get("check"):
-            if not proj.get("ALLOW_UNCHECKED", None, str):
-                return {"event": "error", "task": task["id"], "error": "task has no check"}
+        if not task.get("check") and not proj.get("ALLOW_UNCHECKED", None, str):
+            return {"event": "error", "task": task["id"], "error": "task has no check"}
         G.ensure_baseline(proj)
-        if fresh: G.reset_to_last_good(proj)
-        # Run the check BEFORE the worker: if it already passes there is nothing to do (e.g. the final gate of a split
-        # task, or a weak check), and if it fails its output is the freshest, most accurate error for the worker.
+        do_fresh, extra_env = L.mods(proj, task)
+        if fresh or do_fresh: G.reset_to_last_good(proj)
+        # Run the check BEFORE the worker: if it already passes there is nothing to do (the final gate of a split task,
+        # or a weak check), and if it fails its output is the freshest, most accurate error for the worker.
         pre = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else None
         if pre is not None and pre["rc"] == 0:
             task["status"] = "done"; task["commit"] = G.checkpoint(proj, task)
             task["history"].append({"ts": now(), "precheck_pass": True, "gate": bool(task.get("split_into"))})
             if not task.get("split_into"): Z.record(proj, task, "done")
             store.save(data)
-            append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "event": "precheck_pass",
-                                                     "gate": bool(task.get("split_into"))})
+            append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "event": "precheck_pass", "gate": bool(task.get("split_into"))})
             if not task.get("split_into"):
                 append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "weak_check", "ok": True,
                              "reason": f"{task['id']} check passed before any work"})
@@ -94,7 +103,8 @@ def step(proj, fresh=False):
         task["status"] = "running"; task["attempts"] += 1; attempt = task["attempts"]
         store.save(data)
         last = err_text(task, pre) if pre else ""
-    w = run_worker(proj, task, attempt, last)
+    w = run_worker(proj, task, attempt, last, extra_env)
+    need_split = False
     with store.locked():
         tamper2 = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
         data = store.load(); task = T.get(data, task["id"])
@@ -104,31 +114,58 @@ def step(proj, fresh=False):
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "task": task["id"], "findings": tamper2})
         res = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
         passed = res["rc"] == 0 and not tamper2
-        rec = {"ts": now(), "task": task["id"], "attempt": attempt, "worker_rc": w.get("rc"), "check_rc": res["rc"],
-               "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
+        rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"),
+               "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
                "files": G.changed_files(proj.rundir)}
-        task["history"].append({**rec, "out_tail": err_text(task, res) if not passed else ""})
-        task["status"] = "done" if passed else "pending"
-        if passed:
-            task["commit"] = G.checkpoint(proj, task); Z.record(proj, task, "done")
         append_jsonl(proj.p("attempts.jsonl"), rec)
-        stuck = [] if passed else B.signals(proj, task)
-        if stuck:   # interim hand-off (Step G replaces this with the full ladder): never loop forever
-            task["status"] = "blocked"
-            task["blocked_question"] = "Stuck (" + "; ".join(m for _, m in stuck) + "). Last error: " + err_text(task, res)[-300:].replace("\n", " ")
-            Z.record(proj, task, "blocked")
-            append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
-                         "reason": task["blocked_question"][:300], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
+        task["history"].append({**{k: v for k, v in rec.items() if k != "files"}, "out_tail": err_text(task, res) if not passed else ""})
+        action, signals, new_rung, why = None, [], None, ""
+        if passed:
+            task["status"] = "done"; task["commit"] = G.checkpoint(proj, task); Z.record(proj, task, "done")
+        else:
+            task["status"] = "pending"
+            signals = [n for n, _ in B.signals(proj, task)]
+            action, new_rung, why = L.decide(proj, task, signals)
+            old = L.rung_of(task)
+            if action != "stay":
+                L.log_escalation(proj, task, old, new_rung, why); task["ladder"] = new_rung; task["rung_tries"] = 0
+            if new_rung == 3 and not task.get("split_into"): need_split = True
+            if action == "block": _block(proj, task, err_text(task, res), res)
         store.save(data)
-    split_after = proj.get("AUTO_SPLIT_AFTER", 0, int)
-    if not passed and not stuck and split_after and attempt >= split_after and not task.get("split_into"):
+    if need_split:     # split needs the store lock itself, so it runs after we release it
         r = Z.auto_split(proj, task["id"], err_text(task, res))
         if r["ok"]: return {"event": "task_split", "task": task["id"], "children": r["children"], "attempt": attempt, "tamper": tamper2}
-    if stuck:
-        return {"event": "task_blocked", "task": task["id"], "attempt": attempt, "signals": [n for n, _ in stuck],
+        with store.locked():                                   # no split available: skip straight to the next rung
+            data = store.load(); t2 = T.get(data, task["id"]); nr = L.next_rung(proj, 3)
+            L.log_escalation(proj, t2, 3, nr, "no split available"); t2["ladder"] = nr; t2["rung_tries"] = 0
+            if nr >= 6:
+                _block(proj, t2, err_text(task, res), res); action = "block"; task = t2
+            store.save(data)
+    if action == "block":
+        return {"event": "task_blocked", "task": task["id"], "attempt": attempt, "signals": signals, "why": why,
                 "question": task["blocked_question"], "tamper": tamper2}
-    return {"event": "task_done" if passed else "task_failed", "task": task["id"], "attempt": attempt, "fresh": fresh,
-            "check_rc": res["rc"], "tamper": tamper2, "out_tail": res["out"][-400:]}
+    return {"event": "task_done" if passed else "task_failed", "task": task["id"], "attempt": attempt, "rung": L.rung_of(task),
+            "fresh": fresh, "check_rc": res["rc"], "tamper": tamper2, "out_tail": res["out"][-400:]}
+
+def answer(proj, text, task_id=None):
+    """A human answer: recorded, and the (named or first) blocked task goes back to rung 1 with a fresh budget."""
+    m = re.match(r"^\s*(T\d+(?:\.\d+)*)\s*[:,\-]\s*(.*)$", text, re.S)
+    if m and not task_id: task_id, text = m.group(1), m.group(2)
+    store = T.TaskStore(proj); released = None
+    if store.exists():
+        with store.locked():
+            store.check_integrity(); data = store.load()
+            blocked = [t for t in data["tasks"] if t["status"] == "blocked"]
+            tgt = T.get(data, task_id) if task_id else (blocked[0] if blocked else None)
+            if tgt is not None and tgt["status"] == "blocked":
+                tgt["status"] = "pending"; tgt["ladder"] = 1; tgt["rung_tries"] = 0; tgt["attempts_base"] = tgt["attempts"]
+                q, tgt["blocked_question"] = tgt["blocked_question"], None; released = tgt["id"]
+                store.save(data)
+                append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "human", "op": "answer", "ok": True,
+                             "reason": f"{released} unblocked", "before": [(released, "blocked")], "after": [(released, "pending")]})
+    with open(proj.p("ANSWERS.md"), "a") as f:
+        f.write(f"\n## {now()} (answer{' to ' + (released or task_id) if (released or task_id) else ''})\n{text.strip()}\n")
+    return {"ok": True, "released": released}
 
 def reset(proj):
     """Manual/ladder primitive: code dir back to the last verified checkpoint."""

@@ -58,7 +58,7 @@ def _split(proj, data, op):
     parent["deps"] = list(parent["deps"]) + [k["id"] for k in kids]   # parent keeps its ORIGINAL check as the final gate
     parent["split_into"] = [k["id"] for k in kids]
     if parent["status"] == "blocked": parent["status"] = "pending"; parent["blocked_question"] = None
-    parent["ladder"] = 0
+    parent["ladder"] = 1; parent["rung_tries"] = 0
     return [k["id"] for k in kids]
 
 def _reorder(proj, data, op):

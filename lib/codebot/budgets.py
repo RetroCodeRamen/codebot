@@ -49,15 +49,17 @@ def _flipped(seq):
 def signals(proj, task):
     """List of (name, message) for the task that just failed."""
     L, allatts = limits(proj), load_attempts(proj)
-    mine = [a for a in allatts if a["task"] == task["id"]]
+    base = task.get("attempts_base", 0)          # attempts before the last human answer do not count
+    mine = [a for a in allatts if a["task"] == task["id"]][base:]
+    used = task["attempts"] - base
     out = []
     n = L["STUCK_SAME_FAILURE"]
     if n and len(mine) >= n:
         tail = mine[-n:]
         if all(not a["passed"] for a in tail) and len({a["sig"] for a in tail}) == 1 and tail[-1]["sig"]:
             out.append(("same_failure", f"the same check failure {n} times in a row"))
-    if L["TASK_MAX_ATTEMPTS"] and task["attempts"] >= L["TASK_MAX_ATTEMPTS"]:
-        out.append(("task_budget", f"{task['attempts']} attempts used (cap {L['TASK_MAX_ATTEMPTS']})"))
+    if L["TASK_MAX_ATTEMPTS"] and used >= L["TASK_MAX_ATTEMPTS"]:
+        out.append(("task_budget", f"{used} attempts used (cap {L['TASK_MAX_ATTEMPTS']})"))
     nop = 0
     for a in reversed(allatts):
         if a["passed"]: break

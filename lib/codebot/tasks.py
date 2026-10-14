@@ -7,8 +7,8 @@ STATUSES = ("pending", "running", "done", "blocked")
 
 def new_task(tid, title, check=None, files=None, size=None, deps=None, parent=None):
     return {"id": tid, "title": title, "check": check, "files": files or [], "size": size or "M",
-            "status": "pending", "deps": deps or [], "parent": parent, "attempts": 0, "ladder": 0,
-            "blocked_question": None, "history": []}
+            "status": "pending", "deps": deps or [], "parent": parent, "attempts": 0, "ladder": 1, "rung_tries": 0,
+            "attempts_base": 0, "blocked_question": None, "history": []}
 
 class TaskStore:
     def __init__(self, proj):
