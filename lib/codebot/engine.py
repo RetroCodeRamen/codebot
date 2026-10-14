@@ -46,6 +46,12 @@ def run_worker(proj, task, attempt, last_error):
     except subprocess.TimeoutExpired:
         return {"rc": 124, "secs": round(time.time() - t0, 1), "tail": "[worker timed out]"}
 
+def err_text(task, res):
+    """What the worker is told about a failing check. Silent checks (grep -q, test -f) get a description."""
+    out = (res.get("out") or "").strip()
+    if out: return out[-1500:]
+    return f"The acceptance check `{task.get('check')}` exited with status {res['rc']} and printed nothing. It is run in the code directory."
+
 def step(proj, fresh=False):
     """One attempt. Returns an event dict for the supervisor (bash loop) to act on.
     fresh=True: reset the code dir to the last verified checkpoint before the worker runs."""
@@ -68,9 +74,22 @@ def step(proj, fresh=False):
                 return {"event": "error", "task": task["id"], "error": "task has no check"}
         G.ensure_baseline(proj)
         if fresh: G.reset_to_last_good(proj)
+        # Run the check BEFORE the worker: if it already passes there is nothing to do (e.g. the final gate of a split
+        # task, or a weak check), and if it fails its output is the freshest, most accurate error for the worker.
+        pre = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else None
+        if pre is not None and pre["rc"] == 0:
+            task["status"] = "done"; task["commit"] = G.checkpoint(proj, task)
+            task["history"].append({"ts": now(), "precheck_pass": True, "gate": bool(task.get("split_into"))})
+            store.save(data)
+            append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "event": "precheck_pass",
+                                                     "gate": bool(task.get("split_into"))})
+            if not task.get("split_into"):
+                append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "weak_check", "ok": True,
+                             "reason": f"{task['id']} check passed before any work"})
+            return {"event": "task_done", "task": task["id"], "attempt": task["attempts"], "precheck": True, "tamper": tamper}
         task["status"] = "running"; task["attempts"] += 1; attempt = task["attempts"]
         store.save(data)
-        last = (task["history"][-1].get("out_tail") or "") if task["history"] else ""
+        last = err_text(task, pre) if pre else ""
     w = run_worker(proj, task, attempt, last)
     with store.locked():
         tamper2 = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
@@ -83,7 +102,7 @@ def step(proj, fresh=False):
         passed = res["rc"] == 0 and not tamper2
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "worker_rc": w.get("rc"), "check_rc": res["rc"],
                "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed}
-        task["history"].append({**rec, "out_tail": res["out"][-1500:]})
+        task["history"].append({**rec, "out_tail": err_text(task, res) if not passed else ""})
         task["status"] = "done" if passed else "pending"
         if passed: task["commit"] = G.checkpoint(proj, task)
         store.save(data)

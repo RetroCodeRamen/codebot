@@ -188,7 +188,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | A | Baseline, tests harness, tasks.json, freeze, engine skeleton | **done** (9 tests) |
 | B | F1 locked checks | **done** (10 tests) |
 | C | F2 git checkpoints | **done** (7 tests) |
-| D | F6 controlled replanning | todo |
+| D | F6 controlled replanning | **done** (22 tests) |
 | E | F3 budgets and stuck detection | todo |
 | F | F5 adaptive sizing | todo |
 | G | F4 escalation ladder | todo |
@@ -216,3 +216,11 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   venvs/caches. Verified task = commit `codebot: T3 <title>` + tag `codebot/<project>/T3` + `checkpoints.json`.
   `step --fresh` resets first (the primitive the ladder uses). Not yet done: the legacy bash path still lets the
   model commit; engine projects commit only after the harness verifies.
+- D: `planops.py`. Allowed ops: add_task, split_task, reorder; anything else, a missing reason, a missing check, a split of a
+  done task, a dependency-breaking reorder, or a fixture that would overwrite a locked file is rejected AND logged
+  (`plan.log`: ts, actor, op, reason, ok, before/after). New checks are frozen on the spot (`freeze(only_new=True)`), old ones
+  are byte-identical (tested). Split: children run in order before the parent; the parent keeps its original check
+  as the final gate. Two engine changes came out of it: (1) the check now runs BEFORE the worker, so an already-
+  satisfied task (a split parent, or a weak check) is marked done without wasting a model call, and weak checks are
+  logged; (2) silent checks (`grep -q`, `test -f`) used to hand the worker an empty error, so a failing check with no
+  output is now described ("check X exited with status 1 and printed nothing").

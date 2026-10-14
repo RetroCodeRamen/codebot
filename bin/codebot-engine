@@ -7,8 +7,8 @@ from codebot import engine, tasks as T
 
 def main():
     ap = argparse.ArgumentParser(prog="codebot-engine")
-    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset"])
-    ap.add_argument("project"); ap.add_argument("--allow-unchecked", action="store_true")
+    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op"])
+    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true")
     ap.add_argument("--home"); ap.add_argument("--fresh", action="store_true")
     a = ap.parse_args()
     proj = Project(a.project, a.home)
@@ -21,6 +21,9 @@ def main():
         s = T.TaskStore(proj)
         if not s.exists(): print(json.dumps({"frozen": False})); return
         d = s.load(); print(json.dumps({"frozen": True, "counts": T.counts(d)}))
+    elif a.cmd == "plan-op":
+        from codebot import planops
+        print(json.dumps(planops.apply(proj, json.loads(a.op_json), a.actor)))
     elif a.cmd == "reset":
         print("reset to " + str(engine.reset(proj)))
     elif a.cmd == "render":
