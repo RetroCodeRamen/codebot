@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, re, subprocess, sys, time
-from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L
+from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -110,6 +110,8 @@ def step(proj, fresh=False):
         task["status"] = "running"; task["attempts"] += 1; attempt = task["attempts"]
         store.save(data)
         last = err_text(task, pre) if pre else ""
+    try: os.remove(proj.p("packed.json"))
+    except OSError: pass
     w = run_worker(proj, task, attempt, last, extra_env)
     need_split = False
     with store.locked():
@@ -124,6 +126,12 @@ def step(proj, fresh=False):
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"),
                "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
                "files": G.changed_files(proj.rundir)}
+        packed = []                                    # lessons the worker's context actually contained this attempt
+        try:
+            with open(proj.p("packed.json")) as f: packed = json.load(f).get("lessons", [])
+        except (OSError, ValueError): pass
+        rec["lessons"] = packed
+        M.record_outcome(proj.home, packed, passed); M.prune(proj.home)
         append_jsonl(proj.p("attempts.jsonl"), rec)
         task["history"].append({**{k: v for k, v in rec.items() if k != "files"}, "out_tail": err_text(task, res) if not passed else ""})
         action, signals, new_rung, why = None, [], None, ""

@@ -2,7 +2,7 @@
 schema; the harness validates every action before applying it and builds all context itself. The worker's own claim
 of success is irrelevant: the engine runs the frozen check afterwards."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-from . import ollama, packer, planops, sandbox
+from . import memory, ollama, packer, planops, sandbox
 from .config import Project, now, append_jsonl
 
 ACTIONS = ("read_file", "list_dir", "write_file", "edit_file", "run", "replan", "note_lesson", "finish")
@@ -135,11 +135,8 @@ def do_action(ctx, a):
         r = planops.apply(proj, op, "model")
         return json.dumps(r)[:600]
     if name == "note_lesson":
-        text = str(a["text"]).strip()[:300]
-        if len(text) < 12: raise ActionError("lesson too short to be useful")
-        lid = hashlib.sha1(text.encode()).hexdigest()[:8]
-        append_jsonl(os.path.join(proj.home, "memory", "lessons.raw.jsonl"),
-                     {"id": lid, "ts": now(), "text": text, "project": proj.name, "task": ctx.task["id"], "attempt": ctx.attempt})
+        lid = memory.add(proj.home, str(a["text"]), proj.name, ctx.task["id"], ctx.attempt)
+        if lid is None: raise ActionError("lesson too short or already known")
         return f"lesson {lid} saved"
     if name == "finish":
         ctx.finished = True; ctx.summary = str(a.get("summary", ""))[:300]; return "finished"

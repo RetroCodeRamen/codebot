@@ -2,7 +2,7 @@
 check, the last error, the files the task names, a compact repo/symbol map, the agreed decisions, a few relevant lessons.
 Nothing else, within a token budget."""
 import json, os, re, subprocess
-from . import checks as C
+from . import checks as C, memory
 from .config import now
 
 CHARS_PER_TOKEN = 3.5
@@ -93,16 +93,8 @@ def section_from_md(path, headings, cap):
     return "\n".join(out)[:cap]
 
 def lessons_for(proj, task, cap=700):
-    try:
-        with open(os.path.join(proj.home, "memory", "lessons.md")) as f: lines = [l.strip() for l in f if l.strip().startswith("-")]
-    except OSError: return ""
-    words = {w for w in re.findall(r"[a-z]{4,}", (task["title"] + " " + " ".join(task.get("files") or [])).lower())}
-    scored = sorted(((sum(w in l.lower() for w in words), i, l) for i, l in enumerate(lines)), key=lambda x: (-x[0], x[1]))
-    out, used = [], 0
-    for sc, _, l in scored:
-        if used + len(l) > cap: break
-        out.append(l); used += len(l)
-    return "\n".join(out)
+    """Relevant, non-pruned lessons from the evidence-backed store: [(id, text)]."""
+    return [(l["id"], l["text"]) for l in memory.select(proj, task, cap=cap)]
 
 def previous_attempts(task, cap=5):
     h = [x for x in task.get("history", []) if "attempt" in x][-cap:]
@@ -142,7 +134,7 @@ def pack(proj, task, last_error="", budget_tokens=None):
     pa = previous_attempts(task)
     if pa: secs.append(("PREVIOUS ATTEMPTS AT THIS TASK", pa, 2))
     les = lessons_for(proj, task)
-    if les: secs.append(("LESSONS", les, 4))
+    if les: secs.append(("LESSONS", "\n".join(f"- {t}" for _, t in les), 4))
     rel = relevant_files(rundir, task, last_error, files)
     fixed = sum(len(t) + len(n) + 8 for n, t, _ in secs)
     remaining = max(1500, budget - fixed)
@@ -161,5 +153,6 @@ def pack(proj, task, last_error="", budget_tokens=None):
         if secs[drop][2] == 0: text = text[:int(budget)]; break
         secs.pop(drop); text = "\n\n".join(f"## {n}\n{t}" for n, t, _ in secs if t)
     manifest = {"ts": now(), "task": task["id"], "tokens": tok(text), "budget_tokens": int(budget / CHARS_PER_TOKEN),
-                "sections": [(n.split(" (")[0], tok(t)) for n, t, _ in secs if t], "files_shown": rel}
+                "sections": [(n.split(" (")[0], tok(t)) for n, t, _ in secs if t], "files_shown": rel,
+                "lessons": [i for i, _ in les] if any(n == "LESSONS" for n, _, _ in secs) else []}
     return text, manifest

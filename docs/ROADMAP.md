@@ -193,7 +193,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | F | F5 adaptive sizing | **done** (16 tests) |
 | G | F4 escalation ladder | **done** (18 tests + supervisor integration) |
 | H | F7+F8 native worker | **done** (32 tests against a fake Ollama; real-model run pending) |
-| I | F9 evidence-backed memory | todo |
+| I | F9 evidence-backed memory | **done** (14 tests) |
 | J | F10 sandbox and audit | todo |
 | K | F11 modes | todo |
 | L | F12 morning report | todo |
@@ -274,3 +274,11 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   NOT yet verified: the real ornith:9b obeying the anyOf grammar and actually solving a task. That is the smoke test
   (step N) and needs the machine to be cool. Known limit until J: `run` is policy-checked, not isolated (a clever
   command could still read outside the project); bwrap closes that.
+- I: `memory.py`. Source of truth is `memory/lessons.raw.jsonl` (append-only; test asserts earlier bytes never change;
+  duplicates are skipped but their provenance is kept). `lessons.status.json` holds, per lesson, which project/task
+  produced it, how many attempts used it, how many passed, and a `pruned` flag with the reason; plus a baseline of
+  all attempts. The packer selects non-pruned lessons by relevance and the engine reads `packed.json` (removed before each
+  attempt so it cannot be stale) to attribute every attempt's outcome to the lessons actually in its context. Pruning is
+  deliberately conservative (>= 8 uses, >= 20 baseline attempts, pass rate more than 15 points under baseline) because
+  correlation is not causation; pruned lessons stay in raw. `lessons.md` is generated best-evidence-first under
+  LESSONS_MAX, so the model can no longer corrupt it; `codebot tidy` now needs no model when raw exists.
