@@ -57,12 +57,13 @@ BASE_ENV = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.U
 def execute(proj, argv, *, timeout, env=None, rw=None, ro=None, cwd=None):
     """Run argv (a list) sandboxed when available. Returns (rc, combined_output, sandbox_label)."""
     m = mode(proj); cwd = cwd or proj.rundir; env = {**BASE_ENV, **(env or {})}; mc = modes.sandbox_cfg(proj)
+    rw = [proj.rundir] if rw is None else rw          # rw=() means a read-only run
     for k in [*mc["env"], *[x for x in proj.get("SANDBOX_PASS_ENV", "VIRTUAL_ENV").split(",") if x]]:
         if os.environ.get(k): env.setdefault(k, os.environ[k])
     if mc["path_prepend"]: env["PATH"] = ":".join(mc["path_prepend"]) + ":" + env["PATH"]
     if m["mode"] == "docker":
         name = "cb-" + uuid.uuid4().hex[:10]; label = "docker:net=none:ro-root"
-        full = _docker_argv(proj, name, cwd, env, rw or [proj.rundir], ro or [], m["image"]) + list(argv)
+        full = _docker_argv(proj, name, cwd, env, rw, ro or [], m["image"]) + list(argv)
         try:
             r = subprocess.run(full, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
             return r.returncode, (r.stdout or "") + (r.stderr or ""), label

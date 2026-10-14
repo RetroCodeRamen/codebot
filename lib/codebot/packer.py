@@ -2,7 +2,7 @@
 check, the last error, the files the task names, a compact repo/symbol map, the agreed decisions, a few relevant lessons.
 Nothing else, within a token budget."""
 import json, os, re, subprocess
-from . import checks as C, memory, modes
+from . import checks as C, memory, modes, tokens
 from .config import now
 
 CHARS_PER_TOKEN = 3.5
@@ -18,7 +18,7 @@ SYMBOL_RES = {
 for _e in (".ts", ".tsx", ".jsx", ".mjs"): SYMBOL_RES[_e] = SYMBOL_RES[".js"]
 for _e in (".h", ".cpp", ".cc", ".hpp"): SYMBOL_RES[_e] = SYMBOL_RES[".c"]
 
-def tok(s): return int(len(s) / CHARS_PER_TOKEN) + 1
+def tok(s): return int(len(s) / CHARS_PER_TOKEN) + 1       # fallback; pack() uses the calibrated ratio
 
 def list_files(rundir, limit=400):
     r = subprocess.run(["git", "-C", rundir, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], capture_output=True, text=True)
@@ -116,7 +116,8 @@ def fixture_text(proj, task, cap=1800):
 
 def pack(proj, task, last_error="", budget_tokens=None):
     """Build the initial user message for one attempt. Returns (text, manifest)."""
-    budget = (budget_tokens or proj.get("CONTEXT_BUDGET", 8000, int)) * CHARS_PER_TOKEN
+    cpt = tokens.ratio(proj); tok = lambda s: int(len(s) / cpt) + 1
+    budget = (budget_tokens or proj.get("CONTEXT_BUDGET", 8000, int)) * cpt
     rundir = proj.rundir; files = list_files(rundir)
     secs = []   # (name, text, priority) ; lower priority number = kept first
     secs.append(("TASK", f"id: {task['id']}\ntitle: {task['title']}\nsize: {task.get('size', 'M')}\nfiles hint: {', '.join(task.get('files') or []) or '(none)'}", 0))
@@ -150,11 +151,16 @@ def pack(proj, task, last_error="", budget_tokens=None):
         if body is None or used + len(body) > file_budget: continue
         shown.append(f"--- {r} ---\n{body}"); used += len(body)
     if shown: secs.append(("RELEVANT FILES", "\n".join(shown), 3))
-    text = "\n\n".join(f"## {n}\n{t}" for n, t, _ in secs if t)
+    # STABLE-FIRST ORDER: what rarely changes goes first so the model server's KV cache can reuse the longest prefix across turns
+    # and attempts; what changes every attempt (task, last error, files) goes last. Priorities (above) still decide what is dropped.
+    ORDER = ["PROJECT GOAL", "AGREED DECISIONS", "MODE NOTES", "LESSONS", "REPO MAP", "TASK", "ACCEPTANCE CHECK", "PREVIOUS ATTEMPTS", "HUMAN ANSWERS", "LAST CHECK OUTPUT", "RELEVANT FILES"]
+    rank = lambda n: next((i for i, k in enumerate(ORDER) if n.startswith(k)), len(ORDER))
+    render = lambda: "\n\n".join(f"## {n}\n{t}" for n, t, _ in sorted(secs, key=lambda s: rank(s[0])) if t)
+    text = render()
     while len(text) > budget and secs:      # still too big: drop the least important section first
         drop = max(range(len(secs)), key=lambda i: (secs[i][2], len(secs[i][1])))
         if secs[drop][2] == 0: text = text[:int(budget)]; break
-        secs.pop(drop); text = "\n\n".join(f"## {n}\n{t}" for n, t, _ in secs if t)
+        secs.pop(drop); text = render()
     manifest = {"ts": now(), "task": task["id"], "tokens": tok(text), "budget_tokens": int(budget / CHARS_PER_TOKEN),
                 "sections": [(n.split(" (")[0], tok(t)) for n, t, _ in secs if t], "files_shown": rel,
                 "lessons": [i for i, _ in les] if any(n == "LESSONS" for n, _, _ in secs) else []}

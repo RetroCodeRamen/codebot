@@ -1,7 +1,7 @@
 """Controlled replanning. The model may ADD, SPLIT or REORDER tasks. It may never delete a task, edit or weaken a
 check, rename, or set a status. Every op (accepted or rejected) is logged with a reason in plan.log."""
 import os, re
-from . import tasks as T, checks as C
+from . import tasks as T, checks as C, guard as GD
 from .config import now, append_jsonl
 
 ALLOWED = ("add_task", "split_task", "reorder")
@@ -40,7 +40,17 @@ def _add(proj, data, op):
         a = T.get(data, op["after"])
         if a is None: raise Rejected(f"unknown task {op['after']} in 'after'")
         pos = data["tasks"].index(a) + 1
-    _fixtures(proj, op.get("fixtures")); data["tasks"].insert(pos, t); return [t["id"]]
+    fx_before = set(os.listdir(C.checks_dir(proj))) if os.path.isdir(C.checks_dir(proj)) else set()
+    _fixtures(proj, op.get("fixtures"))
+    if GD.enabled(proj) and t.get("check"):                       # same guard as at freeze: a check that already passes tests nothing
+        pr = GD.probe(proj, t["check"], proj.get("CHECK_TIMEOUT", 600, int))
+        if pr["verdict"] != "ok":
+            for n in set(os.listdir(C.checks_dir(proj))) - fx_before:
+                try: os.remove(os.path.join(C.checks_dir(proj), n))     # do not leave unlocked fixture files behind
+                except OSError: pass
+            GD.log_rejection(proj, t["id"], t["title"], t["check"], pr["verdict"], pr["out"], op.get("_actor", "model"))
+            raise Rejected(GD.REASON[pr["verdict"]])
+    data["tasks"].insert(pos, t); return [t["id"]]
 
 def _split(proj, data, op):
     parent = T.get(data, op.get("task", ""))

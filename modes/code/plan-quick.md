@@ -24,3 +24,5 @@ Tasks must be small (a single iteration, ~20 tool calls), ordered, and each veri
 6. When approved, tell the user to exit and run: codebot start {{NAME}}
 
 Every task needs a `check:` line (one shell command run in the code directory, exit 0 only when the task is done; it must fail now and print why) plus `files:` and `size: S|M|L` lines. SIZING HISTORY: {{SIZING}}
+
+After writing PLAN.md run `codebot check-plan {{NAME}}` and rewrite every check it rejects (a check that already passes, or is broken, tests nothing) until its last line says OK.

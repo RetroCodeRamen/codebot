@@ -1,10 +1,10 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, re, subprocess, sys, time
-from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD
+from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD, guard as GD
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
-def freeze_project(proj, allow_unchecked=False):
+def freeze_project(proj, allow_unchecked=False, allow_passing=False):
     """PLAN.md -> tasks.json (+ frozen checks). Additive: PLAN.md and other state files are kept."""
     store = T.TaskStore(proj)
     if store.exists(): raise SystemExit(f"{proj.name}: already frozen (tasks.json exists)")
@@ -20,6 +20,9 @@ def freeze_project(proj, allow_unchecked=False):
     os.makedirs(C.checks_dir(proj), exist_ok=True)
     try: MD.copy_verifiers(proj)                 # the mode's verifier helpers become part of the frozen checks
     except MD.ModeError as e: raise SystemExit(f"{proj.name}: {e}")
+    if GD.enabled(proj) and not allow_passing:   # a check that already passes (or is broken) tests nothing: reject before freezing
+        try: GD.enforce(proj, tasks)
+        except GD.GuardError as e: raise SystemExit(f"{proj.name}: {e}")
     with store.locked():
         C.freeze(proj, data); store.save(data)
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "freeze", "reason": "initial freeze",

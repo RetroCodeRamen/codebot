@@ -2,7 +2,7 @@
 schema; the harness validates every action before applying it and builds all context itself. The worker's own claim
 of success is irrelevant: the engine runs the frozen check afterwards."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-from . import audit, memory, modes, ollama, packer, planops, sandbox
+from . import audit, memory, modes, ollama, packer, planops, sandbox, tokens
 from .config import Project, now, append_jsonl
 
 ACTIONS = ("read_file", "list_dir", "write_file", "edit_file", "run", "replan", "note_lesson", "finish")
@@ -153,63 +153,90 @@ def do_action(ctx, a):
     raise ActionError(f"unhandled action {name}")
 
 # ---------- conversation ----------
-def est_tokens(messages): return int(sum(len(m["content"]) for m in messages) / packer.CHARS_PER_TOKEN)
+SUMMARY_MARK = "## EARLIER STEPS (compacted)"
+
+def est_tokens(proj, messages): return tokens.est_messages(proj, messages)
 
 def compact(messages, keep=6):
-    """Fold old steps into one-line notes in the first user message so long attempts stay inside the window."""
-    if len(messages) <= keep + 2: return messages
-    head, mid, tail = messages[:2], messages[2:-keep], messages[-keep:]
+    """Fold old steps into one-line notes in ONE extra user message placed AFTER the untouched [system, context] prefix. The prefix
+    stays byte-identical for the whole attempt, so the model server's KV cache keeps being reused for it."""
+    prefix, rest, old = messages[:2], messages[2:], []
+    if rest and rest[0]["role"] == "user" and rest[0]["content"].startswith(SUMMARY_MARK):
+        old = rest[0]["content"].splitlines()[1:]; rest = rest[1:]
+    if len(rest) <= keep and not (keep == 0 and rest): return messages
+    mid, tail = (rest[:-keep], rest[-keep:]) if keep else (rest, [])
+    mid, tail = list(mid), list(tail)
     while tail and tail[0]["role"] != "assistant": mid.append(tail.pop(0))
     notes = []
     for i in range(0, len(mid) - 1, 2):
         try: a = json.loads(mid[i]["content"]); act = f"{a.get('action')} {a.get('path') or a.get('command') or ''}".strip()
         except ValueError: act = "(malformed reply)"
         notes.append(f"- {act[:80]} -> {mid[i + 1]['content'].splitlines()[0][:100] if mid[i + 1]['content'] else ''}")
-    first = dict(head[1]); first["content"] = head[1]["content"].split("\n\n## EARLIER STEPS")[0] + "\n\n## EARLIER STEPS (compacted)\n" + "\n".join(notes[-30:])
-    return [head[0], first, *tail]
+    return [*prefix, {"role": "user", "content": SUMMARY_MARK + "\n" + "\n".join((old + notes)[-30:])}, *tail]
+
+def fit(proj, messages, reserve):
+    """Guarantee request + generation reserve fit in the model's window (NUM_CTX), using the calibrated token estimate."""
+    limit = int(tokens.num_ctx(proj) * 0.94) - reserve
+    truncated = False
+    for keep in (6, 4, 2, 0):
+        if est_tokens(proj, messages) <= limit: return messages, False
+        messages = compact(messages, keep)
+    over = est_tokens(proj, messages) - limit
+    if over > 0:        # the packed context itself is too big: cut the end of it (the least stable part) as a last resort
+        ctx = dict(messages[1]); cut = int(over * tokens.ratio(proj)) + 400
+        ctx["content"] = ctx["content"][: max(500, len(ctx["content"]) - cut)] + "\n\n[context truncated to fit]\nReply with ONE JSON action."
+        messages = [messages[0], ctx, *messages[2:]]; truncated = True
+    return messages, truncated
 
 def trace(proj, rec): append_jsonl(proj.p("trace.jsonl"), {"ts": now(), **rec})
 
 def run_attempt(proj, task, attempt, last_error, variant="", model=None, temperature=None):
     max_turns = proj.get("WORKER_MAX_TURNS", 24, int); ctx_cap = proj.get("WORKER_CONTEXT_TOKENS", 22000, int)
+    num_predict = proj.get("WORKER_MAX_TOKENS", 1800, int); n_ctx = tokens.num_ctx(proj)
     temp = temperature if temperature is not None else proj.get("WORKER_TEMPERATURE", 0.2, float)
     text, manifest = packer.pack(proj, task, last_error)
     with open(proj.p("packed.json"), "w") as f: json.dump(manifest, f)
-    trace(proj, {"event": "attempt_start", "task": task["id"], "attempt": attempt, "variant": variant or "std", "model": model, "context": manifest})
+    trace(proj, {"event": "attempt_start", "task": task["id"], "attempt": attempt, "variant": variant or "std", "model": model, "context": manifest, "num_ctx": n_ctx})
     rules = ""
     try: rules = modes.worker_rules(proj.home, proj.mode)
     except modes.ModeError: pass
     messages = [{"role": "system", "content": (SYSTEM_ALT if variant == "alt" else SYSTEM) + ("\n" + rules if rules else "")},
                 {"role": "user", "content": text + "\n\nReply with ONE JSON action."}]
     ctx, schema, bad, recent, turns = Ctx(proj, task, attempt), action_schema(), 0, [], 0
-    ended = "turn limit"
+    ended, stats = "turn limit", {"malformed": 0, "action_errors": 0, "max_est": 0, "truncated": 0}
     while turns < max_turns:
         turns += 1
-        try: resp = ollama.chat(proj, messages, schema=schema, model=model, temperature=temp, num_predict=proj.get("WORKER_MAX_TOKENS", 1800, int))
+        messages, cut = fit(proj, messages, num_predict); est = est_tokens(proj, messages)
+        stats["max_est"] = max(stats["max_est"], est); stats["truncated"] += 1 if cut else 0
+        try: resp = ollama.chat(proj, messages, schema=schema, model=model, temperature=temp, num_predict=num_predict)
         except ollama.ModelError as e:
             if "HTTP 400" in str(e) and schema is not flat_schema():       # server cannot compile anyOf: use the flat schema
-                schema = flat_schema(); continue
+                schema = flat_schema(); trace(proj, {"event": "schema_fallback", "task": task["id"], "attempt": attempt}); continue
             ended = f"model error: {e}"; break
-        raw = resp["content"]; reply_ok = True; result = ""; a = None
+        raw = resp["content"]; kind = "ok"; result = ""; a = None
         try:
             a = json.loads(raw); validate_shape(a)
         except (ValueError, ActionError) as e:
-            bad += 1; reply_ok = False; result = f"Your reply was rejected: {e}. Reply with exactly one JSON action object."
-            if bad >= 3: ended = "too many malformed replies"; trace(proj, {"event": "turn", "task": task["id"], "ok": False, "result": result}); break
+            bad += 1; kind = "malformed"; stats["malformed"] += 1
+            result = f"Your reply was rejected: {e}. Reply with exactly one JSON action object."
         else:
             key = json.dumps({k: v for k, v in a.items() if k != "why"}, sort_keys=True)
             recent = (recent + [key])[-5:]
-            if recent.count(key) >= 5: ended = "stuck repeating the same action"; break
-            try: result = do_action(ctx, a)
-            except ActionError as e: reply_ok = False; result = f"ERROR: {e}"
-            if recent.count(key) >= 3: result += "\nWARNING: you repeated this exact action 3 times. Do something different or call finish."
-        trace(proj, {"event": "turn", "task": task["id"], "attempt": attempt, "n": turns, "ok": reply_ok, "action": (a.get("action") if isinstance(a, dict) else None),
-                     "arg": (str(a.get("path") or a.get("command") or "")[:120] if isinstance(a, dict) else ""), "result": result[:160],
-                     "ptok": resp["prompt_tokens"], "gtok": resp["gen_tokens"], "secs": resp["secs"]})
+            if recent.count(key) >= 5: ended = "stuck repeating the same action"
+            else:
+                try: result = do_action(ctx, a)
+                except ActionError as e: kind = "action_error"; stats["action_errors"] += 1; result = f"ERROR: {e}"
+                if recent.count(key) >= 3: result += "\nWARNING: you repeated this exact action 3 times. Do something different or call finish."
+        trace(proj, {"event": "turn", "task": task["id"], "attempt": attempt, "n": turns, "kind": kind, "ok": kind == "ok",
+                     "action": (a.get("action") if isinstance(a, dict) else None), "arg": (str(a.get("path") or a.get("command") or "")[:120] if isinstance(a, dict) else ""),
+                     "result": result[:160], "ptok": resp["prompt_tokens"], "gtok": resp["gen_tokens"], "prompt_ms": resp["prompt_ms"], "gen_ms": resp["gen_ms"],
+                     "load_ms": resp["load_ms"], "secs": resp["secs"], "est_prompt": est, "num_ctx": n_ctx})
+        if ended == "stuck repeating the same action": break
+        if kind == "malformed" and bad >= 3: ended = "too many malformed replies"; break
         messages.append({"role": "assistant", "content": raw}); messages.append({"role": "user", "content": "RESULT:\n" + result[:3000]})
         if ctx.finished: ended = "finished"; break
-        if est_tokens(messages) > ctx_cap: messages = compact(messages)
-    trace(proj, {"event": "attempt_end", "task": task["id"], "attempt": attempt, "turns": turns, "ended": ended, "summary": ctx.summary})
+        if est_tokens(proj, messages) > ctx_cap: messages = compact(messages)
+    trace(proj, {"event": "attempt_end", "task": task["id"], "attempt": attempt, "turns": turns, "ended": ended, "summary": ctx.summary, **stats})
     return {"turns": turns, "ended": ended, "summary": ctx.summary}
 
 def main():

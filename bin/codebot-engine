@@ -7,8 +7,8 @@ from codebot import engine, tasks as T
 
 def main():
     ap = argparse.ArgumentParser(prog="codebot-engine")
-    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit", "mode-info", "prompt-template", "modes", "report"])
-    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--quick", action="store_true"); ap.add_argument("--json", action="store_true"); ap.add_argument("--short", action="store_true"); ap.add_argument("--write", action="store_true")
+    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit", "mode-info", "prompt-template", "modes", "report", "check-plan"])
+    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--quick", action="store_true"); ap.add_argument("--json", action="store_true"); ap.add_argument("--short", action="store_true"); ap.add_argument("--allow-passing-checks", action="store_true"); ap.add_argument("--write", action="store_true")
     ap.add_argument("--home"); ap.add_argument("--fresh", action="store_true")
     a = ap.parse_intermixed_args()
     if a.cmd == "modes":
@@ -17,7 +17,7 @@ def main():
         return
     proj = Project(a.project, a.home)
     if a.cmd == "freeze":
-        d = engine.freeze_project(proj, a.allow_unchecked or bool(proj.get("ALLOW_UNCHECKED")))
+        d = engine.freeze_project(proj, a.allow_unchecked or bool(proj.get("ALLOW_UNCHECKED")), a.allow_passing_checks)
         print(f"frozen {proj.name}: {len(d['tasks'])} tasks, checks locked in checks.lock")
     elif a.cmd == "step":
         print(json.dumps(engine.step(proj, fresh=a.fresh)))
@@ -28,6 +28,16 @@ def main():
     elif a.cmd == "plan-op":
         from codebot import planops
         print(json.dumps(planops.apply(proj, json.loads(a.op_json), a.actor)))
+    elif a.cmd == "check-plan":
+        from codebot import guard, planparse
+        with open(proj.p("PLAN.md")) as f: _, tasks = planparse.parse_plan(f.read())
+        res = guard.evaluate(proj, tasks); bad = [r for r in res if r["verdict"] != "ok"]
+        for r in res: print(f"{r['id']:<6} {'OK  (fails now: a real test)' if r['verdict'] == 'ok' else r['verdict'].upper():<30} {r['title'][:50]}")
+        missing = [t["id"] for t in tasks if t["status"] != "done" and not (t.get("check") or "").strip()]
+        for m in missing: print(f"{m:<6} {'NO CHECK':<30}")
+        for r in bad: guard.log_rejection(proj, r["id"], r["title"], r["check"], r["verdict"], r["out"], "planner")
+        if bad: print("\n" + guard.message(proj, bad).split("\n", 1)[1])
+        print("OK" if not bad and not missing else "REJECTED"); sys.exit(1 if bad or missing else 0)
     elif a.cmd == "report":
         from codebot import report
         r = report.build(proj)

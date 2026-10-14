@@ -165,8 +165,12 @@ class TestLoopControl(Base):
         self.write_code("big.txt", "\n".join("x" * 80 for _ in range(300)))
         self.set_env(WORKER_CONTEXT_TOKENS="1500", WORKER_MAX_TURNS="14")
         self.attempt([A("read_file", path="big.txt", offset=i * 40 + 1, limit=40) for i in range(14)])
-        sizes = [sum(len(m["content"]) for m in r["messages"]) / 3.5 for r in self.fake.requests]
-        self.assertLess(max(sizes), 1500 * 2.2); first = self.fake.requests[-1]["messages"][1]["content"]; self.assertIn("EARLIER STEPS", first)
+        last = self.fake.requests[-1]["messages"]
+        self.assertTrue(last[2]["content"].startswith("## EARLIER STEPS (compacted)"))      # in its OWN message, after the untouched prefix
+        self.assertNotIn("EARLIER STEPS", last[1]["content"])
+        sizes = [sum(len(m["content"]) for m in r["messages"]) / 3.0 for r in self.fake.requests]
+        self.assertLess(max(sizes), 1500 * 3)                                        # soft cap + the 3 most recent turns kept verbatim
+        self.assertLess(sizes[-1], max(sizes[:8]) * 1.3)                              # history plateaus instead of growing with the turn count
 
 class TestPacker(Base):
     def test_includes_named_files_error_and_decisions(self):

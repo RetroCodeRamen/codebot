@@ -394,6 +394,8 @@ cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" rende
 cmd_freeze() { need_proj "${1:-}"; "$CODEBOT_HOME/bin/codebot-engine" freeze "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_engine() { local sub="${1:-}"; need_proj "${2:-}"; "$CODEBOT_HOME/bin/codebot-engine" "$sub" "$2" --home "$CODEBOT_HOME" "${@:3}"; }
 cmd_report() { load_proj "${1:-}"; if [[ "${2:-}" == --send ]]; then send_report; echo "report saved and pushed"; else eng report "${@:2}"; fi; }
+cmd_check_plan() { need_proj "${1:-}"; "$ENGINE" check-plan "$1" --home "$CODEBOT_HOME"; }
+cmd_bench() { exec "$CODEBOT_HOME/bin/codebot-bench" --home "$CODEBOT_HOME" "$@"; }
 cmd_modes() { "$ENGINE" modes x --home "$CODEBOT_HOME"; }
 cmd_audit() { need_proj "${1:-}"; "$ENGINE" audit "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_tidy() {   # evidence-backed memory needs no model: prune lessons that correlate with failure and regenerate lessons.md
@@ -410,6 +412,8 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 c="${1:-help}"; shift || true
 case "$c" in
   setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|report|__loop) "cmd_$c" "$@";;
+  check-plan) cmd_check_plan "$@";;
+  bench) cmd_bench "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -419,6 +423,7 @@ case "$c" in
 codebot - local ralph-loop coding agent
   plan <name> [workdir] [--mode <m>] [--target <path>] [--quick]   interactive planning (default: thorough "grill me" interview; --quick = short one; --re = --mode re)
   modes                   list the modes (folders under modes/)
+  bench [--preflight] [--suite pyutils --plan fixed|auto] [--record]   run a suite through the real pipeline and record the metrics
   start <name>            run the autonomous loop in the background
   pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
   resume <name>           continue after pause
