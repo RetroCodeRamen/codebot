@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# codebot: local-only ralph-loop coding agent (ollama + opencode)
+set -uo pipefail
+CODEBOT_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$CODEBOT_HOME/config/codebot.env"
+OLLAMA_BIN="$CODEBOT_HOME/tools/ollama/bin/ollama"
+OPENCODE_BIN="$CODEBOT_HOME/tools/node_modules/.bin/opencode"
+export OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT"
+export OLLAMA_MODELS="$CODEBOT_HOME/models"
+export OLLAMA_KEEP_ALIVE=30m OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1
+export OPENCODE_CONFIG="$CODEBOT_HOME/config/opencode.json"
+mkdir -p "$CODEBOT_HOME/logs" "$CODEBOT_HOME/projects"
+
+die() { echo "codebot: $*" >&2; exit 1; }
+sdir() { echo "$CODEBOT_HOME/projects/$1"; }
+need_proj() { [[ -n "${1:-}" && -d "$(sdir "$1")" ]] || die "unknown project '${1:-}' (see: codebot list)"; }
+load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; }
+alive() { [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null; }
+
+notify() { # title message priority tags
+  curl -s -m 15 -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" \
+    -d "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1 || echo "(ntfy send failed)" >&2
+}
+
+ensure_ollama() {
+  curl -sf -m 2 "http://$OLLAMA_HOST/api/version" >/dev/null && return 0
+  [[ -x "$OLLAMA_BIN" ]] || die "private ollama missing at $OLLAMA_BIN"
+  setsid nohup "$OLLAMA_BIN" serve >> "$CODEBOT_HOME/logs/ollama.log" 2>&1 &
+  for _ in $(seq 1 30); do curl -sf -m 2 "http://$OLLAMA_HOST/api/version" >/dev/null && break; sleep 1; done
+  "$OLLAMA_BIN" list | grep -q "^$CODEBOT_MODEL" || "$OLLAMA_BIN" create "$CODEBOT_MODEL" -f "$CODEBOT_HOME/config/Modelfile"
+}
+
+render() { # template file -> stdout
+  local t; t="$(cat "$1")"
+  t="${t//\{\{WORKDIR\}\}/$RUNDIR}"; t="${t//\{\{STATE\}\}/$S}"
+  t="${t//\{\{CODEBOT_HOME\}\}/$CODEBOT_HOME}"; t="${t//\{\{NAME\}\}/$NAME}"
+  printf '%s\n' "$t"
+}
+
+state_hash() {
+  { cat "$S/PLAN.md" "$S/PROGRESS.md" 2>/dev/null
+    git -C "$RUNDIR" rev-parse HEAD 2>/dev/null
+    git -C "$RUNDIR" status --porcelain 2>/dev/null
+    git -C "$RUNDIR" diff 2>/dev/null; } | md5sum | cut -d' ' -f1
+}
+tasks_left() { grep -c '^- \[ \]' "$S/PLAN.md" 2>/dev/null || true; }
+tasks_done() { grep -c '^- \[[xX]\]' "$S/PLAN.md" 2>/dev/null || true; }
+
+cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
+
+cmd_plan() {
+  local name="${1:-}"; [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir]"
+  S="$(sdir "$name")"; NAME="$name"
+  if [[ ! -d "$S" ]]; then
+    local wd; wd="$(readlink -f "${2:-$PWD}")"; [[ -d "$wd" ]] || die "no such dir: $wd"
+    mkdir -p "$S"; echo "WORKDIR=\"$wd\"" > "$S/project.env"; touch "$S/PROGRESS.md" "$S/ANSWERS.md"
+  fi
+  source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; ensure_ollama
+  cd "$RUNDIR" && exec "$OPENCODE_BIN" --agent codebot --prompt "$(render "$CODEBOT_HOME/prompts/plan.md")" "$RUNDIR"
+}
+
+cmd_start() {
+  load_proj "${1:-}"
+  [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
+  alive "$S/loop.pid" && die "$NAME is already running"
+  rm -f "$S/PAUSE" "$S/STATUS"
+  ensure_ollama
+  if [[ ! -f "$S/.git-prepped" ]]; then
+    if git -C "$WORKDIR" rev-parse HEAD >/dev/null 2>&1; then
+      # existing repo with history: isolate in a worktree so your checkout/uncommitted work is never touched
+      RUNDIR="$S/work"
+      git -C "$WORKDIR" worktree add -q -b "codebot/$NAME" "$RUNDIR" 2>/dev/null \
+        || git -C "$WORKDIR" worktree add -q "$RUNDIR" "codebot/$NAME" 2>/dev/null || [[ -d "$RUNDIR" ]] \
+        || die "could not create worktree for codebot/$NAME"
+      echo "RUNDIR=\"$RUNDIR\"" >> "$S/project.env"
+      echo "isolated worktree: $RUNDIR (branch codebot/$NAME) - your checkout is untouched"
+    else
+      # brand-new / history-less folder: nothing to protect, work in place
+      git -C "$WORKDIR" rev-parse --git-dir >/dev/null 2>&1 || git -C "$WORKDIR" init -q
+      git -C "$WORKDIR" checkout -q -b "codebot/$NAME" 2>/dev/null || true
+    fi
+    touch "$S/.git-prepped"
+  fi
+  setsid nohup "$0" __loop "$NAME" >> "$S/loop.log" 2>&1 &
+  echo $! > "$S/loop.pid"
+  echo "started $NAME (pid $!). watch: codebot log $NAME   pause: codebot pause $NAME"
+}
+
+verify_gate() { # 0 = ok / no verify script
+  [[ -x "$S/verify.sh" ]] || return 0
+  local out; out="$(cd "$RUNDIR" && timeout 900 "$S/verify.sh" 2>&1)"; local rc=$?
+  (( rc == 0 )) && return 0
+  VERIFY_OUT="$(printf '%s' "$out" | tail -c 1500)"; return 1
+}
+
+tidy_memory() { # condense lessons.md with the model; restore on any sanity failure
+  local f="$CODEBOT_HOME/memory/lessons.md" arch="$CODEBOT_HOME/memory/.archive"; mkdir -p "$arch"
+  local bak="$arch/lessons-$(date +%F-%H%M%S).md"; cp "$f" "$bak"
+  S="${S:-$CODEBOT_HOME}"; RUNDIR="$CODEBOT_HOME"
+  timeout 900 "$OPENCODE_BIN" run --auto --agent codebot --dir "$CODEBOT_HOME/memory" \
+    "Rewrite the file $f. Merge duplicates, drop anything project-specific or obsolete, keep only reusable lessons as short bullets (max 25 bullets, under 3000 characters), keep the first heading line. Edit only that file." \
+    >> "$CODEBOT_HOME/logs/tidy.log" 2>&1 < /dev/null
+  local n; n=$(wc -c < "$f")
+  if (( n < 80 )) || ! head -1 "$f" | grep -q '^#' || (( n > $(wc -c < "$bak") + 200 )); then cp "$bak" "$f"; echo "tidy rejected, restored"; return 1; fi
+  echo "lessons condensed: $(wc -c < "$bak") -> $n bytes (backup: $bak)"
+}
+
+cmd___loop() {
+  load_proj "$1"; local iter=0 stall=0 verify_fails=0 t0=$SECONDS finished=0 notified_block=0 pid
+  echo $$ > "$S/loop.pid"
+  trap 'finished=2' TERM INT
+  trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
+  notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR" low rocket
+  while (( iter < MAX_ITERATIONS )) && [[ $finished == 0 ]]; do
+    if [[ -f "$S/PAUSE" ]]; then sleep 5; continue; fi
+    local st=""; [[ -f "$S/STATUS" ]] && st="$(head -c 1500 "$S/STATUS")"
+    if [[ "$st" == DONE* ]]; then
+      if ! verify_gate; then
+        verify_fails=$((verify_fails+1)); rm -f "$S/STATUS"
+        { echo; echo "## VERIFY FAILED ($(date '+%F %T')), attempt $verify_fails"; echo "$VERIFY_OUT"; } >> "$S/PROGRESS.md"
+        if (( verify_fails >= 3 )); then echo "BLOCKED: verify.sh still fails after $verify_fails attempts. Last output: $VERIFY_OUT" > "$S/STATUS"
+        else echo "- [ ] Fix the failing verification: read the VERIFY FAILED section at the end of $S/PROGRESS.md, fix the code, run $S/verify.sh until it exits 0" >> "$S/PLAN.md"; fi
+        echo "(verify failed, attempt $verify_fails)"; continue
+      fi
+      notify "codebot: $NAME COMPLETE" "$(tasks_done) tasks done in $iter iterations, $(( (SECONDS-t0)/60 )) min. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
+      finished=1; break
+    elif [[ "$st" == BLOCKED* ]]; then
+      if (( ! notified_block )); then
+        notify "codebot: $NAME needs you" "$st
+
+Reply with: codebot answer $NAME \"your answer\"" urgent sos; notified_block=1
+      fi
+      sleep 10; continue
+    fi
+    notified_block=0
+    if [[ "$(tasks_left)" == 0 ]]; then echo "DONE" > "$S/STATUS"; continue; fi
+    if (( $(wc -c < "$CODEBOT_HOME/memory/lessons.md") > LESSONS_MAX )); then echo "(condensing lessons.md)"; tidy_memory >> "$S/loop.log" 2>&1; fi
+    iter=$((iter+1)); local before after; before="$(state_hash)"
+    echo "=== iteration $iter $(date '+%F %T') | tasks left: $(tasks_left) ==="
+    setsid timeout "$ITER_TIMEOUT" "$OPENCODE_BIN" run --auto --thinking --agent codebot --dir "$RUNDIR" --title "$NAME #$iter" \
+      "$(render "$CODEBOT_HOME/prompts/work.md")" >> "$S/loop.log" 2>&1 < /dev/null &
+    pid=$!; echo $pid > "$S/iter.pid"
+    # small models sometimes keep rambling after finishing: once STATUS appears, give it 20s then end the iteration
+    local seen=0
+    while kill -0 "$pid" 2>/dev/null; do
+      if [[ -s "$S/STATUS" ]]; then (( seen++ >= 4 )) && { kill -TERM -- "-$pid" 2>/dev/null; pkill -TERM -P "$pid" 2>/dev/null; break; }; fi
+      sleep 5
+    done
+    wait "$pid" 2>/dev/null; rm -f "$S/iter.pid"
+    [[ $finished == 2 ]] && break
+    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "(iteration interrupted by pause)"; continue; fi
+    after="$(state_hash)"
+    if [[ "$before" == "$after" ]]; then stall=$((stall+1)); else stall=0; fi
+    if (( stall >= STALL_LIMIT )) && [[ ! -f "$S/STATUS" ]]; then
+      echo "BLOCKED: no progress for $stall iterations in a row (model stuck or looping). See loop.log." > "$S/STATUS"; stall=0
+    fi
+  done
+  if [[ $finished == 0 ]]; then
+    notify "codebot: $NAME hit iteration cap" "Stopped after $iter iterations with $(tasks_left) tasks left." high warning; finished=1
+  fi
+}
+
+cmd_pause() {
+  load_proj "${1:-}"; touch "$S/PAUSE"
+  if [[ "${2:-}" == --soft ]]; then echo "paused after the current iteration finishes"; return; fi
+  if [[ -f "$S/iter.pid" ]]; then kill -TERM -- "-$(cat "$S/iter.pid")" 2>/dev/null; pkill -TERM -P "$(cat "$S/iter.pid")" 2>/dev/null; fi
+  "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1
+  echo "paused: iteration stopped, model unloaded (RAM freed). resume: codebot resume $NAME"
+}
+cmd_resume() { load_proj "${1:-}"; alive "$S/loop.pid" || die "loop not running; use: codebot start $NAME"; ensure_ollama; rm -f "$S/PAUSE"; echo "resumed $NAME"; }
+cmd_answer() { load_proj "${1:-}"; shift; [[ -n "${*:-}" ]] || die "usage: codebot answer <name> <text>"
+  { echo; echo "## $(date '+%F %T') (answer to: $(head -c 300 "$S/STATUS" 2>/dev/null))"; echo "$*"; } >> "$S/ANSWERS.md"
+  rm -f "$S/STATUS"; echo "recorded; loop will continue"; }
+cmd_stop() { load_proj "${1:-}"; if alive "$S/loop.pid"; then local p; p=$(cat "$S/loop.pid"); touch "$S/PAUSE"
+    [[ -f "$S/iter.pid" ]] && kill -TERM -- "-$(cat "$S/iter.pid")" 2>/dev/null; kill -TERM "$p"; sleep 1; kill -9 "$p" 2>/dev/null
+    rm -f "$S/loop.pid" "$S/iter.pid" "$S/PAUSE"; "$OLLAMA_BIN" stop "$CODEBOT_MODEL" >/dev/null 2>&1; echo "stopped $NAME"; else echo "$NAME not running"; fi; }
+cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
+cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
+cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
+  alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
+  echo "$NAME: $s | done $(tasks_done) / left $(tasks_left) | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
+cmd_tidy() { ensure_ollama; tidy_memory; }
+cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
+  echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
+cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_mark; echo "sent to $NTFY_SERVER/$NTFY_TOPIC"; }
+
+[[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
+c="${1:-help}"; shift || true
+case "$c" in
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|__loop) "cmd_$c" "$@";;
+  notify-test) cmd_notify_test;;
+  ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
+  *) cat <<USAGE
+codebot - local ralph-loop coding agent
+  plan <name> [workdir]   interactive planning session (writes PLAN.md)
+  start <name>            run the autonomous loop in the background
+  pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
+  resume <name>           continue after pause
+  answer <name> <text>    reply to a BLOCKED notification
+  status [name] | list    show state
+  log <name>              follow the loop log
+  stop <name>             end the loop
+  diff <name>             show what codebot changed + how to merge it
+  tidy                    condense memory/lessons.md
+  setup | notify-test     start ollama / send test ntfy message
+USAGE
+;;
+esac

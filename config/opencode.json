@@ -1,0 +1,54 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled",
+  "model": "ollama/codebot-model",
+  "small_model": "ollama/codebot-model",
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (codebot)",
+      "options": {
+        "baseURL": "http://127.0.0.1:11500/v1"
+      },
+      "models": {
+        "codebot-model": {
+          "name": "ornith 9b (local)",
+          "tool_call": true,
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  },
+  "permission": {
+    "*": "allow",
+    "bash": {
+      "*": "allow",
+      "sudo *": "deny",
+      "git push*": "deny",
+      "rm -rf /*": "deny",
+      "rm -rf ~*": "deny",
+      "curl * | *": "deny"
+    }
+  },
+  "default_agent": "codebot",
+  "agent": {
+    "codebot": {
+      "mode": "primary",
+      "description": "Lean local coding agent",
+      "prompt": "You are codebot, an autonomous coding agent running on a small local model. Do exactly what the user message says. Always use absolute file paths. Verify work by running commands. Be concise. When your task is finished, stop and reply with one short sentence.",
+      "tools": {
+        "webfetch": false,
+        "task": false,
+        "todowrite": false,
+        "todoread": false,
+        "patch": false,
+        "list": false,
+        "skill": false
+      }
+    }
+  }
+}

@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""codebot interactive harness: pick/create project -> plan -> start -> live view."""
+import os, sys, select, subprocess, termios, tty, time, glob
+
+HOME = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+CLI = os.path.join(HOME, "bin", "codebot")
+B, D, R, G, Y, C, RED = "\033[1m", "\033[2m", "\033[0m", "\033[32m", "\033[33m", "\033[36m", "\033[31m"
+
+def sh(*a, **k): return subprocess.run([CLI, *a], **k)
+def rd(p, n=200):
+    try: return open(p).read(n).strip()
+    except OSError: return ""
+def alive(pidfile):
+    try: os.kill(int(rd(pidfile)), 0); return True
+    except Exception: return False
+def projects(): return sorted(os.path.basename(p) for p in glob.glob(f"{HOME}/projects/*") if os.path.exists(f"{p}/project.env"))
+def info(n):
+    s = f"{HOME}/projects/{n}"
+    plan = rd(f"{s}/PLAN.md", 100000)
+    left, done = plan.count("\n- [ ]") , plan.lower().count("\n- [x]")
+    wd = rd(f"{s}/project.env").split('"')[1] if '"' in rd(f"{s}/project.env") else "?"
+    st = "stopped"
+    if alive(f"{s}/loop.pid"): st = "PAUSED" if os.path.exists(f"{s}/PAUSE") else "running"
+    status = rd(f"{s}/STATUS", 300)
+    return dict(s=s, left=left, done=done, wd=wd, st=st, status=status, hasplan=bool(plan))
+def line(): print(D + "─" * min(__import__("shutil").get_terminal_size().columns, 100) + R)
+def ask(q, default=""):
+    v = input(f"{C}{q}{R}{f' [{default}]' if default else ''} ").strip()
+    return v or default
+def banner():
+    os.system("clear"); print(f"{B}codebot{R} {D}local ralph-loop agent · ornith:9b · all on this machine{R}"); line()
+
+def pretty(n):
+    i = info(n); col = {"running": G, "PAUSED": Y, "stopped": D}[i["st"]]
+    extra = f"  {RED}{i['status'][:60]}{R}" if i["status"] else ""
+    return f"{B}{n}{R}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
+
+def attach(n):
+    i = info(n); logf = f"{i['s']}/loop.log"
+    print(f"\n{B}attached to {n}{R}  {D}[p] pause/resume  [a] answer  [s] status  [x] stop  [q] detach (keeps running){R}\n")
+    fd = sys.stdin.fileno(); old = termios.tcgetattr(fd)
+    f = open(logf, "a+"); f.seek(0, 2); size = f.tell(); f.seek(max(0, size - 4000))
+    last = None
+    try:
+        tty.setcbreak(fd)
+        while True:
+            chunk = f.read()
+            if chunk: sys.stdout.write(chunk); sys.stdout.flush()
+            cur = info(n)
+            key_state = (cur["st"], cur["status"][:40], cur["done"])
+            if key_state != last:
+                print(f"\n{D}── {cur['st']} · {cur['done']} done / {cur['left']} left {cur['status'][:80]} ──{R}"); last = key_state
+                if cur["st"] == "stopped" and not alive(f"{cur['s']}/loop.pid"): print(f"{G}loop finished or not running.{R}"); break
+            if select.select([sys.stdin], [], [], 0.4)[0]:
+                k = sys.stdin.read(1).lower()
+                if k == "q": break
+                if k == "p":
+                    sh("resume" if cur["st"] == "PAUSED" else "pause", n)
+                if k == "s": sh("status", n)
+                if k == "x": sh("stop", n); break
+                if k == "a":
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+                    print(f"\n{Y}{cur['status'] or 'no pending question'}{R}")
+                    a = input(f"{C}your answer> {R}").strip()
+                    if a: sh("answer", n, a)
+                    tty.setcbreak(fd)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old); f.close()
+    print(f"\n{D}detached. loop keeps running in background. reattach: codebot{R}")
+
+def project_menu(n):
+    while True:
+        banner(); print(pretty(n)); line(); i = info(n)
+        print(f" {B}e{R} edit/re-run planning chat   {B}g{R} go (start loop + watch)   {B}w{R} watch live   {B}p{R} pause/resume\n"
+              f" {B}a{R} answer a question   {B}x{R} stop   {B}l{R} full log   {B}b{R} back")
+        k = ask("›").lower()
+        if k == "b": return
+        elif k == "e": sh("plan", n)
+        elif k == "g":
+            if not i["hasplan"]: print("no plan yet; run planning first (e)"); time.sleep(1.5); continue
+            if i["st"] == "stopped": sh("start", n)
+            elif i["st"] == "PAUSED": sh("resume", n)
+            attach(n); input("enter to continue")
+        elif k == "w": attach(n); input("enter to continue")
+        elif k == "p": sh("resume" if i["st"] == "PAUSED" else "pause", n); time.sleep(1)
+        elif k == "a":
+            a = ask(f"{i['status'] or 'answer'} >")
+            if a: sh("answer", n, a)
+        elif k == "x": sh("stop", n); time.sleep(1)
+        elif k == "l": os.system(f"less +G -R '{i['s']}/loop.log'")
+
+def new_project():
+    banner(); print(f"{B}New project{R}\n")
+    n = ask("name (short, no spaces):").replace(" ", "-")
+    if not n: return
+    wd = ask("path to the code folder:", os.getcwd())
+    sh("setup", stdout=subprocess.DEVNULL)
+    print(f"\n{G}Starting planning chat.{R} Answer its questions; when you approve the plan, exit the chat (ctrl+c or /exit).\n"); time.sleep(1.5)
+    sh("plan", n, os.path.expanduser(wd))
+    if os.path.exists(f"{HOME}/projects/{n}") and info(n)["hasplan"]:
+        if ask("Plan written. Start the autonomous loop now? (y/n)", "y").lower().startswith("y"):
+            sh("start", n); attach(n); input("enter to continue")
+    project_menu(n) if os.path.exists(f"{HOME}/projects/{n}") else None
+
+def main():
+    while True:
+        banner(); ps = projects()
+        if not ps: print("No projects yet.\n")
+        for k, n in enumerate(ps, 1): print(f" {B}{k}{R}  {pretty(n)}")
+        print(f"\n {B}n{R} new project   {B}t{R} test ntfy   {B}m{R} edit memory   {B}q{R} quit"); k = ask("›").lower()
+        if k == "q": return
+        elif k == "n": new_project()
+        elif k == "t": sh("notify-test"); time.sleep(1.5)
+        elif k == "m": os.system(f"${{EDITOR:-nano}} '{HOME}/memory/expertise.md'")
+        elif k.isdigit() and 1 <= int(k) <= len(ps): project_menu(ps[int(k) - 1])
+
+if __name__ == "__main__":
+    try: main()
+    except (KeyboardInterrupt, EOFError): print()
