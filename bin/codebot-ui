@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """codebot interactive harness: pick/create project -> plan -> start -> live view."""
-import os, sys, select, subprocess, termios, tty, time, glob
+import os, re, sys, select, subprocess, termios, tty, time, glob
 
 HOME = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 CLI = os.path.join(HOME, "bin", "codebot")
@@ -17,7 +17,7 @@ def projects(): return sorted(os.path.basename(p) for p in glob.glob(f"{HOME}/pr
 def info(n):
     s = f"{HOME}/projects/{n}"
     plan = rd(f"{s}/PLAN.md", 100000)
-    left, done = plan.count("\n- [ ]") , plan.lower().count("\n- [x]")
+    left = len(re.findall(r"(?m)^[^A-Za-z0-9]{0,3}[-*]\s+\[ \]", plan)); done = len(re.findall(r"(?m)^[^A-Za-z0-9]{0,3}[-*]\s+\[[xX]\]", plan))
     wd = rd(f"{s}/project.env").split('"')[1] if '"' in rd(f"{s}/project.env") else "?"
     st = "stopped"
     if alive(f"{s}/loop.pid"): st = "PAUSED" if os.path.exists(f"{s}/PAUSE") else "running"

@@ -10,6 +10,7 @@ export OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT"
 export OLLAMA_MODELS="$CODEBOT_HOME/models"
 export OLLAMA_KEEP_ALIVE=30m OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1
 export OPENCODE_CONFIG="$CODEBOT_HOME/config/opencode.json"
+THINK="${THINK:-on}"; [[ "$THINK" == off ]] && THINK_VARIANT=nothink || THINK_VARIANT=""
 mkdir -p "$CODEBOT_HOME/logs" "$CODEBOT_HOME/projects"
 
 die() { echo "codebot: $*" >&2; exit 1; }
@@ -77,8 +78,9 @@ state_hash() {
     git -C "$RUNDIR" status --porcelain 2>/dev/null
     git -C "$RUNDIR" diff 2>/dev/null; } | md5sum | cut -d' ' -f1
 }
-tasks_left() { grep -c '^- \[ \]' "$S/PLAN.md" 2>/dev/null || true; }
-tasks_done() { grep -c '^- \[[xX]\]' "$S/PLAN.md" 2>/dev/null || true; }
+# tolerant of stray prefixes the model sometimes writes (e.g. "^- [x]")
+tasks_left() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[ \]' "$S/PLAN.md" 2>/dev/null || true; }
+tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md" 2>/dev/null || true; }
 
 cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
 
@@ -99,6 +101,7 @@ cmd_start() {
   alive "$S/loop.pid" && die "$NAME is already running"
   rm -f "$S/PAUSE"; [[ "${2:-}" == --keep ]] || rm -f "$S/STATUS"
   touch "$S/.active"
+  [[ -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
   if [[ ! -f "$S/.git-prepped" ]]; then
     if git -C "$WORKDIR" rev-parse HEAD >/dev/null 2>&1; then
@@ -121,9 +124,12 @@ cmd_start() {
   echo "started $NAME (pid $!). watch: codebot log $NAME   pause: codebot pause $NAME"
 }
 
+verify_script() { # state-dir verify.sh preferred; fall back to one the model left in the code dir
+  if [[ -f "$S/verify.sh" ]]; then echo "$S/verify.sh"; elif [[ -f "$RUNDIR/verify.sh" ]]; then echo "$RUNDIR/verify.sh"; fi
+}
 verify_gate() { # 0 = ok / no verify script
-  [[ -x "$S/verify.sh" ]] || return 0
-  local out; out="$(cd "$RUNDIR" && timeout 900 "$S/verify.sh" 2>&1)"; local rc=$?
+  local v; v="$(verify_script)"; [[ -n "$v" ]] || return 0
+  local out; out="$(cd "$RUNDIR" && timeout 900 bash "$v" 2>&1)"; local rc=$?
   (( rc == 0 )) && return 0
   VERIFY_OUT="$(printf '%s' "$out" | tail -c 1500)"; return 1
 }
@@ -154,7 +160,7 @@ cmd___loop() {
         verify_fails=$((verify_fails+1)); rm -f "$S/STATUS"
         { echo; echo "## VERIFY FAILED ($(date '+%F %T')), attempt $verify_fails"; echo "$VERIFY_OUT"; } >> "$S/PROGRESS.md"
         if (( verify_fails >= 3 )); then echo "BLOCKED: verify.sh still fails after $verify_fails attempts. Last output: $VERIFY_OUT" > "$S/STATUS"
-        else echo "- [ ] Fix the failing verification: read the VERIFY FAILED section at the end of $S/PROGRESS.md, fix the code, run $S/verify.sh until it exits 0" >> "$S/PLAN.md"; fi
+        else echo "- [ ] Fix the failing verification: read the VERIFY FAILED section at the end of $S/PROGRESS.md, fix the code, run bash $(verify_script) until it exits 0" >> "$S/PLAN.md"; fi
         echo "(verify failed, attempt $verify_fails)"; continue
       fi
       notify "codebot: $NAME COMPLETE" "$(tasks_done) tasks done in $iter iterations, $(( (SECONDS-t0)/60 )) min. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
@@ -172,7 +178,7 @@ Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or:
     if (( $(wc -c < "$CODEBOT_HOME/memory/lessons.md") > LESSONS_MAX )); then echo "(condensing lessons.md)"; tidy_memory >> "$S/loop.log" 2>&1; fi
     iter=$((iter+1)); local before after; before="$(state_hash)"
     echo "=== iteration $iter $(date '+%F %T') | tasks left: $(tasks_left) ==="
-    setsid timeout "$ITER_TIMEOUT" "$OPENCODE_BIN" run --auto --thinking --agent codebot --dir "$RUNDIR" --title "$NAME #$iter" \
+    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout "$ITER_TIMEOUT" "$OPENCODE_BIN" run --auto --thinking ${THINK_VARIANT:+--variant "$THINK_VARIANT"} --agent codebot --dir "$RUNDIR" --title "$NAME #$iter" \
       "$(render "$CODEBOT_HOME/prompts/work.md")" >> "$S/loop.log" 2>&1 < /dev/null &
     pid=$!; echo $pid > "$S/iter.pid"
     # small models sometimes keep rambling after finishing: once STATUS appears, give it 20s then end the iteration

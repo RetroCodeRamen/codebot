@@ -53,6 +53,11 @@ still active, keeping any pending BLOCKED question. Loops that finished or that 
 `memory/expertise.md` (curated, edit freely) and `memory/lessons.md` (agent appends; auto-condensed when over
 `LESSONS_MAX` bytes, backups in `memory/.archive/`). Config/prompts/memory are git-versioned.
 
+## Speed expectations (this machine)
+CPU-only ~4-6 tok/s. `THINK=off` (default for the loop, in `config/codebot.env`) skips hidden reasoning, which was
+the dominant cost: with thinking on, one step could take ~11 min and a first task 30+ min. A 4-task toy project
+completed unattended with it off. Planning chat always thinks. Close Cursor/other heavy apps for long runs.
+
 ## Notes
 - The agent has full shell access as you (sudo and git push are denied in config/opencode.json).
 - GPU: no NVIDIA kernel driver installed. `sudo apt install nvidia-driver-580-open` + reboot lets Ollama split

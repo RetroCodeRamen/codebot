@@ -18,6 +18,11 @@
           "limit": {
             "context": 32768,
             "output": 8192
+          },
+          "variants": {
+            "nothink": {
+              "reasoningEffort": "none"
+            }
           }
         }
       }
@@ -50,5 +55,9 @@
         "skill": false
       }
     }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true
   }
 }
