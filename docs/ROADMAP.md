@@ -185,7 +185,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 
 | Step | Feature | Status |
 |------|---------|--------|
-| A | Baseline, tests harness, tasks.json, freeze, engine skeleton | todo |
+| A | Baseline, tests harness, tasks.json, freeze, engine skeleton | **done** (9 tests) |
 | B | F1 locked checks | todo |
 | C | F2 git checkpoints | todo |
 | D | F6 controlled replanning | todo |
@@ -202,3 +202,8 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 ## Notes and learnings (updated as work proceeds)
 
 - The running RE test uses the legacy loop and opencode; none of this work touches its files.
+- A: `lib/codebot/` (config, tasks, planparse, checks, engine) + `bin/codebot-engine`; `tests/run.sh` runs the suite
+  in a throwaway CODEBOT_HOME in <1s. Freeze is additive: PLAN.md is kept, then re-rendered from tasks.json
+  (`- [ ] T1. title` lines, so the bash counters keep working). The bash loop is not yet switched over; that happens
+  once the ladder (G) defines every event it must handle. Lesson: close files in library code (ResourceWarnings
+  flagged leaks immediately).

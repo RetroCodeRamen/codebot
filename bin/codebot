@@ -258,7 +258,8 @@ cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
 cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
 cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
   alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
-  echo "$NAME: $s | done $(tasks_done) / left $(tasks_left) | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
+  local eng=""; [[ -f "$S/tasks.json" ]] && eng=" [engine: $(jq -r '[.tasks[]|.status]|group_by(.)|map("\(.[0]) \(length)")|join(", ")' "$S/tasks.json" 2>/dev/null)]"
+  echo "$NAME: $s | done $(tasks_done) / left $(tasks_left)$eng | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
 cmd_resume_all() { # at login and every 5 min (watchdog): restart loops that should be running but are not
   for d in "$CODEBOT_HOME"/projects/*/; do
     [[ -f "$d/.active" ]] || continue; local n; n=$(basename "$d")
@@ -296,6 +297,8 @@ UNIT
 }
 cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
 cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" render_prompt "${2:-plan}"; }
+cmd_freeze() { need_proj "${1:-}"; "$CODEBOT_HOME/bin/codebot-engine" freeze "$1" --home "$CODEBOT_HOME" "${@:2}"; }
+cmd_engine() { local sub="${1:-}"; need_proj "${2:-}"; "$CODEBOT_HOME/bin/codebot-engine" "$sub" "$2" --home "$CODEBOT_HOME" "${@:3}"; }
 cmd_tidy() { ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
@@ -304,7 +307,7 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|__loop) "cmd_$c" "$@";;
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -322,6 +325,7 @@ codebot - local ralph-loop coding agent
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
   prompt <name> [plan|work] [quick]   print the exact prompt the model receives
+  freeze <name> [--allow-unchecked]   lock per-task checks and create tasks.json (needs a `check:` per task in PLAN.md)
   tidy                    condense memory/lessons.md
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         auto-restart active loops after reboot/login
