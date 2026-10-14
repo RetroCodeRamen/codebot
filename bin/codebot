@@ -26,6 +26,7 @@ oc_setup() { # sets OC_CONFIG / OC_AGENT for the current project ($MODE from pro
 }
 render_prompt() { # plan|work
   local f="$CODEBOT_HOME/prompts/$1.md"
+  [[ "$1" == plan && "${PLAN_STYLE:-grill}" == quick ]] && f="$CODEBOT_HOME/prompts/plan-quick.md"
   if [[ "${MODE:-code}" == re ]]; then render <(cat "$f" "$CODEBOT_HOME/prompts/re-$1.md"); else render "$f"; fi
 }
 
@@ -101,8 +102,8 @@ tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md
 cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
 
 cmd_plan() {
-  local name="" wd_arg="" re=0 a
-  for a in "$@"; do case "$a" in --re) re=1;; *) if [[ -z "$name" ]]; then name="$a"; else wd_arg="$a"; fi;; esac; done
+  local name="" wd_arg="" re=0 a style="${PLAN_STYLE:-grill}"
+  for a in "$@"; do case "$a" in --re) re=1;; --quick) style=quick;; --grill) style=grill;; *) if [[ -z "$name" ]]; then name="$a"; else wd_arg="$a"; fi;; esac; done
   [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir] [--re]"
   S="$(sdir "$name")"; NAME="$name"
   if [[ ! -d "$S" ]]; then
@@ -111,7 +112,7 @@ cmd_plan() {
   fi
   (( re )) && ! grep -q '^MODE=' "$S/project.env" && echo 'MODE="re"' >> "$S/project.env"
   load_proj "$name"; ensure_ollama
-  cd "$RUNDIR" && exec env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" --agent "$OC_AGENT" --prompt "$(render_prompt plan)" "$RUNDIR"
+  cd "$RUNDIR" && exec env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" --agent "$OC_AGENT" --prompt "$(PLAN_STYLE=$style render_prompt plan)" "$RUNDIR"
 }
 
 cmd_start() {
@@ -294,6 +295,7 @@ UNIT
     && echo "installed: loops that die or survive a reboot are restarted (checked at login and every 5 min)"
 }
 cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
+cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" render_prompt "${2:-plan}"; }
 cmd_tidy() { ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
@@ -302,7 +304,7 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|__loop) "cmd_$c" "$@";;
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -310,7 +312,7 @@ case "$c" in
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   *) cat <<USAGE
 codebot - local ralph-loop coding agent
-  plan <name> [workdir] [--re]   interactive planning session (--re = reverse-engineering project using REA)
+  plan <name> [workdir] [--re] [--quick]   interactive planning (default: thorough "grill me" interview; --quick = short one; --re = reverse engineering with REA)
   start <name>            run the autonomous loop in the background
   pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
   resume <name>           continue after pause
@@ -319,6 +321,7 @@ codebot - local ralph-loop coding agent
   log <name>              follow the loop log
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
+  prompt <name> [plan|work] [quick]   print the exact prompt the model receives
   tidy                    condense memory/lessons.md
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         auto-restart active loops after reboot/login

@@ -6,7 +6,7 @@ Locations:
 - Expertise memory: {{CODEBOT_HOME}}/memory/
 
 Procedure:
-1. Read these files one by one (no wildcards): {{CODEBOT_HOME}}/memory/expertise.md, {{CODEBOT_HOME}}/memory/lessons.md, {{STATE}}/PLAN.md, {{STATE}}/PROGRESS.md and {{STATE}}/ANSWERS.md (answers from the user to earlier blockers; they override your assumptions).
+1. Read these files one by one (no wildcards): {{CODEBOT_HOME}}/memory/expertise.md, {{CODEBOT_HOME}}/memory/lessons.md, {{STATE}}/PLAN.md, {{STATE}}/PROGRESS.md and {{STATE}}/ANSWERS.md and, if it exists, {{STATE}}/GRILL.md (the Decisions, Assumptions and Non-goals the user agreed to; follow them) (answers from the user to earlier blockers; they override your assumptions).
 2. Pick the FIRST unchecked task (`- [ ]`) in {{STATE}}/PLAN.md. Work only on it, inside {{WORKDIR}}.
 3. Implement it, then VERIFY by actually running the relevant tests/commands. Do not claim success without running something.
 4. If it works: change `- [ ]` to `- [x]` in {{STATE}}/PLAN.md (edit that exact absolute path; never create a PLAN.md in the workdir), append 2-5 lines to {{STATE}}/PROGRESS.md (what changed, what you learned, gotchas for later iterations), then `git add -A && git commit -m "codebot: <task>"` inside {{WORKDIR}}.

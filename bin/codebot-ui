@@ -95,9 +95,10 @@ def new_project():
     if not n: return
     wd = ask("path to the code folder (for reverse engineering: a folder for the findings):", os.getcwd())
     re_mode = ask("Reverse-engineering project using REA? (y/N)", "n").lower().startswith("y")
+    quick = ask("Planning style: [g]rill me (thorough, keeps asking until nothing is ambiguous) or [q]uick?", "g").lower().startswith("q")
     sh("setup", stdout=subprocess.DEVNULL)
     print(f"\n{G}Starting planning chat.{R} Answer its questions; when you approve the plan, exit the chat (ctrl+c or /exit).\n"); time.sleep(1.5)
-    sh("plan", n, os.path.expanduser(wd), *(["--re"] if re_mode else []))
+    sh("plan", n, os.path.expanduser(wd), *(["--re"] if re_mode else []), *(["--quick"] if quick else []))
     if os.path.exists(f"{HOME}/projects/{n}") and info(n)["hasplan"]:
         if ask("Plan written. Start the autonomous loop now? (y/n)", "y").lower().startswith("y"):
             sh("start", n); attach(n); input("enter to continue")
