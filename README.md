@@ -1,67 +1,109 @@
 # codebot
 
-Local-only ralph-loop coding agent. No cloud compute.
+The autonomous coding agent built for **small, slow, fully offline models** (ornith:9b on CPU through a private Ollama) running
+unattended for hours. Most harnesses assume a frontier model and fall apart on a 9B one. codebot takes the decisions away from the
+model: the harness plans the work, packs the context, validates every edit, judges every task with a check the model cannot
+change, checkpoints in git, escalates when stuck, and tells you in the morning what happened.
 
-- Model: `ornith:9b` (Q4, 5.6 GB, agentic-coding tuned), 32k context, CPU inference (~6 tok/s on this machine)
-- Harness: opencode (`tools/`) with a lean custom agent (`codebot`, ~3k-token prompt instead of 11k); private Ollama 0.40.3 on port 11500 (`tools/ollama`, models in `models/`)
-- Notifications: ntfy topic in `config/codebot.env` (subscribe to it in the ntfy app)
+Nothing leaves this machine except the ntfy notifications you choose to keep (and `NTFY_ENABLED=0` removes those too).
 
-## Easiest way: just run `codebot`
-Interactive harness: pick/create a project -> planning chat -> "start the loop?" -> live view that streams the
-agent's thinking, every file read/edit and command. In the live view: `p` pause/resume, `a` answer, `s` status,
-`x` stop, `q` detach (loop keeps running; run `codebot` again to reattach).
+## Quick start
 
-## CLI
 ```
-codebot plan <name> [workdir]   planning chat -> projects/<name>/PLAN.md + verify.sh
-codebot start <name>            autonomous loop in background
-codebot pause <name> [--soft]   stop now & unload model (frees ~7 GB RAM + CPU); --soft = after this iteration
-codebot resume <name>
-codebot answer <name> "text"    reply to a BLOCKED push
-codebot status [name] | log <name> | stop <name>
-codebot diff <name>             what codebot changed + the merge command
-codebot tidy                    condense memory/lessons.md
-codebot setup | notify-test
+codebot                       # the guided menu: pick or create a project, plan, start, watch live
+codebot plan myproj ~/code/repo          # interactive "grill me" planning chat -> PLAN.md with a check per task
+codebot start myproj                     # freezes the checks and starts the unattended loop
+codebot status | log myproj | pause myproj | resume myproj
+codebot answer myproj "T3: use the v2 API"   # reply when a task is blocked (or answer from your phone)
+codebot report myproj                    # the morning report
+codebot audit myproj --probe             # proof of what ran and that it was offline
+codebot diff myproj                      # review what it changed and how to merge it
 ```
 
-## How the loop works
-Each iteration = a fresh opencode session that reads memory + PLAN.md + PROGRESS.md + ANSWERS.md, does the
-first unchecked task, verifies it, checks it off, commits. State lives in files, so pausing/crashing loses at
-most one iteration. The agent writes `DONE` or `BLOCKED: ...` to `projects/<name>/STATUS`; both send an ntfy push.
+Subscribe to your ntfy topic (`config/codebot.env`) on your phone: pushes for start, blocked (with the exact question), tamper,
+budget stops, COMPLETE and the morning report. Buttons: Pause / Resume / Status. Reply topic: `<topic>-reply`.
 
-Safety nets:
-- **Git isolation**: if the target is an existing repo, work happens in a separate git worktree
-  (`projects/<name>/work`, branch `codebot/<name>`). Your checkout and uncommitted changes are never touched.
-  Review with `codebot diff <name>`, then merge yourself. Brand-new folders are worked in place.
-- **Verify gate**: `projects/<name>/verify.sh` (written during planning) must exit 0 before DONE is accepted.
-  If it fails, a fix task is added to the plan (3 failures -> BLOCKED ping).
-- **Stall detection**: 3 iterations with no change -> BLOCKED ping. Per-iteration timeout 45 min. Iteration cap 300.
-- Finished iterations are ended automatically 20 s after STATUS appears (the small model likes to ramble).
+## How a run works (engine mode)
 
-## Control and answers from your phone
-Subscribe to the ntfy topic for progress pushes (they carry Pause / Resume / Status buttons). To talk back,
-publish to `<your topic>-reply` (the ntfy app: subscribe to it too, then send a message):
-`pause`, `resume`, `stop`, `status`, or any other text = the answer to a pending BLOCKED question.
-The topic name is the only secret; for stronger protection set `NTFY_TOKEN` (and use a protected topic on a
-self-hosted ntfy).
+1. **Plan.** `codebot plan` is a "grill me" interview (13-area checklist, one question at a time, recommended answers, it challenges
+   vague answers) and writes `PLAN.md`: small tasks, each with a `check:` (a shell command), `files:` and `size:`. Decisions go to
+   `GRILL.md`. A fixture test the check needs is written into `checks/` first.
+2. **Freeze.** `codebot start` turns the plan into `tasks.json` and **locks every check** (sha256 + a frozen copy). From now on only
+   the harness changes task state; a worker that edits a check, a fixture, or `tasks.json` is detected, undone, and its attempt fails.
+3. **Attempt.** For the next ready task the engine runs the check first (already green? done; red? its output is the error the worker
+   sees), then runs the **native worker**: the model replies with one JSON action per turn under a JSON schema
+   (`read_file`, `edit_file`, `write_file`, `run`, `replan`, `note_lesson`, `finish`). Every write is path-checked, syntax-checked and
+   applied atomically; `edit_file` must match exactly once; malformed replies are bounced back. The harness builds the whole context
+   (task, frozen check, last error, answers, decisions, repo map, relevant files, lessons) inside a token budget.
+4. **Judge.** The frozen check decides, not the model. Pass: commit + tag in git (checkpoint). Fail: the **escalation ladder**.
+5. **Escalate.** retry with the error, then reset to the last good commit and retry fresh, then split the task into smaller ones with
+   their own checks, then an alternate prompt/temperature, then (optional, `ESCALATE_MODEL`) a larger local model, then **blocked**:
+   it pushes the exact question and moves on to other tasks. `codebot answer` puts it back on the ladder.
+6. **Budgets.** Caps per task, per project (minutes), total attempts; stuck signals (same failure N times, no progress in N attempts,
+   a file edited back and forth) skip a rung. A run always terminates.
+7. **Report.** At the end (and the first time it idles waiting on you) a morning report is saved and pushed.
 
-## Survives reboots and crashes
-`codebot install-service` (already run) installs a systemd user timer. At login and every 5 minutes it checks
-for loops that should be running but are not (reboot, crash, out-of-memory kill), restarts them in their own
-systemd unit, and sends a "restarted" push. A pause stays paused, and a pending BLOCKED question is kept.
-Loops you stopped or that finished stay stopped. Undo: `systemctl --user disable --now codebot.timer`.
+Projects without `tasks.json` (old plans with no `check:` lines) keep running on the original loop unchanged.
 
-## Memory / expertise
-`memory/expertise.md` (curated, edit freely) and `memory/lessons.md` (agent appends; auto-condensed when over
-`LESSONS_MAX` bytes, backups in `memory/.archive/`). Config/prompts/memory are git-versioned.
+## Safety and proof of offline operation
 
-## Speed expectations (this machine)
-CPU-only ~4-6 tok/s. `THINK=off` (default for the loop, in `config/codebot.env`) skips hidden reasoning, which was
-the dominant cost: with thinking on, one step could take ~11 min and a first task 30+ min. A 4-task toy project
-completed unattended with it off. Planning chat always thinks. Close Cursor/other heavy apps for long runs.
+- Every command the model runs and every acceptance check runs in a throwaway Docker container: `--network none`, read-only root,
+  all capabilities dropped, no-new-privileges, memory and pid limits, only the code dir writable, your home and the harness state
+  invisible. It uses an image that is **already local** (`ubuntu:24.04`) with the host's `/usr` mounted read-only; nothing is pulled
+  or created in Docker. Policy on top: no sudo, no network tools, no history-rewriting git, no package installs, no touching the state dir.
+- `audit.jsonl` is a hash-chained log of every command (and refused command), file read/write with before/after hash, model request
+  and check run. `codebot audit <project> [--probe]` verifies the chain, lists what ran and changed, shows that worker traffic is
+  loopback-only, and with `--probe` tries to reach the internet from inside the sandbox and shows it fail. Exit code is non-zero on
+  any warning (unsandboxed command, broken chain, ...).
+- Honest limits: the `docker` group is root-equivalent (the harness holds it, the model does not); the engine and worker process are
+  trusted code outside the container; the audit log is tamper-evident, not root-protected; `SANDBOX=auto` falls back to unsandboxed
+  if Docker or the image is missing, and the audit then says so.
 
-## Notes
-- The agent has full shell access as you (sudo and git push are denied in config/opencode.json).
-- GPU: no NVIDIA kernel driver installed. `sudo apt install nvidia-driver-580-open` + reboot lets Ollama split
-  layers onto the 4 GB card automatically.
-- RAM is tight (15 GB). After a pause/cold start the first request takes a minute or so (model reload).
+## Modes
+
+A mode is a folder under `modes/` (`mode.json`, prompts, worker rules, a notes file, verifier helper scripts). Adding one needs no
+code change. `codebot modes` lists them; `codebot plan <name> <dir> --mode <mode>` picks one.
+
+- `code` (default): general coding with test-style checks.
+- `re`: reverse engineering with [REA](https://github.com/morluto/rea): static analysis only (`rea` CLI + Ghidra run inside the
+  offline sandbox with Node, the JDK and Ghidra mounted read-only; the target via `--target <path>`), an allowlist of safe commands,
+  `rea capture-*/observe-*/setup/update/uninstall`, adb, gdb, lldb and strace denied, evidence-only findings with `[src: ...]` tags
+  and a `findings_has.sh` verifier helper. `re` extends `code`.
+
+## Memory
+
+`memory/lessons.raw.jsonl` is append-only and never rewritten. Every attempt records which lessons were in its context and whether it
+passed; lessons whose attempts pass clearly less often than the baseline get pruned (flagged, never deleted). `memory/lessons.md` is
+generated from the raw log, best evidence first, under `LESSONS_MAX`. `memory/sizing.json` and `projects/<p>/stats.json` track which
+task sizes succeed first try on this machine and feed the planner ("cut tasks to size S"). Edit `memory/expertise.md` freely.
+
+## Per-project files
+
+`project.env` (workdir, mode, overrides) · `PLAN.md` (rendered view; do not edit once frozen) · `tasks.json` · `checks/` + `checks.lock` ·
+`GRILL.md` · `ANSWERS.md` · `attempts.jsonl` · `plan.log` (every plan change with reason) · `checkpoints.json` · `audit.jsonl` ·
+`trace.jsonl` · `stats.json` · `report-*.md` · `loop.log` · `work/` (git worktree when the target is an existing repo; your checkout is untouched).
+
+## Configuration (`config/codebot.env`)
+
+Model/server: `CODEBOT_MODEL`, `OLLAMA_PORT`, `THINK`. Planning: `PLAN_STYLE=grill|quick`. Worker: `WORKER=native`, `CONTEXT_BUDGET`,
+`WORKER_MAX_TURNS`, `WORKER_CONTEXT_TOKENS`, `WORKER_TEMPERATURE`, `RUN_TIMEOUT`. Ladder/budgets: `LADDER_TRIES`, `ALT_TEMPERATURE`,
+`ESCALATE_MODEL`, `TASK_MAX_ATTEMPTS`, `STUCK_SAME_FAILURE`, `STUCK_NO_PROGRESS`, `PINGPONG_WINDOW`, `MAX_ITERATIONS`, `PROJECT_MAX_MINUTES`.
+Safety: `SANDBOX=auto|docker|none`, `SANDBOX_IMAGE`, `SANDBOX_MEMORY`, `SANDBOX_RO`, `NTFY_ENABLED`, `PHONE_CONTROL`. Any key can be
+overridden per project in `projects/<p>/project.env`.
+
+## Running it on this machine
+
+CPU only: about 4-6 tokens/second, hotter than the laptop likes. `codebot pause <p>` kills the running attempt and unloads the model
+(verify with `ollama ps`); the watchdog timer (`codebot install-service`) restarts loops that die, keeping pauses and pending
+questions. `THINK=off` is the default for unattended runs (hidden reasoning cost 10x on this CPU); the planning chat always thinks.
+Close heavy apps for long runs and keep the vents clear. The NVIDIA driver (`sudo apt install nvidia-driver-580-open`, reboot) would
+let Ollama offload layers to the 4 GB GPU.
+
+## Tests
+
+`tests/run.sh` runs ~190 tests in about 90 seconds with almost no CPU: a fake Ollama and scripted workers exercise the whole harness
+(locking and tamper, checkpoints, replanning, budgets, ladder, worker validation, packing, memory, sandbox against real Docker,
+audit chain, modes including a throwaway mode created with zero code edits, reports, and the real bash supervisor against a fake
+ntfy server). Real-model runs are separate smoke tests (see `docs/ROADMAP.md`).
+
+Design notes, decisions, and what was learned at each step: `docs/ROADMAP.md`.

@@ -83,7 +83,7 @@ Dependencies first. Each step commits, updates this file, and has its own test.
 | K | **F11** pluggable modes | needs the real shape of prompts/allowlist/verifier first; converts REA and code |
 | L | **F12** morning report | consumes everything above |
 | M | Grill-me live test + planner emits checks | needs the real model; scheduled when the RE test finishes |
-| N | Real-model smoke runs, README/docs | |
+| N | Real-model smoke runs; README/docs | README/docs **done**; real-model smoke **pending** |
 
 The earlier efficiency review (CLI-first for RE, short env-var paths, no narration, inline context) is absorbed
 by H (native worker) and K (modes); it is not applied to the legacy opencode path.
@@ -201,7 +201,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | J | F10 sandbox and audit | **done** (21 tests incl. 9 against real Docker) |
 | K | F11 modes | todo |
 | L | F12 morning report | **done** (12 tests + supervisor push test) |
-| M | Grill-me live test | blocked on RE test finishing (model busy) |
+| M | Grill-me live test + planner emits checks | **pending: needs the real model** (user asked to keep the LLM off while the PC cools) |
 
 ## Notes and learnings (updated as work proceeds)
 
@@ -328,3 +328,20 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   the run first goes idle waiting on you, and again at COMPLETE or a budget stop, via the existing notify path (so NTFY_ENABLED=0 silences
   it and the file is still written). The push text leads with `N/M tasks verified`, then blocked questions, the first thing to review,
   and the safety line, capped at 1200 chars. Legacy (non-frozen) projects return a clear message instead of a report.
+
+## What is left (needs the real model; deliberately not run while the machine is hot)
+
+Everything above is verified without the model (fake Ollama + scripted workers + real Docker + the real bash supervisor). What has NOT been
+observed is ornith:9b itself inside the new pipeline. Run these when the machine is cool, one at a time (`sensors`, `ollama ps`):
+
+1. **M, grill planner live.** `codebot plan demo ~/some/scratch --quick` first (cheaper), then without `--quick`. Confirm: successive questions,
+   `GRILL.md` written, and PLAN.md tasks each carry `check:`/`files:`/`size:` that `codebot freeze demo` accepts. Likely fixes: the planner
+   forgetting `check:` lines or writing silent checks; adjust `modes/code/plan.md` (the strict freeze error says exactly which tasks lack one).
+2. **N1, constrained output.** One real attempt: `WORKER=native` on a 2-task toy. Confirm ornith obeys the `anyOf` action schema (if the
+   server rejects it the worker falls back to the flat schema automatically; `trace.jsonl` shows `HTTP 400` retries), measure seconds per
+   turn, and check the first-request prompt size in `packed.json`.
+3. **N2, a real project end to end** with `codebot audit <p> --probe` and `codebot report <p>` at the end.
+4. Then decide: tune `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`, `LADDER_TRIES` from `trace.jsonl` timings; set `ESCALATE_MODEL` if a bigger model fits.
+
+Open items worth a decision: the paused legacy `re1` project (old opencode loop) can be deleted or re-planned in engine mode (`codebot freeze`
+needs a `check:` per task); `SANDBOX=auto` could be tightened to `docker` so a missing image refuses to run instead of falling back.
