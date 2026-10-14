@@ -1,5 +1,6 @@
 """Per-task acceptance checks: written first, hashed, frozen. The worker may not change them."""
 import hashlib, json, os, re, shutil, subprocess, time
+from . import audit, sandbox
 from .config import now
 
 def _sha(path):
@@ -109,14 +110,12 @@ def failure_sig(out):
 def run_check(proj, task, timeout=600):
     """Run the frozen script for a task. Returns dict(rc, out, sig, secs)."""
     script = os.path.join(checks_dir(proj), script_rel(task["id"]))
-    env = dict(os.environ, CODEBOT_RUNDIR=proj.rundir, CODEBOT_CHECKS=checks_dir(proj), CODEBOT_STATE=proj.state)
     t0 = time.time()
-    try:
-        r = subprocess.run(["bash", script], cwd=proj.rundir, env=env, capture_output=True, text=True, timeout=timeout)
-        rc, out = r.returncode, (r.stdout or "") + (r.stderr or "")
-    except subprocess.TimeoutExpired as e:
-        rc, out = 124, ((e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")) + f"\n[check timed out after {timeout}s]"
+    try:   # checks run in the same offline sandbox as the worker's commands: the frozen script is mounted read-only
+        rc, out, label = sandbox.execute(proj, ["bash", script], timeout=timeout, rw=[proj.rundir], ro=[checks_dir(proj)],
+                                         env={"CODEBOT_RUNDIR": proj.rundir, "CODEBOT_CHECKS": checks_dir(proj)})
     except OSError as e:
-        rc, out = 127, f"[cannot run check: {e}]"
+        rc, out, label = 127, f"[cannot run check: {e}]", "none"
     out = out[-6000:]
+    audit.log(proj, "check_run", task=task["id"], rc=rc, secs=round(time.time() - t0, 1), sandbox=label)
     return {"rc": rc, "out": out, "sig": failure_sig(out) if rc else "", "secs": round(time.time() - t0, 1)}

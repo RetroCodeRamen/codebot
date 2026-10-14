@@ -1,5 +1,6 @@
 """Minimal Ollama /api/chat client (stdlib only). Local only: the host is always 127.0.0.1:<port>."""
 import json, time, urllib.error, urllib.request
+from . import audit
 
 class ModelError(Exception):
     pass
@@ -23,6 +24,8 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r: out = json.loads(r.read().decode())
             msg = out.get("message") or {}
+            audit.log(proj, "model_request", endpoint=base_url(proj).split("//")[1], model=body["model"], prompt_tokens=out.get("prompt_eval_count", 0),
+                      gen_tokens=out.get("eval_count", 0), secs=round(time.time() - t0, 1))
             return {"content": msg.get("content", ""), "prompt_tokens": out.get("prompt_eval_count", 0),
                     "gen_tokens": out.get("eval_count", 0), "secs": round(time.time() - t0, 1)}
         except urllib.error.HTTPError as e:

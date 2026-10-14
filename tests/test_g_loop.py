@@ -7,14 +7,14 @@ REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__))
 
 class FakeNtfy:
     def __init__(self):
-        self.msgs = []; outer = self
+        self.msgs = []; self.gets = []; outer = self
         class H(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
             def do_POST(self):
                 n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n).decode()
                 outer.msgs.append({"path": self.path, "title": self.headers.get("Title", ""), "prio": self.headers.get("Priority", ""), "body": body})
                 self.send_response(200); self.end_headers()
-            def do_GET(self): self.send_response(200); self.end_headers()
+            def do_GET(self): outer.gets.append(self.path); self.send_response(200); self.end_headers()
         self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
     def titles(self): return [m["title"] for m in self.msgs]
@@ -84,6 +84,17 @@ class TestSupervisor(LoopBase):
         self.assertIn("2 of 2 tasks verified by their own locked checks", done)
         self.assertEqual([t["status"] for t in self.data()["tasks"]], ["done", "done"])
         self.assertFalse(os.path.exists(os.path.join(self.state, ".active")))
+        eg = [json.loads(l) for l in open(os.path.join(self.home, "logs", "egress.jsonl"))]
+        self.assertTrue(any(e["purpose"] == "notification" and e["dest"].startswith("127.0.0.1:") and e["project"] == self.name for e in eg))
+        self.assertTrue(any(e["purpose"] == "phone-poll" for e in eg))
+
+    def test_ntfy_can_be_disabled_entirely(self):
+        with open(os.path.join(self.home, "config", "codebot.env"), "a") as f: f.write("NTFY_ENABLED=0\nPHONE_CONTROL=0\n")
+        with open(os.path.join(self.state, "fixable"), "w") as f: f.write("1")
+        self.start_loop(); self.assertTrue(self.wait_for(lambda: self.loop.poll() is not None, 60)); self.assertEqual(self.loop.returncode, 0)
+        self.assertEqual((self.ntfy.msgs, self.ntfy.gets), ([], []))                                  # not one request left the process
+        self.assertEqual([t["status"] for t in self.data()["tasks"]], ["done", "done"])
+        self.assertFalse(os.path.exists(os.path.join(self.home, "logs", "egress.jsonl")))
 
     def test_pause_stops_stepping_and_resume_continues(self):
         with open(os.path.join(self.state, "fixable"), "w") as f: f.write("1")

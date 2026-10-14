@@ -2,7 +2,7 @@
 schema; the harness validates every action before applying it and builds all context itself. The worker's own claim
 of success is irrelevant: the engine runs the frozen check afterwards."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-from . import memory, ollama, packer, planops, sandbox
+from . import audit, memory, ollama, packer, planops, sandbox
 from .config import Project, now, append_jsonl
 
 ACTIONS = ("read_file", "list_dir", "write_file", "edit_file", "run", "replan", "note_lesson", "finish")
@@ -86,6 +86,15 @@ def validate_shape(a):
     missing = [k for k in need if k not in a]
     if missing: raise ActionError(f"action {name} is missing: {', '.join(missing)}")
 
+def _sha_of(path):
+    try:
+        with open(path, "rb") as f: return hashlib.sha1(f.read()).hexdigest()[:12]
+    except OSError: return None
+
+def _write_audited(ctx, full, rel, content, how):
+    before = _sha_of(full); _atomic_write(full, content)
+    audit.log(ctx.proj, "file_write", path=rel, action=how, sha_before=before, sha_after=_sha_of(full), task=ctx.task["id"], attempt=ctx.attempt)
+
 # ---------- execution ----------
 class Ctx:
     def __init__(self, proj, task, attempt): self.proj, self.task, self.attempt, self.finished, self.summary = proj, task, attempt, False, ""
@@ -96,6 +105,7 @@ def do_action(ctx, a):
         full, rel = safe_path(proj, a["path"])
         if not os.path.isfile(full): raise ActionError(f"{rel}: not a file")
         with open(full, errors="replace") as f: lines = f.read().splitlines()
+        audit.log(proj, "file_read", path=rel, task=ctx.task["id"])
         off, lim = max(1, int(a.get("offset") or 1)), min(400, max(1, int(a.get("limit") or 200)))
         chunk = lines[off - 1: off - 1 + lim]
         text = "\n".join(f"{i}: {l}" for i, l in enumerate(chunk, off))[:9000]
@@ -110,7 +120,7 @@ def do_action(ctx, a):
         if not isinstance(c, str) or len(c) > 300_000: raise ActionError("content must be a string under 300 KB")
         err = syntax_error(rel, c)
         if err: raise ActionError(f"NOT written: {err}. Fix it and send the whole file again.")
-        _atomic_write(full, c); return f"wrote {rel} ({len(c)} chars)"
+        _write_audited(ctx, full, rel, c, "write"); return f"wrote {rel} ({len(c)} chars)"
     if name == "edit_file":
         full, rel = safe_path(proj, a["path"])
         if not os.path.isfile(full): raise ActionError(f"{rel}: not a file (use write_file to create it)")
@@ -124,9 +134,9 @@ def do_action(ctx, a):
         if n > 1: raise ActionError(f"NOT edited: search text appears {n} times in {rel}; include more surrounding lines so it matches once.")
         new = cur.replace(s, r, 1); err = syntax_error(rel, new)
         if err: raise ActionError(f"NOT edited: the result would be broken: {err}.")
-        _atomic_write(full, new); return f"edited {rel}"
+        _write_audited(ctx, full, rel, new, "edit"); return f"edited {rel}"
     if name == "run":
-        try: rc, out = sandbox.run(proj, a["command"], proj.get("RUN_TIMEOUT", 120, int))
+        try: rc, out = sandbox.run(proj, a["command"], proj.get("RUN_TIMEOUT", 120, int), task=ctx.task["id"])
         except sandbox.Denied as e: raise ActionError(f"command refused: {e}")
         return f"exit {rc}\n{out}"
     if name == "replan":

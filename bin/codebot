@@ -40,20 +40,25 @@ alive() { # pidfile; for loop.pid also confirm the pid is really a codebot loop 
 
 NTFY_TOKEN="${NTFY_TOKEN:-}"
 ntfy_auth() { [[ -n "$NTFY_TOKEN" ]] && echo "Authorization: Bearer $NTFY_TOKEN" || echo "X-Codebot: 1"; }
+egress_log() { # purpose [ok]: every byte the harness itself sends off-machine is listed here (codebot audit reads it)
+  printf '{"ts":"%s","project":"%s","dest":"%s","purpose":"%s","ok":%s}\n' "$(date '+%FT%T')" "${NAME:-}" "$(sed -E 's#^[a-z]+://##; s#/.*##' <<< "$NTFY_SERVER")" "$1" "${2:-true}" >> "$CODEBOT_HOME/logs/egress.jsonl"
+}
 notify() { # title message priority tags [buttons=1]
+  if [[ "${NTFY_ENABLED:-1}" == 0 ]]; then echo "(ntfy disabled: $1)" >&2; return 0; fi
   local acts=()
   if [[ "${5:-}" == 1 ]]; then
     local r="$NTFY_SERVER/$NTFY_TOPIC-reply"
     acts=(-H "Actions: http, Pause, $r, method=POST, body=pause, clear=false; http, Resume, $r, method=POST, body=resume, clear=false; http, Status, $r, method=POST, body=status, clear=false")
   fi
-  curl -s -m 15 -H "$(ntfy_auth)" -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" "${acts[@]}" \
-    -d "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1 || echo "(ntfy send failed)" >&2
+  if curl -s -m 15 -H "$(ntfy_auth)" -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" "${acts[@]}" \
+    -d "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1; then egress_log notification; else echo "(ntfy send failed)" >&2; egress_log notification false; fi
 }
 
 # phone control: poll <topic>-reply. words pause/resume/stop/status act on the loop; anything else answers a BLOCKED question.
-PHONE_LAST=$(date +%s); PHONE_T=0
+PHONE_LAST=$(date +%s); PHONE_T=-20
 phone_tick() { # call often; polls at most every 20s
-  (( SECONDS - PHONE_T >= 20 )) || return 0; PHONE_T=$SECONDS
+  [[ "${PHONE_CONTROL:-1}" == 0 ]] && return 0
+  (( SECONDS - PHONE_T >= 20 )) || return 0; PHONE_T=$SECONDS; egress_log phone-poll
   local msgs m t txt
   msgs="$(curl -s -m 10 -H "$(ntfy_auth)" "$NTFY_SERVER/$NTFY_TOPIC-reply/json?poll=1&since=$PHONE_LAST" 2>/dev/null)" || return 0
   while IFS= read -r m; do
@@ -371,6 +376,7 @@ cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
 cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" render_prompt "${2:-plan}"; }
 cmd_freeze() { need_proj "${1:-}"; "$CODEBOT_HOME/bin/codebot-engine" freeze "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_engine() { local sub="${1:-}"; need_proj "${2:-}"; "$CODEBOT_HOME/bin/codebot-engine" "$sub" "$2" --home "$CODEBOT_HOME" "${@:3}"; }
+cmd_audit() { need_proj "${1:-}"; "$ENGINE" audit "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_tidy() {   # evidence-backed memory needs no model: prune lessons that correlate with failure and regenerate lessons.md
   if [[ -f "$CODEBOT_HOME/memory/lessons.raw.jsonl" ]]; then
     local first; first="$(ls "$CODEBOT_HOME/projects" 2>/dev/null | head -1)"
@@ -384,7 +390,7 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|__loop) "cmd_$c" "$@";;
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -402,6 +408,7 @@ codebot - local ralph-loop coding agent
   stop <name>             end the loop
   diff <name>             show what codebot changed + how to merge it
   prompt <name> [plan|work] [quick]   print the exact prompt the model receives
+  audit <name> [--probe]  what ran, what changed, proof of offline operation (--probe tests the sandbox network live)
   freeze <name> [--allow-unchecked]   lock per-task checks and create tasks.json (needs a `check:` per task in PLAN.md)
   tidy                    condense memory/lessons.md
   re-config               rebuild the REA agent config after editing config/rea-tools.txt

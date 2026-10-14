@@ -34,9 +34,13 @@ other file are kept. (This is why no per-project format change breaks anything.)
   action schema fixes all three and cuts per-request prompt size from ~18k tokens to a few k (the measured RE run
   carried 12k tokens of unused MCP schemas). opencode stays as `engine: opencode` for modes that want MCP, so
   nothing is removed. This is a rewrite of the worker only, not of the supervisor, CLI or UI.
-- **D2. Sandbox with bubblewrap (`bwrap`, already installed), not a dedicated user or Docker.** No root needed,
-  no touching anything outside the codebot dir, `--unshare-net` blocks all egress for model-issued commands. The
-  worker process itself (which talks to Ollama) stays outside the sandbox; only the commands it executes run inside.
+- **D2 (REVISED in step J). Sandbox with Docker, not bubblewrap.** Planned bwrap, but Ubuntu 24.04 here has
+  `kernel.apparmor_restrict_unprivileged_userns=1`, which strips the capabilities bwrap needs (`bwrap --unshare-net` fails with
+  `RTM_NEWADDR: Operation not permitted`; `unshare -Urn` fails too). Docker works for this user and is stronger anyway:
+  `--network none`, read-only root, caps dropped, no-new-privileges, memory/pid limits. It uses an image that is ALREADY local
+  (`ubuntu:24.04`, same distro as the host) with the host's `/usr` mounted read-only over it, so nothing is created or pulled
+  in Docker and nothing outside the codebot dir is modified; each command is a throwaway `--rm` container. The worker process
+  itself (which talks to Ollama) stays outside the sandbox; only the commands and checks it triggers run inside.
 - **D3. Tests without the real model.** The 9B model is slow (minutes per step) and currently busy with the RE
   test. A scripted fake Ollama + scripted workers (`tests/`) exercise the harness logic in seconds. Real-model
   runs are a final smoke test per feature group, scheduled when the model is free.
@@ -194,7 +198,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | G | F4 escalation ladder | **done** (18 tests + supervisor integration) |
 | H | F7+F8 native worker | **done** (32 tests against a fake Ollama; real-model run pending) |
 | I | F9 evidence-backed memory | **done** (14 tests) |
-| J | F10 sandbox and audit | todo |
+| J | F10 sandbox and audit | **done** (21 tests incl. 9 against real Docker) |
 | K | F11 modes | todo |
 | L | F12 morning report | todo |
 | M | Grill-me live test | blocked on RE test finishing (model busy) |
@@ -282,3 +286,17 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   deliberately conservative (>= 8 uses, >= 20 baseline attempts, pass rate more than 15 points under baseline) because
   correlation is not causation; pruned lessons stay in raw. `lessons.md` is generated best-evidence-first under
   LESSONS_MAX, so the model can no longer corrupt it; `codebot tidy` now needs no model when raw exists.
+- J: `sandbox.py` (policy + Docker execution), `audit.py` (hash-chained log, verify, report/render). Model-issued commands AND the
+  frozen acceptance checks run in `docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges
+  --user <you> --pids-limit --memory` with only the code dir writable and the frozen checks mounted read-only; home, the harness
+  state dir and the network are simply absent (tested: DNS and raw sockets fail, `ls ~` fails, `/usr` `/etc` read-only, CapEff=0,
+  timeouts kill the container and none are left behind). A prototype caught `--init` hiding behind the `/usr` mount, so it is
+  not used. The audit log records every command (and every refused one), file read/write with before/after sha, model request
+  (endpoint, tokens), and check run, each entry hashing the previous; edits, mid-file deletions and (while `audit.head` is
+  intact) tail cuts are detected. `codebot audit <project> [--probe]` prints sandbox/chain/commands/files/model/egress and a
+  verdict, exits non-zero on any warning (unsandboxed command, broken chain, loopback-leaving traffic, probe reaching the net).
+  The probe tries raw sockets and DNS from inside the sandbox. The harness's own egress (ntfy notifications and the phone-reply
+  poll) is logged to `logs/egress.jsonl`; `NTFY_ENABLED=0` / `PHONE_CONTROL=0` make it zero (tested: not a single request).
+  Honest limits: the docker group is root-equivalent on the host (it is the harness, not the model, that holds it); the worker
+  process and engine are trusted code outside the sandbox; `audit.head` is not root-protected (D4); SANDBOX=auto falls back
+  to unsandboxed if Docker or the image is missing, but the audit then says so and exits non-zero.
