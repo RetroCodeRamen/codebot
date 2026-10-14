@@ -39,7 +39,7 @@ if t == 'T2' and os.path.exists(os.path.join(st, 'fixable')): open('b.txt', 'w')
 class LoopBase(Sandboxed):
     def setUp(self):
         super().setUp()
-        for d in ("bin", "lib", "prompts", "memory", "config"):
+        for d in ("bin", "lib", "modes", "memory", "config"):
             shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "projects", "*.snap"))
         self.ntfy = FakeNtfy()
         with open(os.path.join(self.home, "config", "codebot.env"), "w") as f:

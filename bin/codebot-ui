@@ -33,7 +33,7 @@ def banner():
 def pretty(n):
     i = info(n); col = {"running": G, "PAUSED": Y, "stopped": D}[i["st"]]
     extra = f"  {RED}{i['status'][:60]}{R}" if i["status"] else ""
-    return f"{B}{n}{R}{' [RE]' if 'MODE="re"' in rd(i['s']+'/project.env', 2000) else ''}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
+    return f"{B}{n}{R}{' [RE]' if 'MODE="' in rd(i['s']+'/project.env', 2000) and 'MODE="code"' not in rd(i['s']+'/project.env', 2000) else ''}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
 
 def attach(n):
     i = info(n); logf = f"{i['s']}/loop.log"
@@ -94,11 +94,17 @@ def new_project():
     n = ask("name (short, no spaces):").replace(" ", "-")
     if not n: return
     wd = ask("path to the code folder (for reverse engineering: a folder for the findings):", os.getcwd())
-    re_mode = ask("Reverse-engineering project using REA? (y/N)", "n").lower().startswith("y")
+    sys.path.insert(0, os.path.join(HOME, "lib")); from codebot import modes as M
+    avail = M.describe(HOME); print("\nModes:"); [print(f"  {d['name']:<8} {d['description']}") for d in avail]
+    mode = ask("mode:", "code")
+    if mode not in [d["name"] for d in avail]: print(f"unknown mode '{mode}', using code"); mode = "code"
+    targets = []
+    if mode != "code" and M.load(HOME, mode).get("wants_target"):
+        targets = [t.strip() for t in ask("path(s) of the thing to analyze (comma separated; mounted read-only):").split(",") if t.strip()]
     quick = ask("Planning style: [g]rill me (thorough, keeps asking until nothing is ambiguous) or [q]uick?", "g").lower().startswith("q")
     sh("setup", stdout=subprocess.DEVNULL)
     print(f"\n{G}Starting planning chat.{R} Answer its questions; when you approve the plan, exit the chat (ctrl+c or /exit).\n"); time.sleep(1.5)
-    sh("plan", n, os.path.expanduser(wd), *(["--re"] if re_mode else []), *(["--quick"] if quick else []))
+    sh("plan", n, os.path.expanduser(wd), "--mode", mode, *[x for t in targets for x in ("--target", os.path.expanduser(t))], *(["--quick"] if quick else []))
     if os.path.exists(f"{HOME}/projects/{n}") and info(n)["hasplan"]:
         if ask("Plan written. Start the autonomous loop now? (y/n)", "y").lower().startswith("y"):
             sh("start", n); attach(n); input("enter to continue")

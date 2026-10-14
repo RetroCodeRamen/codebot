@@ -300,3 +300,22 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   Honest limits: the docker group is root-equivalent on the host (it is the harness, not the model, that holds it); the worker
   process and engine are trusted code outside the sandbox; `audit.head` is not root-protected (D4); SANDBOX=auto falls back
   to unsandboxed if Docker or the image is missing, but the audit then says so and exits non-zero.
+- K: `modes.py` + `modes/<name>/`. A mode folder = `mode.json` (engine, extends, prompts / prompts_add, opencode config+agent+build, verifier
+  helpers + guidance, command allowlist + deny regexes, sandbox mounts/env/PATH/memory, worker_rules, memory_file, wants_target) plus
+  the files it names. `extends` merges (lists like deny/ro/env concatenate, other keys override; prompts = nearest full prompt + every
+  `prompts_add`). The old `prompts/` and `memory/rea.md` moved into `modes/code` and `modes/re` with `git mv`; the hard-coded MODE=re
+  branches in bash (oc_setup, render_prompt, mkconfig use) now read the mode: `codebot-engine mode-info|prompt-template|modes`.
+  What a mode controls at runtime: the planner and legacy-worker prompts; extra rules appended to the native worker's system prompt;
+  a notes file packed into context (MODE NOTES, capped); verifier helper scripts copied into the project's frozen `checks/` at freeze;
+  which shell commands `run` accepts (allowlist on the first word of every pipeline segment, no command substitution when an allowlist
+  exists, plus deny regexes); extra read-only sandbox mounts, env passthrough, PATH prefix and memory. REA is now data: `re` extends `code`,
+  allows `rea`/grep/jq/... and denies `rea capture-*|observe-*|setup|update|uninstall`, adb, gdb, lldb, strace; mounts node, the JDK and
+  Ghidra read-only; `codebot plan --mode re --target <path>` mounts the target read-only (stored as SANDBOX_RO). Verified by hand that
+  `rea search` + Ghidra run inside the offline container (18 s on a copy of /bin/ls; the package reached 84 C, so not repeated).
+  Test of the requirement: a throwaway `docs` mode created in a temp home with only files (no code edits) loads, renders its prompts,
+  freezes and locks its verifier helper, constrains commands, injects its rules and notes, and shows up in `codebot modes`.
+  Lessons: (1) a child mode must inherit `engine`, so required fields are validated after merging; (2) freeze must tolerate a home without
+  modes/ (bare homes, old installs) but not an unknown mode name; (3) moving files broke 100+ older tests at once, which is what the suite
+  is for. `codebot-ui` now lists modes from the folder and asks for target paths when the mode wants them.
+  Not done: the legacy opencode path still builds its REA MCP config with `bin/codebot-mkconfig` (named in re/mode.json, so it is data, but
+  the builder itself is REA-specific); a new MCP-based mode would need its own builder script.

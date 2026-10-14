@@ -13,21 +13,24 @@ export OPENCODE_CONFIG="$CODEBOT_HOME/config/opencode.json"
 THINK="${THINK:-on}"; [[ "$THINK" == off ]] && THINK_VARIANT=nothink || THINK_VARIANT=""
 mkdir -p "$CODEBOT_HOME/logs" "$CODEBOT_HOME/projects"
 
-# per-project mode: code (default) or re (reverse engineering with REA)
-oc_setup() { # sets OC_CONFIG / OC_AGENT for the current project ($MODE from project.env)
-  if [[ "${MODE:-code}" == re ]]; then
-    command -v rea >/dev/null || die "rea CLI not found (npm i -g rea-agents)"
-    if [[ ! -f "$CODEBOT_HOME/config/opencode-re.json" || "$CODEBOT_HOME/config/rea-tools.txt" -nt "$CODEBOT_HOME/config/opencode-re.json" \
-          || "$CODEBOT_HOME/config/opencode.json" -nt "$CODEBOT_HOME/config/opencode-re.json" ]]; then
-      "$CODEBOT_HOME/bin/codebot-mkconfig" >/dev/null || die "could not build opencode-re.json"
-    fi
-    OC_CONFIG="$CODEBOT_HOME/config/opencode-re.json"; OC_AGENT=codebot-re
-  else OC_CONFIG="$CODEBOT_HOME/config/opencode.json"; OC_AGENT=codebot; fi
+# per-project mode: a folder under modes/<name>/ (mode.json + prompts + worker rules + memory + verifier helpers); no code change adds a mode
+oc_setup() { # sets MODE_DIR, OC_CONFIG, OC_AGENT for the current project from its mode
+  local mj req b dep need=0
+  mj="$("$CODEBOT_HOME/bin/codebot-engine" mode-info "$NAME" --home "$CODEBOT_HOME" 2>&1)" || die "$mj"
+  MODE_DIR="$CODEBOT_HOME/modes/$MODE"
+  OC_CONFIG="$CODEBOT_HOME/$(jq -r '.opencode.config' <<< "$mj")"; OC_AGENT="$(jq -r '.opencode.agent' <<< "$mj")"
+  for req in $(jq -r '.opencode.requires[]?' <<< "$mj"); do command -v "$req" >/dev/null || die "mode '$MODE' needs '$req' on PATH"; done
+  b="$(jq -r '.opencode.build // empty' <<< "$mj")"
+  if [[ -n "$b" ]]; then
+    [[ -f "$OC_CONFIG" ]] || need=1
+    for dep in $(jq -r '.opencode.build_deps[]?' <<< "$mj"); do [[ "$CODEBOT_HOME/$dep" -nt "$OC_CONFIG" ]] && need=1; done
+    (( need )) && { "$CODEBOT_HOME/$b" >/dev/null || die "could not build $OC_CONFIG for mode $MODE"; }
+  fi
+  return 0
 }
-render_prompt() { # plan|work
-  local f="$CODEBOT_HOME/prompts/$1.md"
-  [[ "$1" == plan && "${PLAN_STYLE:-grill}" == quick ]] && f="$CODEBOT_HOME/prompts/plan-quick.md"
-  if [[ "${MODE:-code}" == re ]]; then render <(cat "$f" "$CODEBOT_HOME/prompts/re-$1.md"); else render "$f"; fi
+render_prompt() { # plan|work: the mode's prompt (a mode that extends another gets the base plus its additions)
+  local q=(); [[ "$1" == plan && "${PLAN_STYLE:-grill}" == quick ]] && q=(--quick)
+  render <("$CODEBOT_HOME/bin/codebot-engine" prompt-template "$NAME" "$1" --home "$CODEBOT_HOME" "${q[@]}")
 }
 
 die() { echo "codebot: $*" >&2; exit 1; }
@@ -90,7 +93,7 @@ ensure_ollama() {
 render() { # template file -> stdout
   local t; t="$(cat "$1")"
   t="${t//\{\{WORKDIR\}\}/$RUNDIR}"; t="${t//\{\{STATE\}\}/$S}"
-  t="${t//\{\{CODEBOT_HOME\}\}/$CODEBOT_HOME}"; t="${t//\{\{NAME\}\}/$NAME}"
+  t="${t//\{\{CODEBOT_HOME\}\}/$CODEBOT_HOME}"; t="${t//\{\{NAME\}\}/$NAME}"; t="${t//\{\{MODE_DIR\}\}/${MODE_DIR:-}}"
   if [[ "$t" == *"{{SIZING}}"* ]]; then t="${t//\{\{SIZING\}\}/$("$CODEBOT_HOME/bin/codebot-engine" sizing "$NAME" --home "$CODEBOT_HOME" 2>/dev/null || echo '(no history yet)')}"; fi
   printf '%s\n' "$t"
 }
@@ -108,15 +111,22 @@ tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md
 cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
 
 cmd_plan() {
-  local name="" wd_arg="" re=0 a style="${PLAN_STYLE:-grill}"
-  for a in "$@"; do case "$a" in --re) re=1;; --quick) style=quick;; --grill) style=grill;; *) if [[ -z "$name" ]]; then name="$a"; else wd_arg="$a"; fi;; esac; done
-  [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir] [--re]"
+  local name="" wd_arg="" mode="" a style="${PLAN_STYLE:-grill}" targets=() want_t=0
+  for a in "$@"; do
+    if (( want_t )); then targets+=("$a"); want_t=0; continue; fi
+    case "$a" in --re) mode=re;; --mode=*) mode="${a#--mode=}";; --mode) mode="@next";; --target) want_t=1;; --quick) style=quick;; --grill) style=grill;;
+      *) if [[ "$mode" == "@next" ]]; then mode="$a"; elif [[ -z "$name" ]]; then name="$a"; else wd_arg="$a"; fi;; esac
+  done
+  [[ -n "$name" ]] || die "usage: codebot plan <name> [workdir] [--mode <mode>] [--target <path>]... [--quick]   (modes: codebot modes)"
   S="$(sdir "$name")"; NAME="$name"
   if [[ ! -d "$S" ]]; then
     local wd; wd="$(readlink -f "${wd_arg:-$PWD}")"; [[ -d "$wd" ]] || die "no such dir: $wd"
     mkdir -p "$S"; echo "WORKDIR=\"$wd\"" > "$S/project.env"; touch "$S/PROGRESS.md" "$S/ANSWERS.md"
   fi
-  (( re )) && ! grep -q '^MODE=' "$S/project.env" && echo 'MODE="re"' >> "$S/project.env"
+  [[ -n "$mode" ]] && ! grep -q '^MODE=' "$S/project.env" && echo "MODE=\"$mode\"" >> "$S/project.env"
+  if (( ${#targets[@]} )) && ! grep -q '^SANDBOX_RO=' "$S/project.env"; then
+    local t ro=""; for t in "${targets[@]}"; do ro+="$(readlink -f "$t"),"; done; echo "SANDBOX_RO=\"${ro%,}\"" >> "$S/project.env"
+  fi
   load_proj "$name"; ensure_ollama
   cd "$RUNDIR" && exec env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" --agent "$OC_AGENT" --prompt "$(PLAN_STYLE=$style render_prompt plan)" "$RUNDIR"
 }
@@ -376,6 +386,7 @@ cmd_re_config() { "$CODEBOT_HOME/bin/codebot-mkconfig" --refresh; }
 cmd_prompt() { load_proj "${1:-}"; PLAN_STYLE="${3:-${PLAN_STYLE:-grill}}" render_prompt "${2:-plan}"; }
 cmd_freeze() { need_proj "${1:-}"; "$CODEBOT_HOME/bin/codebot-engine" freeze "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_engine() { local sub="${1:-}"; need_proj "${2:-}"; "$CODEBOT_HOME/bin/codebot-engine" "$sub" "$2" --home "$CODEBOT_HOME" "${@:3}"; }
+cmd_modes() { "$ENGINE" modes x --home "$CODEBOT_HOME"; }
 cmd_audit() { need_proj "${1:-}"; "$ENGINE" audit "$1" --home "$CODEBOT_HOME" "${@:2}"; }
 cmd_tidy() {   # evidence-backed memory needs no model: prune lessons that correlate with failure and regenerate lessons.md
   if [[ -f "$CODEBOT_HOME/memory/lessons.raw.jsonl" ]]; then
@@ -390,7 +401,7 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|__loop) "cmd_$c" "$@";;
+  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|__loop) "cmd_$c" "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -398,7 +409,8 @@ case "$c" in
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   *) cat <<USAGE
 codebot - local ralph-loop coding agent
-  plan <name> [workdir] [--re] [--quick]   interactive planning (default: thorough "grill me" interview; --quick = short one; --re = reverse engineering with REA)
+  plan <name> [workdir] [--mode <m>] [--target <path>] [--quick]   interactive planning (default: thorough "grill me" interview; --quick = short one; --re = --mode re)
+  modes                   list the modes (folders under modes/)
   start <name>            run the autonomous loop in the background
   pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
   resume <name>           continue after pause

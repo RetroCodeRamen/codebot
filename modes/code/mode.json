@@ -1,0 +1,13 @@
+{
+  "name": "code",
+  "description": "General coding: small tasks, each with a frozen test-style acceptance check",
+  "engine": "native",
+  "prompts": {"plan": "plan.md", "plan_quick": "plan-quick.md", "work": "work.md"},
+  "opencode": {"config": "config/opencode.json", "agent": "codebot"},
+  "verifier": {"style": "tests", "helpers": [], "guidance": "Checks are runnable tests: a test file in checks/ run with the project's own runner, or one command that exits 0 only when the behaviour works."},
+  "commands": {"allow": null, "deny": []},
+  "sandbox": {"ro": [], "env": [], "path_prepend": [], "memory": null},
+  "worker_rules": "worker.md",
+  "memory_file": null,
+  "memory_cap": 2500
+}

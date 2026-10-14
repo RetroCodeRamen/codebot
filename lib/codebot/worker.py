@@ -2,7 +2,7 @@
 schema; the harness validates every action before applying it and builds all context itself. The worker's own claim
 of success is irrelevant: the engine runs the frozen check afterwards."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-from . import audit, memory, ollama, packer, planops, sandbox
+from . import audit, memory, modes, ollama, packer, planops, sandbox
 from .config import Project, now, append_jsonl
 
 ACTIONS = ("read_file", "list_dir", "write_file", "edit_file", "run", "replan", "note_lesson", "finish")
@@ -176,7 +176,10 @@ def run_attempt(proj, task, attempt, last_error, variant="", model=None, tempera
     text, manifest = packer.pack(proj, task, last_error)
     with open(proj.p("packed.json"), "w") as f: json.dump(manifest, f)
     trace(proj, {"event": "attempt_start", "task": task["id"], "attempt": attempt, "variant": variant or "std", "model": model, "context": manifest})
-    messages = [{"role": "system", "content": SYSTEM_ALT if variant == "alt" else SYSTEM},
+    rules = ""
+    try: rules = modes.worker_rules(proj.home, proj.mode)
+    except modes.ModeError: pass
+    messages = [{"role": "system", "content": (SYSTEM_ALT if variant == "alt" else SYSTEM) + ("\n" + rules if rules else "")},
                 {"role": "user", "content": text + "\n\nReply with ONE JSON action."}]
     ctx, schema, bad, recent, turns = Ctx(proj, task, attempt), action_schema(), 0, [], 0
     ended = "turn limit"

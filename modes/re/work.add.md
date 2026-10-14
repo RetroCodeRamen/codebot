@@ -1,5 +1,5 @@
 
-REVERSE-ENGINEERING MODE (REA). First read {{CODEBOT_HOME}}/memory/rea.md (cheat sheet). Rules:
+REVERSE-ENGINEERING MODE (REA). First read {{MODE_DIR}}/memory.md (cheat sheet). Rules:
 - Evidence only: every claim you write must cite an address, function, string or file you actually retrieved this session. If you did not see it, do not state it.
 - Static analysis only. Never execute the target. Never run `rea capture-*`, `rea observe-*`, adb, gdb, lldb, strace. If the plan truly requires runtime execution, write BLOCKED asking the user.
 - Tools: the rea_* MCP tools (start with rea_open_binary on the target path) and the `rea` CLI through bash. Outputs can be huge: with the CLI ALWAYS add `--token-limit 1500` and page with `--token-offset`; use `--filter-output` to select fields. For repeated CLI calls on the same target add `--snapshot {{STATE}}/rea.snap` (turns a 15 s analysis into 1 s).

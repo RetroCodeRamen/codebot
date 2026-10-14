@@ -2,7 +2,7 @@
 check, the last error, the files the task names, a compact repo/symbol map, the agreed decisions, a few relevant lessons.
 Nothing else, within a token budget."""
 import json, os, re, subprocess
-from . import checks as C, memory
+from . import checks as C, memory, modes
 from .config import now
 
 CHARS_PER_TOKEN = 3.5
@@ -131,6 +131,9 @@ def pack(proj, task, last_error="", budget_tokens=None):
     plan = section_from_md(proj.p("PLAN.md"), ["Goal", "Definition of done"], 900)
     if dec: secs.append(("AGREED DECISIONS", dec, 2))
     if plan: secs.append(("PROJECT GOAL", plan, 3))
+    try: mnotes = modes.notes(proj.home, proj.mode)
+    except modes.ModeError: mnotes = ""
+    if mnotes: secs.append((f"MODE NOTES ({proj.mode})", mnotes, 3))
     pa = previous_attempts(task)
     if pa: secs.append(("PREVIOUS ATTEMPTS AT THIS TASK", pa, 2))
     les = lessons_for(proj, task)

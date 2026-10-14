@@ -1,0 +1,92 @@
+{
+  "name": "re",
+  "description": "Reverse engineering with REA: static analysis of binaries/packages, evidence-only findings",
+  "extends": "code",
+  "prompts_add": {
+    "plan": "plan.add.md",
+    "work": "work.add.md"
+  },
+  "opencode": {
+    "config": "config/opencode-re.json",
+    "agent": "codebot-re",
+    "build": "bin/codebot-mkconfig",
+    "build_deps": [
+      "config/rea-tools.txt",
+      "config/opencode.json"
+    ],
+    "requires": [
+      "rea"
+    ]
+  },
+  "verifier": {
+    "style": "findings",
+    "helpers": [
+      "findings_has.sh"
+    ],
+    "guidance": "Checks assert on the findings file: `bash $CODEBOT_CHECKS/findings_has.sh <findings.md> '# Overview' 'validate_license'` exits 1 and says what is missing; add --sourced to require a [src: ...] tag on every bullet."
+  },
+  "commands": {
+    "allow": [
+      "rea",
+      "grep",
+      "egrep",
+      "cat",
+      "head",
+      "tail",
+      "wc",
+      "ls",
+      "sort",
+      "uniq",
+      "cut",
+      "awk",
+      "sed",
+      "tr",
+      "echo",
+      "printf",
+      "test",
+      "[",
+      "true",
+      "false",
+      "jq",
+      "python3",
+      "bash",
+      "find",
+      "diff",
+      "basename",
+      "dirname",
+      "strings",
+      "file",
+      "xxd",
+      "od",
+      "git",
+      "date",
+      "sha256sum",
+      "md5sum",
+      "tee"
+    ],
+    "deny": [
+      "\\brea\\s+(capture[\\w-]*|observe[\\w-]*|setup|update|uninstall|install[\\w-]*)\\b",
+      "\\b(adb|gdb|lldb|strace|ltrace|ptrace|qemu[\\w-]*)\\b"
+    ]
+  },
+  "sandbox": {
+    "ro": [
+      "{NODE_PREFIX}",
+      "{JAVA_HOME}",
+      "{GHIDRA_INSTALL_DIR}"
+    ],
+    "env": [
+      "JAVA_HOME",
+      "GHIDRA_INSTALL_DIR"
+    ],
+    "path_prepend": [
+      "{NODE_PREFIX}/bin",
+      "{JAVA_HOME}/bin"
+    ],
+    "memory": "4g"
+  },
+  "worker_rules": "worker.md",
+  "memory_file": "memory.md",
+  "memory_cap": 3200,
+  "wants_target": true
+}

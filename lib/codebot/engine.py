@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, re, subprocess, sys, time
-from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M
+from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -18,6 +18,8 @@ def freeze_project(proj, allow_unchecked=False):
                          f"Add a `  - check: `<command>`` line to each (or set ALLOW_UNCHECKED=1).")
     data = {"version": 1, "project": proj.name, "created": now(), "plan_head": head, "tasks": tasks}
     os.makedirs(C.checks_dir(proj), exist_ok=True)
+    try: MD.copy_verifiers(proj)                 # the mode's verifier helpers become part of the frozen checks
+    except MD.ModeError as e: raise SystemExit(f"{proj.name}: {e}")
     with store.locked():
         C.freeze(proj, data); store.save(data)
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "freeze", "reason": "initial freeze",

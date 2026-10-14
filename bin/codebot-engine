@@ -7,10 +7,14 @@ from codebot import engine, tasks as T
 
 def main():
     ap = argparse.ArgumentParser(prog="codebot-engine")
-    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit"])
-    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--json", action="store_true")
+    ap.add_argument("cmd", choices=["freeze", "step", "status", "render", "reset", "plan-op", "split", "sizing", "answer", "memory", "audit", "mode-info", "prompt-template", "modes"])
+    ap.add_argument("project"); ap.add_argument("op_json", nargs="?"); ap.add_argument("--actor", default="user"); ap.add_argument("--allow-unchecked", action="store_true"); ap.add_argument("--probe", action="store_true"); ap.add_argument("--quick", action="store_true"); ap.add_argument("--json", action="store_true")
     ap.add_argument("--home"); ap.add_argument("--fresh", action="store_true")
     a = ap.parse_intermixed_args()
+    if a.cmd == "modes":
+        from codebot import modes, config
+        for d in modes.describe(a.home or config.home_dir()): print(f"{d['name']:<10} {d['engine']:<9} {('extends ' + d['extends']) if d['extends'] else '':<14} {d['description']}")
+        return
     proj = Project(a.project, a.home)
     if a.cmd == "freeze":
         d = engine.freeze_project(proj, a.allow_unchecked or bool(proj.get("ALLOW_UNCHECKED")))
@@ -24,6 +28,14 @@ def main():
     elif a.cmd == "plan-op":
         from codebot import planops
         print(json.dumps(planops.apply(proj, json.loads(a.op_json), a.actor)))
+    elif a.cmd == "mode-info":
+        from codebot import modes
+        try: m = modes.load(proj.home, proj.mode); print(json.dumps({k: v for k, v in m.items() if k != "chain"}))
+        except modes.ModeError as e: print(str(e), file=sys.stderr); sys.exit(2)
+    elif a.cmd == "prompt-template":
+        from codebot import modes
+        try: sys.stdout.write(modes.prompt_template(proj.home, proj.mode, a.op_json or "work", a.quick))
+        except modes.ModeError as e: print(str(e), file=sys.stderr); sys.exit(2)
     elif a.cmd == "audit":
         from codebot import audit, sandbox
         pr = sandbox.probe(proj) if a.probe else None

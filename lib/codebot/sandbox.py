@@ -2,7 +2,7 @@
 root, only the project dir writable, capabilities dropped, memory/pid limits. Uses a base image that is already local
 (ubuntu:24.04 by default, same distro as the host) with the host's /usr mounted read-only over it, so nothing is created in Docker."""
 import os, re, shutil, subprocess, uuid
-from . import audit
+from . import audit, modes
 
 DENY = [
     (r"\bsudo\b|\bsu\s+-?\w*\b|\bdoas\b", "privilege escalation is not available"),
@@ -22,6 +22,8 @@ def check_command(proj, command):
         if re.search(rx, command): raise Denied(why)
     if proj.state and proj.state in command: raise Denied("the harness owns its state directory; the code directory is yours")
     if re.search(r"checks(\.lock|/\.frozen)|tasks\.json", command): raise Denied("those files are locked by the harness")
+    why = modes.command_violation(proj, command)
+    if why: raise Denied(why)
 
 _MODE = {}
 def mode(proj):
@@ -39,12 +41,13 @@ def mode(proj):
     _MODE[key] = res; return res
 
 def _docker_argv(proj, name, cwd, env, rw, ro, image):
-    mem, pids = proj.get("SANDBOX_MEMORY", "2g"), proj.get("SANDBOX_PIDS", "512")
+    mc = modes.sandbox_cfg(proj)
+    mem, pids = mc["memory"] or proj.get("SANDBOX_MEMORY", "2g"), proj.get("SANDBOX_PIDS", "512")
     a = ["docker", "run", "--rm", "--name", name, "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
          "--pids-limit", pids, "--memory", mem, "--user", f"{os.getuid()}:{os.getgid()}", "--tmpfs", "/tmp:rw,exec,size=512m",
          "-v", "/usr:/usr:ro", "-v", "/etc/passwd:/etc/passwd:ro", "-v", "/etc/group:/etc/group:ro", "-w", cwd]
     for p in rw: a += ["-v", f"{p}:{p}"]
-    for p in [*ro, *[x for x in proj.get("SANDBOX_RO", "").split(",") if x.strip()]]:
+    for p in [*ro, *mc["ro"], *[x.strip() for x in proj.get("SANDBOX_RO", "").split(",") if x.strip()]]:
         if os.path.exists(p): a += ["-v", f"{p}:{p}:ro"]
     for k, v in env.items(): a += ["-e", f"{k}={v}"]
     return a + [image]
@@ -53,9 +56,10 @@ BASE_ENV = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.U
 
 def execute(proj, argv, *, timeout, env=None, rw=None, ro=None, cwd=None):
     """Run argv (a list) sandboxed when available. Returns (rc, combined_output, sandbox_label)."""
-    m = mode(proj); cwd = cwd or proj.rundir; env = {**BASE_ENV, **(env or {})}
-    for k in proj.get("SANDBOX_PASS_ENV", "JAVA_HOME,GHIDRA_INSTALL_DIR,VIRTUAL_ENV").split(","):
-        if k and os.environ.get(k): env.setdefault(k, os.environ[k])
+    m = mode(proj); cwd = cwd or proj.rundir; env = {**BASE_ENV, **(env or {})}; mc = modes.sandbox_cfg(proj)
+    for k in [*mc["env"], *[x for x in proj.get("SANDBOX_PASS_ENV", "VIRTUAL_ENV").split(",") if x]]:
+        if os.environ.get(k): env.setdefault(k, os.environ[k])
+    if mc["path_prepend"]: env["PATH"] = ":".join(mc["path_prepend"]) + ":" + env["PATH"]
     if m["mode"] == "docker":
         name = "cb-" + uuid.uuid4().hex[:10]; label = "docker:net=none:ro-root"
         full = _docker_argv(proj, name, cwd, env, rw or [proj.rundir], ro or [], m["image"]) + list(argv)
