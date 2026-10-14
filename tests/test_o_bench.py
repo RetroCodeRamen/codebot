@@ -205,3 +205,48 @@ class TestCollectFromANativeRun(BenchHome):
         for frag in ("Pass rate", "Per turn", "Schema", "Baseline guard", "Ladder steps fired", "Blocked", "Heat"): self.assertIn(frag, md)
 
 if __name__ == "__main__": unittest.main()
+
+class TestPlannerLoop(BenchHome):
+    """The harness (not the model) drives the planner: it runs check-plan itself, undoes any code the planner wrote, and feeds back the exact report."""
+    def setUp(self):
+        super().setUp(); shutil.rmtree(os.path.join(self.home, "projects", "b1")); shutil.rmtree(os.path.join(self.home, "bench", "runs", "b1"))
+        self.name = bench.setup(self.home, "pyutils", "auto", "p1"); self.state = os.path.join(self.home, "projects", "p1"); self.code = os.path.join(self.home, "bench", "runs", "p1", "code")
+        with open(os.path.join(self.home, "config", "codebot.env"), "a") as f: f.write("\nCHECK_BASELINE_GUARD=1\nSANDBOX=none\n")
+        self.cmd_file = os.path.join(self.tmp, "planner.py")
+    def planner(self, src):
+        with open(self.cmd_file, "w") as f: f.write(src)
+        return f"{sys.executable} {self.cmd_file}"
+    BAD = ("import os\\nstate, code, rnd = os.environ['STATE'], os.environ['CODE'], os.environ['PLAN_ROUND']\\n")
+    def run_plan(self, src, rounds=3): return bench.plan_auto(self.home, "p1", timeout=600, rounds=rounds, log=lambda *a: None, planner_cmd=self.planner(src))
+
+    def test_a_bad_first_round_is_repaired_and_everything_is_counted(self):
+        r = self.run_plan(self.BAD.replace("\\n", "\n") + '''
+if rnd == "1":
+    open(os.path.join(state, "PLAN.md"), "w").write("# Tasks\\n- [ ] 1. rename\\n  - check: `python3 main_app.py` prints 42\\n- [ ] 2. slug\\n  - check: `test -f README.md`\\n- [ ] 3. fine\\n  - check: `test -f textutil.py`\\n")
+    open(os.path.join(code, "textutil.py"), "w").write("# the planner implemented something\\n")          # forbidden: code in the code dir
+    os.makedirs(os.path.join(state, "code")); open(os.path.join(state, "code", "x.py"), "w").write("y=1\\n")      # and a stray dir
+else:
+    prompt = open(os.environ["PLAN_PROMPT_FILE"]).read(); assert "MALFORMED" in prompt and "T1" in prompt and "Do not change tasks that were not rejected" in prompt, prompt[:600]
+    open(os.path.join(state, "PLAN.md"), "w").write("# Tasks\\n- [ ] 1. rename\\n  - check: `grep -rq double legacy.py`\\n- [ ] 2. slug\\n  - check: `test -f textutil.py`\\n- [ ] 3. fine\\n  - check: `test -f textutil.py`\\n")
+''')
+        self.assertTrue(r["ok"], r); self.assertEqual(len(r["rounds"]), 2)
+        r1 = r["rounds"][0]; self.assertEqual(sorted(x.split(":")[0] for x in r1["rejected"]), ["T1", "T2"])                      # prose after the backtick; a check that passes today
+        self.assertIn("textutil.py", " ".join(r1["violations"])); self.assertIn("stray code dir", " ".join(r1["violations"]))      # both violations recorded
+        self.assertFalse(os.path.exists(os.path.join(self.code, "textutil.py"))); self.assertFalse(os.path.exists(os.path.join(self.state, "code")))   # and undone
+        self.assertEqual(r["rounds"][1]["rejected"], []); self.assertEqual(r["rounds"][1]["violations"], [])
+        log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "check_rejected" in l]; self.assertEqual(len(log), 2); self.assertEqual({l["actor"] for l in log}, {"planner"})
+
+    def test_a_planner_that_never_recovers_stops_after_the_round_limit(self):
+        r = self.run_plan(self.BAD.replace("\\n", "\n") + 'open(os.path.join(state, "PLAN.md"), "w").write("# Tasks\\n- [ ] 1. x\\n  - check: `true`\\n")\n', rounds=3)
+        self.assertFalse(r["ok"]); self.assertEqual(len(r["rounds"]), 3); self.assertTrue(all(x["rejected"] for x in r["rounds"]))
+    def test_a_missing_plan_is_reported_back_to_the_planner(self):
+        r = self.run_plan(self.BAD.replace("\\n", "\n") + '''
+if rnd == "2": assert "PLAN.md does not exist" in open(os.environ["PLAN_PROMPT_FILE"]).read()
+if rnd == "3": open(os.path.join(state, "PLAN.md"), "w").write("# Tasks\\n- [ ] 1. x\\n  - check: `test -f nope.py`\\n")
+''')
+        self.assertTrue(r["ok"], r); self.assertEqual(len(r["rounds"]), 3)
+    def test_the_first_prompt_forbids_writing_code_and_explains_what_a_check_is(self):
+        self.run_plan(self.BAD.replace("\\n", "\n") + 'open(os.path.join(state, "PLAN.md"), "w").write("# Tasks\\n- [ ] 1. x\\n  - check: `test -f nope.py`\\n")\n')
+        p = open(os.path.join(self.state, "plan-round-1.prompt.md")).read()
+        for frag in ("NEVER write, edit or create any code file", "MUST FAIL TODAY", "nothing after the closing backtick", "tN_test.py", "slugify", "SIZING HISTORY"): self.assertIn(frag, p)
+        self.assertNotIn("{{", p)

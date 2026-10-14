@@ -31,11 +31,14 @@ def evaluate(proj, tasks):
     res = []
     for t in tasks:
         if t.get("status") == "done" or not (t.get("check") or "").strip(): continue
+        if t.get("check_note"):
+            res.append({"id": t["id"], "title": t["title"], "check": t["check"], "verdict": "malformed", "rc": None, "out": f"text after the closing backtick: {t['check_note'][:120]!r}"}); continue
         p = probe(proj, t["check"], proj.get("CHECK_TIMEOUT", 600, int))
         res.append({"id": t["id"], "title": t["title"], "check": t["check"], **p})
     return res
 
-REASON = {"passes": "the check already PASSES against the current code, so it tests nothing. Rewrite it so it fails until the task is really done",
+REASON = {"malformed": "the check line has text AFTER the closing backtick; a check is ONE shell command and nothing else, so write only the command inside the backticks",
+          "passes": "the check already PASSES against the current code, so it tests nothing. Rewrite it so it fails until the task is really done",
           "broken": "the check is BROKEN, so it cannot test anything"}
 
 def log_rejection(proj, tid, title, check, verdict, out, actor):

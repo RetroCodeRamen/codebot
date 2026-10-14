@@ -87,3 +87,18 @@ class TestProbeIsReadOnly(Base):
         sandbox._MODE.clear()
 
 if __name__ == "__main__": unittest.main()
+
+class TestMalformedCheckLine(Base):
+    def test_prose_after_the_closing_backtick_is_its_own_verdict(self):
+        from codebot.planparse import parse_plan
+        _, t = parse_plan("# Tasks\n- [ ] 1. x\n  - check: `python3 main_app.py` prints 42\n- [ ] 2. y\n  - check: `grep -q hi a.txt`\n- [ ] 3. z\n  - check: grep -q hi a.txt\n")
+        self.assertEqual((t[0]["check"], t[0]["check_note"]), ("python3 main_app.py", "prints 42")); self.assertNotIn("check_note", t[1]); self.assertEqual((t[2]["check"], "check_note" in t[2]), ("grep -q hi a.txt", False))
+    def test_freeze_rejects_it_with_an_actionable_message(self):
+        self.write_plan("# Tasks\n- [ ] 1. rename\n  - check: `python3 main_app.py` prints 42\n")
+        with self.assertRaises(SystemExit) as e: engine.freeze_project(self.proj())
+        msg = str(e.exception); self.assertIn("AFTER the closing backtick", msg); self.assertIn("prints 42", msg)
+        r = self.rejected(); self.assertEqual((r[0]["verdict"], r[0]["task"]), ("malformed", "T1")); self.assertFalse(self.frozen())
+    def test_the_cli_names_it_malformed(self):
+        self.write_plan("# Tasks\n- [ ] 1. x\n  - check: `true` and more words\n")
+        r = subprocess.run([sys.executable, ENG, "check-plan", self.name, "--home", self.home], capture_output=True, text=True)
+        self.assertIn("MALFORMED", r.stdout); self.assertEqual(r.returncode, 1)

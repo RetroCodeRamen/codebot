@@ -1,7 +1,7 @@
 """codebot bench: run a suite of tasks through the REAL pipeline (planner optional, freeze, supervisor loop, worker, checks, ladder) with the
 real model, and record what it did: pass rate, attempts, time, per-turn prompt vs generation time, schema failures, guard rejections,
 every ladder step, every blocked task, heat."""
-import json, os, shutil, statistics, subprocess, sys, time
+import json, os, re, shutil, statistics, subprocess, sys, time
 from . import modes, planparse, tasks as T, thermal, tokens
 from .config import Project, now, read_env
 
@@ -35,20 +35,66 @@ def setup(home, suite, plan="fixed", name=None):
     else: shutil.copy(os.path.join(src, "spec.md"), os.path.join(state, "SPEC.md"))
     return name
 
-def plan_auto(home, name, timeout=2700, log=print):
-    """Non-interactive planner: the spec is given up front, the model writes GRILL.md/PLAN.md/checks and iterates against `codebot check-plan`."""
+def _seed_sha(code):
+    r = _git(code, "rev-list", "--max-parents=0", "HEAD"); return r.stdout.split()[0] if r.stdout.split() else None
+
+def _cleanup(proj):
+    """The planner must not touch code. Whatever it did is recorded as a violation and undone, so every later stage starts from the real seed."""
+    code, viol = proj.rundir, []
+    for ln in _git(code, "status", "--porcelain", "--untracked-files=all").stdout.splitlines():
+        path = ln[3:].strip()
+        if path and "__pycache__" not in path: viol.append(path)
+    seed = _seed_sha(code)
+    if seed: _git(code, "reset", "-q", "--hard", seed)
+    _git(code, "clean", "-fdq")
+    stray = os.path.join(proj.state, "code")
+    if os.path.isdir(stray): viol.append("projects/<p>/code/ (a stray code dir in the state dir)"); shutil.rmtree(stray, ignore_errors=True)
+    for f in os.listdir(proj.state):                      # planner-made junk next to the state files (e.g. a stray test dir)
+        if f.endswith(".py") and f != "worker.py": viol.append(f"stray {f} in the state dir"); os.remove(os.path.join(proj.state, f))
+    return viol
+
+def _render(tpl, proj, name, **extra):
+    spec = ""
+    try:
+        with open(proj.p("SPEC.md")) as f: spec = f.read()
+    except OSError: pass
+    out = tpl.replace("{{STATE}}", proj.state).replace("{{WORKDIR}}", proj.rundir).replace("{{NAME}}", name).replace("{{SPEC}}", spec)
+    for k, v in extra.items(): out = out.replace("{{" + k + "}}", v)
+    return out
+
+def _run_planner(home, proj, prompt, timeout, planner_cmd, rnd):
+    pf = proj.p(f"plan-round-{rnd}.prompt.md")
+    with open(pf, "w") as f: f.write(prompt)
+    env = dict(os.environ, OPENCODE_CONFIG=os.path.join(home, "config", "opencode.json"), OLLAMA_HOST=f"127.0.0.1:{proj.get('OLLAMA_PORT', 11500)}",
+               PLAN_ROUND=str(rnd), PLAN_PROMPT_FILE=pf, STATE=proj.state, CODE=proj.rundir)
+    with open(proj.p("plan-auto.log"), "a") as lf:
+        lf.write(f"\n===== planner round {rnd} =====\n"); lf.flush()
+        cmd = planner_cmd or [os.path.join(home, "tools", "node_modules", ".bin", "opencode"), "run", "--auto", "--thinking", "--variant", "nothink", "--agent", "codebot", "--dir", proj.rundir, prompt]
+        try: r = subprocess.run(cmd, shell=isinstance(cmd, str), cwd=proj.rundir, env=env, stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, timeout=timeout); return r.returncode
+        except subprocess.TimeoutExpired: return 124
+
+def plan_auto(home, name, timeout=2700, rounds=3, log=print, planner_cmd=None):
+    """Unattended planner driven BY THE HARNESS: the spec is given up front; after every round the harness runs `check-plan` itself (a 9B model did not run
+    it, and read 'rewrite until it says OK' as 'make the checks pass'), undoes any code the planner wrote, and sends back the exact rejection report."""
     proj = Project(name, home)
-    with open(os.path.join(home, "modes", "code", "plan-auto.md")) as f: tpl = f.read()
-    with open(proj.p("SPEC.md")) as f: spec = f.read()
+    with open(os.path.join(home, "modes", "code", "plan-auto.md")) as f: first = f.read()
+    with open(os.path.join(home, "modes", "code", "plan-repair.md")) as f: repair = f.read()
     sizing = subprocess.run([sys.executable, os.path.join(home, "bin", "codebot-engine"), "sizing", name, "--home", home], capture_output=True, text=True).stdout.strip()
-    prompt = (tpl.replace("{{STATE}}", proj.state).replace("{{WORKDIR}}", proj.rundir).replace("{{NAME}}", name).replace("{{SPEC}}", spec).replace("{{SIZING}}", sizing))
-    env = dict(os.environ, OPENCODE_CONFIG=os.path.join(home, "config", "opencode.json"), OLLAMA_HOST=f"127.0.0.1:{proj.get('OLLAMA_PORT', 11500)}")
-    t0 = time.time()
-    with open(proj.p("plan-auto.log"), "w") as lf:
-        try: r = subprocess.run([os.path.join(home, "tools", "node_modules", ".bin", "opencode"), "run", "--auto", "--thinking", "--variant", "nothink", "--agent", "codebot", "--dir", proj.rundir, prompt],
-                                cwd=proj.rundir, env=env, stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, timeout=timeout); rc = r.returncode
-        except subprocess.TimeoutExpired: rc = 124
-    return {"rc": rc, "secs": round(time.time() - t0)}
+    info = {"rounds": [], "ok": False, "secs": 0}; t0 = time.time(); report = ""
+    for k in range(1, rounds + 1):
+        left = timeout - (time.time() - t0)
+        if left < 60: break
+        prompt = _render(first, proj, name, SIZING=sizing) if k == 1 else _render(repair, proj, name, REPORT=report)
+        r0 = time.time(); rc = _run_planner(home, proj, prompt, left, planner_cmd, k); viol = _cleanup(proj)
+        cp = codebot(home, "check-plan", name); out = (cp.stdout + cp.stderr).strip()
+        if not os.path.exists(proj.p("PLAN.md")): out = "PLAN.md does not exist: write it in " + proj.state; ok = False
+        else: ok = cp.returncode == 0
+        bad = re.findall(r"^(T[\d.]+)\s+(BROKEN|PASSES|MALFORMED|NO CHECK)", out, re.M)
+        info["rounds"].append({"n": k, "secs": round(time.time() - r0), "rc": rc, "rejected": [f"{t}:{v.lower()}" for t, v in bad], "violations": viol, "ok": ok})
+        log(f"planner round {k}: {len(bad)} rejected, {len(viol)} violations, ok={ok}")
+        if ok: info["ok"] = True; break
+        report = out
+    info["secs"] = round(time.time() - t0); return info
 
 def codebot(home, *a, timeout=300): return subprocess.run([os.path.join(home, "bin", "codebot"), *a], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
 
@@ -194,8 +240,9 @@ def main(argv):
         proj = Project(a.collect_only, home); res = collect(proj); print(json.dumps(res, indent=1)); return 0
     name = setup(home, a.suite, a.plan, a.name); plan_info = None; print(f"project {name}")
     if a.plan == "auto":
-        print("planner running (unattended)..."); pi = plan_auto(home, name, a.plan_minutes * 60); cp = codebot(home, "check-plan", name)
-        plan_info = f"{pi['secs']} s, exit {pi['rc']}; check-plan: {cp.stdout.strip().splitlines()[-1] if cp.stdout.strip() else cp.stderr.strip()[-120:]}"; print(plan_info)
+        print("planner running (unattended, harness-driven repair rounds)...", flush=True); pi = plan_auto(home, name, a.plan_minutes * 60)
+        plan_info = (f"{len(pi['rounds'])} round(s), {pi['secs']} s, final check-plan {'OK' if pi['ok'] else 'REJECTED'}. " + "; ".join(
+            f"round {r['n']}: rejected {r['rejected'] or 'none'}, violations {r['violations'] or 'none'}" for r in pi["rounds"])); print(plan_info, flush=True)
         if not os.path.exists(os.path.join(home, "projects", name, "PLAN.md")):
             print("the planner wrote no PLAN.md; nothing to run"); return 2
     run = run_project(home, name, a.max_minutes); proj = Project(name, home)
