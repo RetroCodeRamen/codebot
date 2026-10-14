@@ -52,6 +52,14 @@ def plan_auto(home, name, timeout=2700, log=print):
 
 def codebot(home, *a, timeout=300): return subprocess.run([os.path.join(home, "bin", "codebot"), *a], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
 
+def classify(counts, settled, loop_alive, elapsed_s):
+    """Run status from what we can observe. A loop that exited AFTER every task settled finished normally (COMPLETE ends the loop):
+    only a loop that is gone while work is still unsettled counts as died."""
+    if counts["pending"] == 0 and counts["running"] == 0 and (settled >= 2 or not loop_alive):
+        return "finished" if counts["blocked"] == 0 else "finished_with_blocked"
+    if not loop_alive and elapsed_s > 60: return "loop_died"
+    return None
+
 def run_project(home, name, max_minutes=150, poll=20, log=print):
     proj = Project(name, home); t0 = time.time(); temps = []; store = T.TaskStore(proj)
     r = codebot(home, "start", name)
@@ -70,8 +78,8 @@ def run_project(home, name, max_minutes=150, poll=20, log=print):
         except (OSError, ValueError): pid = None
         if c["pending"] == 0 and c["running"] == 0: settled += 1
         else: settled = 0
-        if settled >= 2: status = "finished" if c["blocked"] == 0 else "finished_with_blocked"; break
-        if pid is None and time.time() - t0 > 60: status = "loop_died"; break
+        st = classify(c, settled, pid is not None, time.time() - t0)
+        if st: status = st; break
     codebot(home, "stop", name)
     return {"status": status, "minutes": round((time.time() - t0) / 60, 1), "temps": temps}
 
@@ -82,7 +90,7 @@ def _stat(xs): return {"mean": round(statistics.mean(xs)), "p50": round(_pct(xs,
 def summarize_turns(trace):
     turns = [e for e in trace if e.get("event") == "turn"]; ends = [e for e in trace if e.get("event") == "attempt_end"]
     if not turns: return {"turns": 0}
-    gen = [e for e in turns if e.get("gtok") and e.get("gen_ms")]; pro = [e for e in turns if e.get("ptok") and e.get("prompt_ms")]
+    gen = [e for e in turns if e.get("gtok") and e.get("gen_ms")]
     first = [e for e in turns if e.get("n") == 1 and e.get("ptok") and e.get("est_prompt")]; later = [e for e in turns if (e.get("n") or 0) > 1 and e.get("ptok") and e.get("est_prompt")]
     cold = [e["ptok"] / (e["prompt_ms"] / 1000) for e in first if e.get("prompt_ms")]             # tokens/s of a cold prompt = the baseline for "what re-evaluating everything costs"
     cold_tps = statistics.median(cold) if cold else None
@@ -93,7 +101,6 @@ def summarize_turns(trace):
             "prompt_ms": _stat([e["prompt_ms"] for e in turns if e.get("prompt_ms") is not None]), "gen_ms": _stat([e["gen_ms"] for e in turns if e.get("gen_ms") is not None]),
             "load_ms_total": sum(e.get("load_ms") or 0 for e in turns), "wall_s": _stat([e["secs"] for e in turns if e.get("secs") is not None]),
             "gen_tok_per_s": round(statistics.mean(e["gtok"] / (e["gen_ms"] / 1000) for e in gen), 2) if gen else None,
-            "prompt_tok_per_s": round(statistics.mean(e["ptok"] / (e["prompt_ms"] / 1000) for e in pro), 1) if pro else None,
             "evaluated_prompt_tokens": {"first_turn_mean": round(statistics.mean(e["ptok"] for e in first)) if first else None, "later_turn_mean": round(statistics.mean(e["ptok"] for e in later)) if later else None},
             "cold_prompt_tok_per_s": round(cold_tps, 1) if cold_tps else None, "cache_reuse_first_turn": reuse(first), "cache_reuse_later_turns": reuse(later),
             "max_est_prompt_tokens": max((e.get("est_prompt") or 0) for e in turns), "num_ctx": next((e["num_ctx"] for e in turns if e.get("num_ctx")), None),
@@ -133,7 +140,7 @@ def render_md(res, run, plan_info=None):
     L += ["| task | status | attempts | top rung | turns | wall s |", "|---|---|---|---|---|---|"] + [f"| {p['id']} {p['title'][:48]} | {p['status']} | {p['attempts']} | {p['max_rung']} | {p['turns']} | {p['wall_s']} |" for p in r["tasks"]] + [""]
     if t.get("turns"):
         L += [f"- **Per turn** ({t['turns']} model turns): prompt processing mean {t['prompt_ms']['mean']} ms (p50 {t['prompt_ms']['p50']}, p95 {t['prompt_ms']['p95']}); generation mean {t['gen_ms']['mean']} ms (p50 {t['gen_ms']['p50']}, p95 {t['gen_ms']['p95']}); wall mean {t['wall_s']['mean']} s; model load total {t['load_ms_total']} ms.",
-              f"- **Speed:** generation {t['gen_tok_per_s']} tok/s, prompt processing {t['prompt_tok_per_s']} tok/s (tokens actually evaluated).",
+              f"- **Speed:** generation {t['gen_tok_per_s']} tok/s; cold prompt processing {t['cold_prompt_tok_per_s']} tok/s (first turn of an attempt; later turns only evaluate what is new).",
               f"- **KV cache reuse:** first turn of an attempt {t['cache_reuse_first_turn']}, later turns {t['cache_reuse_later_turns']} (fraction of the prompt NOT re-evaluated, from prompt-processing time vs a cold {t['cold_prompt_tok_per_s']} tok/s; prompt tokens first/later: {t['evaluated_prompt_tokens']}).",
               f"- **Schema:** {t['malformed']} malformed of {t['turns']} replies ({int(100 * t['schema_failure_rate'])}% failure; grammar fallbacks to the flat schema: {t['schema_fallbacks']}); {t['truncated']} replies cut off by the token limit; {t['action_errors']} valid-JSON actions refused by validation/policy.",
               f"- **Context:** largest prompt estimated {t['max_est_prompt_tokens']} tokens of {t['num_ctx']}; {t['truncated_contexts']} truncations."]

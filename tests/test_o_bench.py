@@ -142,6 +142,17 @@ class TestPreflight(BenchHome):
             def p(s, *x): return os.path.join(self.home, "logs", *x)
         items = preflight.run(P(), self.home); self.assertEqual(self.status(items, "reachable"), "FAIL")
 
+class TestRunStatus(unittest.TestCase):
+    C = lambda self, p=0, r=0, d=0, b=0: {"pending": p, "running": r, "done": d, "blocked": b}
+    def test_a_loop_that_exits_after_everything_settled_finished_normally(self):
+        self.assertEqual(bench.classify(self.C(d=5), 1, False, 600), "finished")          # the bug: this used to be reported as loop_died
+    def test_settled_twice_with_the_loop_alive_is_finished(self):
+        self.assertEqual(bench.classify(self.C(d=5), 2, True, 600), "finished"); self.assertIsNone(bench.classify(self.C(d=5), 1, True, 600))
+    def test_blocked_tasks_are_reported_as_such(self): self.assertEqual(bench.classify(self.C(d=3, b=2), 2, True, 600), "finished_with_blocked")
+    def test_a_dead_loop_with_unfinished_work_is_loop_died(self):
+        self.assertEqual(bench.classify(self.C(p=2, d=3), 0, False, 600), "loop_died"); self.assertIsNone(bench.classify(self.C(p=2, r=1), 0, False, 30))
+    def test_running_work_is_not_a_status(self): self.assertIsNone(bench.classify(self.C(p=2, r=1), 0, True, 600))
+
 class TestTurnStats(unittest.TestCase):
     def turn(self, **kw): return {"event": "turn", "task": "T1", "n": 1, "kind": "ok", "ptok": 1000, "gtok": 50, "prompt_ms": 40000, "gen_ms": 10000, "load_ms": 0, "secs": 50, "est_prompt": 1100, "num_ctx": 32768, **kw}
     # real server semantics: ptok is the TOTAL prompt size; prompt_ms shows what was really evaluated (a cold turn evaluates ~25 tok/s)

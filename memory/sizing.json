@@ -1,0 +1,38 @@
+{
+ "by_size": {
+  "S": {
+   "tasks": 3,
+   "done": 3,
+   "first_try": 3,
+   "attempts": 3,
+   "split": 0,
+   "blocked": 0
+  },
+  "M": {
+   "tasks": 2,
+   "done": 2,
+   "first_try": 2,
+   "attempts": 2,
+   "split": 0,
+   "blocked": 0
+  }
+ },
+ "by_type": {
+  "implement": {
+   "tasks": 4,
+   "done": 4,
+   "first_try": 4,
+   "attempts": 4,
+   "split": 0,
+   "blocked": 0
+  },
+  "refactor": {
+   "tasks": 1,
+   "done": 1,
+   "first_try": 1,
+   "attempts": 1,
+   "split": 0,
+   "blocked": 0
+  }
+ }
+}

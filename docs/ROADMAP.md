@@ -345,3 +345,48 @@ observed is ornith:9b itself inside the new pipeline. Run these when the machine
 
 Open items worth a decision: the paused legacy `re1` project (old opencode loop) can be deleted or re-planned in engine mode (`codebot freeze`
 needs a `check:` per task); `SANDBOX=auto` could be tightened to `docker` so a missing image refuses to run instead of falling back.
+
+## Real-model results (ornith:9b, CPU, private Ollama 0.40.3)
+
+### Preflight (live server)
+All pass: `num_ctx` 32768 identical in Modelfile, `NUM_CTX` and both opencode configs, and the server reports `context_length=32768`; `keep_alive=30m` is sent on
+every request and the server shows the model unloading in about 30 min; the JSON schema is enforced by the server (3/3 adversarial "answer in prose" prompts still
+returned valid actions); KV cache is reused across turns of one attempt (95%: a 880-token prompt took 1.6 s against 29.7 s cold); token ratio calibrated to 3.08
+chars/token (the guard uses 2.83). Info: a prompt that diverges early from the previous one is fully re-evaluated (3% reuse), because this model is a hybrid/recurrent
+architecture (`qwen35`) and llama.cpp only checkpoints at the END of a prompt ("forcing full prompt re-processing due to lack of cache data (likely due to SWA or
+hybrid/recurrent memory)"). Consequence: reuse works within an attempt (append-only conversation) but NOT across attempts or after a compaction, so a compaction costs a full
+re-evaluation of the compacted prompt. The first preflight "failed" twice and both were my test's fault (a 300-token limit cutting replies off; testing the wrong cache
+pattern); `prompt_eval_count` on this server is the TOTAL prompt size, only `prompt_eval_duration` shows what was really evaluated, so the bench derives reuse from timing.
+
+### First real run found a harness bug no test had caught
+Worktrees were created INSIDE the state directory (`projects/<p>/work`), which the harness protects from the worker, so the worker could not write one file in 14 turns
+and `$CODEBOT_CHECKS` was empty for its commands. Tests only used in-place folders. Fixed: worktrees live in `workspaces/<p>` (inside the codebot dir, outside the state dir,
+old ones are migrated by `codebot start`), the engine refuses a code dir inside the state dir, and `run` gets `$CODEBOT_CHECKS` (read-only mount) and `$CODEBOT_RUNDIR`.
+6 regression tests (`tests/test_p_regressions.py`). Lesson: a harness needs at least one end-to-end run against the real model before its tests mean much.
+
+### Bench run `bench-fixed-2` (finished, 8.0 min wall)
+
+- **Pass rate:** 5/5 original tasks verified (100%). Attempts per task: 1. Wall time per task: 91 s (worker + checks).
+
+| task | status | attempts | top rung | turns | wall s |
+|---|---|---|---|---|---|
+| T1 Add slugify(text) to textutil.py (lowercase; run | done | 1 | 1 | 3 | 94 |
+| T2 Add parse_kv(line) to textutil.py ("a=1;b=two;c= | done | 1 | 1 | 3 | 84 |
+| T3 In stats.py make mean([]) return 0.0 and add med | done | 1 | 1 | 4 | 85 |
+| T4 Create cli.py (argparse) with `slug` and `kv` su | done | 1 | 1 | 3 | 112 |
+| T5 Rename old_name to double in legacy.py and main_ | done | 1 | 1 | 5 | 79 |
+
+- **Per turn** (18 model turns): prompt processing mean 8291 ms (p50 1323, p95 36613); generation mean 15155 ms (p50 10980, p95 46824); wall mean 24 s; model load total 9183 ms.
+- **Speed:** generation 6.1 tok/s; cold prompt processing 29.5 tok/s (first turn of an attempt; later turns only evaluate what is new).
+- **KV cache reuse:** first turn of an attempt 0.03, later turns 0.96 (fraction of the prompt NOT re-evaluated, from prompt-processing time vs a cold 29.5 tok/s; prompt tokens first/later: {'first_turn_mean': 792, 'later_turn_mean': 1017}).
+- **Schema:** 0 malformed of 18 replies (0% failure; grammar fallbacks to the flat schema: 0); 0 replies cut off by the token limit; 0 valid-JSON actions refused by validation/policy.
+- **Context:** largest prompt estimated 1663 tokens of 32768; 0 truncations.
+- **Baseline guard:** 0 checks rejected   
+- **Ladder steps fired (0):** none
+- **Blocked:** none
+- **Model replans:** none; splits: none; tamper caught: 0; interrupted: 0.
+- **Heat:** CPU package max 93.0 C, mean 90.4 C; thermal pauses 1 (20 s waiting).
+
+_Note: the run printed `loop_died` because the bench misread a loop that exited normally after COMPLETE; fixed (`bench.classify`, tested) and the report above is regenerated
+from the stored data. This suite is easy: the largest prompt was 1.7k of 32k tokens and nothing failed, so it validates the pipeline but never exercised the ladder, the baseline
+guard or a blocked task._
