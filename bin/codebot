@@ -99,7 +99,7 @@ cmd_start() {
   load_proj "${1:-}"
   [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
   alive "$S/loop.pid" && die "$NAME is already running"
-  rm -f "$S/PAUSE"; [[ "${2:-}" == --keep ]] || rm -f "$S/STATUS"
+  [[ "${2:-}" == --keep ]] || rm -f "$S/PAUSE" "$S/STATUS"
   touch "$S/.active"
   [[ -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
@@ -119,9 +119,17 @@ cmd_start() {
     fi
     touch "$S/.git-prepped"
   fi
-  setsid nohup "$0" __loop "$NAME" >> "$S/loop.log" 2>&1 &
-  echo $! > "$S/loop.pid"
-  echo "started $NAME (pid $!). watch: codebot log $NAME   pause: codebot pause $NAME"
+  if [[ -n "${INVOCATION_ID:-}" ]] && command -v systemd-run >/dev/null; then
+    # launched by a systemd unit (watchdog/login): run the loop in its own transient unit so it outlives the oneshot
+    systemd-run --user --quiet --collect --unit="codebot-loop-$NAME-$(date +%s)" \
+      --property=StandardOutput=append:"$S/loop.log" --property=StandardError=append:"$S/loop.log" \
+      "$CODEBOT_HOME/bin/codebot" __loop "$NAME" || die "systemd-run failed"
+    echo "started $NAME (own systemd unit)"
+  else
+    setsid nohup "$0" __loop "$NAME" >> "$S/loop.log" 2>&1 &
+    echo $! > "$S/loop.pid"
+    echo "started $NAME (pid $!). watch: codebot log $NAME   pause: codebot pause $NAME"
+  fi
 }
 
 verify_script() { # state-dir verify.sh preferred; fall back to one the model left in the code dir
@@ -147,7 +155,9 @@ tidy_memory() { # condense lessons.md with the model; restore on any sanity fail
 }
 
 cmd___loop() {
-  load_proj "$1"; local iter=0 stall=0 verify_fails=0 t0=$SECONDS finished=0 notified_block=0 pid
+  load_proj "$1"; local iter stall=0 verify_fails=0 t0=$SECONDS notified_block=0 pid; finished=0
+  iter=$(cat "$S/iter.count" 2>/dev/null || echo 0)
+  [[ -f "$S/started.at" ]] || date +%s > "$S/started.at"
   echo $$ > "$S/loop.pid"
   trap 'finished=2' TERM INT
   trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
@@ -163,7 +173,10 @@ cmd___loop() {
         else echo "- [ ] Fix the failing verification: read the VERIFY FAILED section at the end of $S/PROGRESS.md, fix the code, run bash $(verify_script) until it exits 0" >> "$S/PLAN.md"; fi
         echo "(verify failed, attempt $verify_fails)"; continue
       fi
-      notify "codebot: $NAME COMPLETE" "$(tasks_done) tasks done in $iter iterations, $(( (SECONDS-t0)/60 )) min. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
+      local total=$(tasks_done)/$(( $(tasks_done) + $(tasks_left) )) vmsg="no verify.sh (agent's word only)" mins
+      [[ -n "$(verify_script)" ]] && vmsg="verify.sh passed"
+      mins=$(( ($(date +%s) - $(cat "$S/started.at" 2>/dev/null || date +%s)) / 60 ))
+      notify "codebot: $NAME COMPLETE" "Tasks $total checked off, $vmsg. $iter iterations, $mins min total. Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME. Last commit: $(git -C "$RUNDIR" log -1 --format=%s 2>/dev/null)" high white_check_mark
       finished=1; rm -f "$S/.active"; break
     elif [[ "$st" == BLOCKED* ]]; then
       if (( ! notified_block )); then
@@ -176,7 +189,7 @@ Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or:
     notified_block=0
     if [[ "$(tasks_left)" == 0 ]]; then echo "DONE" > "$S/STATUS"; continue; fi
     if (( $(wc -c < "$CODEBOT_HOME/memory/lessons.md") > LESSONS_MAX )); then echo "(condensing lessons.md)"; tidy_memory >> "$S/loop.log" 2>&1; fi
-    iter=$((iter+1)); local before after; before="$(state_hash)"
+    iter=$((iter+1)); echo "$iter" > "$S/iter.count"; local before after; before="$(state_hash)"
     echo "=== iteration $iter $(date '+%F %T') | tasks left: $(tasks_left) ==="
     setsid flock "$CODEBOT_HOME/logs/model.lock" timeout "$ITER_TIMEOUT" "$OPENCODE_BIN" run --auto --thinking ${THINK_VARIANT:+--variant "$THINK_VARIANT"} --agent codebot --dir "$RUNDIR" --title "$NAME #$iter" \
       "$(render "$CODEBOT_HOME/prompts/work.md")" >> "$S/loop.log" 2>&1 < /dev/null &
@@ -189,7 +202,7 @@ Reply by sending your answer to the topic $NTFY_TOPIC-reply in the ntfy app, or:
     done
     wait "$pid" 2>/dev/null; rm -f "$S/iter.pid"
     [[ $finished == 2 ]] && break
-    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "(iteration interrupted by pause)"; continue; fi
+    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "$iter" > "$S/iter.count"; echo "(iteration interrupted by pause)"; continue; fi
     after="$(state_hash)"
     if [[ "$before" == "$after" ]]; then stall=$((stall+1)); else stall=0; fi
     if (( stall >= STALL_LIMIT )) && [[ ! -f "$S/STATUS" ]]; then
@@ -220,29 +233,40 @@ cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] 
 cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
   alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
   echo "$NAME: $s | done $(tasks_done) / left $(tasks_left) | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
-cmd_resume_all() { # run at login: restart loops that were active when the machine went down
+cmd_resume_all() { # at login and every 5 min (watchdog): restart loops that should be running but are not
   for d in "$CODEBOT_HOME"/projects/*/; do
     [[ -f "$d/.active" ]] || continue; local n; n=$(basename "$d")
     alive "$d/loop.pid" && continue
-    echo "resuming $n after restart"; cmd_start "$n" --keep
+    echo "restarting $n (loop was not running)"
+    NAME="$n"; cmd_start "$n" --keep >/dev/null && notify "codebot: $n restarted" "The loop had died (crash, out-of-memory kill or reboot). Restarted it; it resumes from the plan files." high recycle 1
   done
 }
 cmd_install_service() {
   local u="$HOME/.config/systemd/user"; mkdir -p "$u"
   cat > "$u/codebot.service" <<UNIT
 [Unit]
-Description=codebot: resume active loops after login/reboot
-After=network-online.target
+Description=codebot: restart active loops that are not running
 
 [Service]
 Type=oneshot
-RemainAfterExit=yes
 ExecStart=$CODEBOT_HOME/bin/codebot resume-all
 
 [Install]
 WantedBy=default.target
 UNIT
-  systemctl --user daemon-reload && systemctl --user enable codebot.service && echo "installed: loops active at shutdown restart at next login"
+  cat > "$u/codebot.timer" <<UNIT
+[Unit]
+Description=codebot watchdog (login + every 5 min)
+
+[Timer]
+OnStartupSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl --user daemon-reload && systemctl --user enable codebot.service codebot.timer >/dev/null 2>&1 && systemctl --user start codebot.timer \
+    && echo "installed: loops that die or survive a reboot are restarted (checked at login and every 5 min)"
 }
 cmd_tidy() { ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat

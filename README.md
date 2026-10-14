@@ -46,8 +46,10 @@ The topic name is the only secret; for stronger protection set `NTFY_TOKEN` (and
 self-hosted ntfy).
 
 ## Survives reboots and crashes
-`codebot install-service` (already run) adds a systemd user service. At login it restarts every loop that was
-still active, keeping any pending BLOCKED question. Loops that finished or that you stopped stay stopped.
+`codebot install-service` (already run) installs a systemd user timer. At login and every 5 minutes it checks
+for loops that should be running but are not (reboot, crash, out-of-memory kill), restarts them in their own
+systemd unit, and sends a "restarted" push. A pause stays paused, and a pending BLOCKED question is kept.
+Loops you stopped or that finished stay stopped. Undo: `systemctl --user disable --now codebot.timer`.
 
 ## Memory / expertise
 `memory/expertise.md` (curated, edit freely) and `memory/lessons.md` (agent appends; auto-condensed when over
