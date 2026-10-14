@@ -41,9 +41,14 @@ PHASE C - CONFIRM AND WRITE
 # Definition of done
 <verifiable acceptance criteria taken from the grilled behaviors and examples>
 # Tasks
-- [ ] 1. <small, concrete task, one iteration of work, with how to verify it>
+- [ ] 1. <small, concrete task title>
+  - check: `<ONE shell command, run in the code directory; exit 0 only when this task is truly done>`
+  - files: <comma-separated files this task touches>
+  - size: S
 - [ ] 2. ...
+  - deps: 1
 
+Every task MUST have a `check:` (the harness freezes it BEFORE any code is written and the model cannot change it; a task is only done when its check passes). Write checks that FAIL now and print WHY when they fail (run the test with a reporter, or `grep` with a message: `grep -q foo f || { echo "f lacks foo"; exit 1; }`), never silent. Prefer real tests: if a test file is needed, write it yourself now into {{STATE}}/checks/ (for example {{STATE}}/checks/t1_test.py) and make the check run it: `python3 $CODEBOT_CHECKS/t1_test.py`. `size:` is S (one file or one behaviour, about 10 tool calls), M (2-3 files) or L (more; avoid). SIZING HISTORY on this machine: {{SIZING}}
 Tasks must be small (a single iteration, about 20 tool calls), ordered by the user's priorities, and each verifiable (a command that passes, a file that exists). Prefer many small tasks. Include a final task for full verification.
 3. Write the file {{STATE}}/verify.sh (exactly that absolute path, in the STATE directory, NOT in the code directory, and do not make it a task): a bash script that exits 0 only if the whole Definition of done really holds. It runs from inside the code directory. Make it print what is wrong when it fails. Keep it fast and deterministic. Run `chmod +x` on it and try it once.
 4. Show the plan and ask once for approval or edits; revise only if they ask.

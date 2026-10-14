@@ -190,7 +190,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | C | F2 git checkpoints | **done** (7 tests) |
 | D | F6 controlled replanning | **done** (22 tests) |
 | E | F3 budgets and stuck detection | **done** (12 tests) |
-| F | F5 adaptive sizing | todo |
+| F | F5 adaptive sizing | **done** (16 tests) |
 | G | F4 escalation ladder | todo |
 | H | F7+F8 native worker | todo |
 | I | F9 evidence-backed memory | todo |
@@ -232,3 +232,12 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   `stalled`, a finished run with blocked tasks reports `done_with_blocked`. A bounded-termination test runs an
   always-failing worker and asserts the run ends. Failure signatures depend on check output, so a SILENT check
   (grep -q) gives every failure the same signature; the planner prompt should prefer checks that print why.
+- F: `sizing.py`. Auto-split: SPLIT_CMD hook (the model-driven splitter plugs in here in H) else a mechanical splitter
+  (one child per listed file with a compile/exists check, or one child per top-level `&&` conjunct of the task's
+  check, quote-aware). Children get their own frozen checks, the parent keeps its original check as the gate, and
+  stats record the split. `AUTO_SPLIT_AFTER=K` splits inside `step` after K failed attempts (default 0 = off; the
+  ladder, G, owns the rung order). Stats: per-project `stats.json` and machine-wide `memory/sizing.json`, by size
+  (S/M/L) and by type (heuristic keywords): tasks/done/first-try/attempts/split/blocked. The planner prompt gets
+  `{{SIZING}}` = e.g. "S: 100% first-try ... Cut tasks to size M or smaller." (default "no history: size S").
+  Planner format now requires `check:`, `files:`, `size:` per task and tells it to write silent-check-proof
+  checks and fixture tests into `checks/`; this prompt change is untested with the real model (step M).

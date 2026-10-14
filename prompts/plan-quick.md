@@ -22,3 +22,5 @@ Tasks must be small (a single iteration, ~20 tool calls), ordered, and each veri
 4. Also write the file {{STATE}}/verify.sh (exactly that absolute path, in the STATE directory, NOT in the code directory, and do not make it a task): a bash script that exits 0 only if the whole Definition of done really holds (runs the tests/build/lint, checks key outputs). It runs from inside the code directory. Keep it fast and deterministic. Run `chmod +x` on it and try it once. Autonomous loop will refuse to finish until it passes.
 5. Show the user the plan and ask once for approval or edits; revise only if they request changes. Do NOT start implementing anything.
 6. When approved, tell the user to exit and run: codebot start {{NAME}}
+
+Every task needs a `check:` line (one shell command run in the code directory, exit 0 only when the task is done; it must fail now and print why) plus `files:` and `size: S|M|L` lines. SIZING HISTORY: {{SIZING}}

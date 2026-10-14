@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, subprocess, time
-from . import tasks as T, checks as C, gitops as G, budgets as B
+from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -83,6 +83,7 @@ def step(proj, fresh=False):
         if pre is not None and pre["rc"] == 0:
             task["status"] = "done"; task["commit"] = G.checkpoint(proj, task)
             task["history"].append({"ts": now(), "precheck_pass": True, "gate": bool(task.get("split_into"))})
+            if not task.get("split_into"): Z.record(proj, task, "done")
             store.save(data)
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "event": "precheck_pass",
                                                      "gate": bool(task.get("split_into"))})
@@ -108,15 +109,21 @@ def step(proj, fresh=False):
                "files": G.changed_files(proj.rundir)}
         task["history"].append({**rec, "out_tail": err_text(task, res) if not passed else ""})
         task["status"] = "done" if passed else "pending"
-        if passed: task["commit"] = G.checkpoint(proj, task)
+        if passed:
+            task["commit"] = G.checkpoint(proj, task); Z.record(proj, task, "done")
         append_jsonl(proj.p("attempts.jsonl"), rec)
         stuck = [] if passed else B.signals(proj, task)
         if stuck:   # interim hand-off (Step G replaces this with the full ladder): never loop forever
             task["status"] = "blocked"
             task["blocked_question"] = "Stuck (" + "; ".join(m for _, m in stuck) + "). Last error: " + err_text(task, res)[-300:].replace("\n", " ")
+            Z.record(proj, task, "blocked")
             append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
                          "reason": task["blocked_question"][:300], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
         store.save(data)
+    split_after = proj.get("AUTO_SPLIT_AFTER", 0, int)
+    if not passed and not stuck and split_after and attempt >= split_after and not task.get("split_into"):
+        r = Z.auto_split(proj, task["id"], err_text(task, res))
+        if r["ok"]: return {"event": "task_split", "task": task["id"], "children": r["children"], "attempt": attempt, "tamper": tamper2}
     if stuck:
         return {"event": "task_blocked", "task": task["id"], "attempt": attempt, "signals": [n for n, _ in stuck],
                 "question": task["blocked_question"], "tamper": tamper2}

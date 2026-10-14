@@ -86,6 +86,7 @@ render() { # template file -> stdout
   local t; t="$(cat "$1")"
   t="${t//\{\{WORKDIR\}\}/$RUNDIR}"; t="${t//\{\{STATE\}\}/$S}"
   t="${t//\{\{CODEBOT_HOME\}\}/$CODEBOT_HOME}"; t="${t//\{\{NAME\}\}/$NAME}"
+  if [[ "$t" == *"{{SIZING}}"* ]]; then t="${t//\{\{SIZING\}\}/$("$CODEBOT_HOME/bin/codebot-engine" sizing "$NAME" --home "$CODEBOT_HOME" 2>/dev/null || echo '(no history yet)')}"; fi
   printf '%s\n' "$t"
 }
 
