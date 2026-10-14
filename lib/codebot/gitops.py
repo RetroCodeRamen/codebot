@@ -1,6 +1,6 @@
 """Git checkpoints in the code dir. A baseline commit captures everything that already exists, so a reset can
 never delete pre-existing user files; a verified task = a commit + a tag; retry-fresh resets to the last good one."""
-import json, os, subprocess
+import hashlib, json, os, subprocess
 from .config import now
 
 _ID = ["-c", "user.name=codebot", "-c", "user.email=codebot@localhost", "-c", "commit.gpgsign=false",
@@ -57,3 +57,19 @@ def reset_to_last_good(proj):
     git(proj.rundir, "reset", "-q", "--hard", sha, check=True)
     git(proj.rundir, "clean", "-fdq")          # no -x: ignored files (venvs, caches) are left alone
     return sha
+
+def changed_files(rundir, limit=40, max_bytes=1_000_000):
+    """{relative path: sha1} for files changed or created since HEAD (used for edit ping-pong detection)."""
+    r = git(rundir, "status", "--porcelain", "-z", "--untracked-files=all")
+    out = {}
+    for ent in r.stdout.split("\0"):
+        if len(ent) < 4: continue
+        path = ent[3:]
+        full = os.path.join(rundir, path)
+        try:
+            if os.path.isfile(full) and os.path.getsize(full) <= max_bytes:
+                with open(full, "rb") as f: out[path] = hashlib.sha1(f.read()).hexdigest()[:12]
+            else: out[path] = "gone"
+        except OSError: out[path] = "gone"
+        if len(out) >= limit: break
+    return out

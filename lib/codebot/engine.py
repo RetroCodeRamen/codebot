@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, subprocess, time
-from . import tasks as T, checks as C, gitops as G
+from . import tasks as T, checks as C, gitops as G, budgets as B
 from .config import Project, now, append_jsonl
 from .planparse import parse_plan
 
@@ -57,6 +57,8 @@ def step(proj, fresh=False):
     fresh=True: reset the code dir to the last verified checkpoint before the worker runs."""
     store = T.TaskStore(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
+    over = B.project_budget(proj)
+    if over: return {"event": "budget", "kind": over[0], "message": over[1]}
     with store.locked():
         tamper = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
         data = store.load()
@@ -67,8 +69,9 @@ def step(proj, fresh=False):
         task = T.next_task(data)
         if task is None:
             c = T.counts(data)
-            return {"event": "all_done" if c["blocked"] == 0 and c["pending"] == 0 and c["running"] == 0 else "stalled",
-                    "counts": c, "tamper": tamper}
+            if c["pending"] == 0 and c["running"] == 0:
+                return {"event": "all_done" if c["blocked"] == 0 else "done_with_blocked", "counts": c, "tamper": tamper}
+            return {"event": "stalled", "counts": c, "tamper": tamper, "note": "remaining tasks wait on blocked ones"}
         if not task.get("check"):
             if not proj.get("ALLOW_UNCHECKED", None, str):
                 return {"event": "error", "task": task["id"], "error": "task has no check"}
@@ -101,12 +104,22 @@ def step(proj, fresh=False):
         res = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
         passed = res["rc"] == 0 and not tamper2
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "worker_rc": w.get("rc"), "check_rc": res["rc"],
-               "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed}
+               "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
+               "files": G.changed_files(proj.rundir)}
         task["history"].append({**rec, "out_tail": err_text(task, res) if not passed else ""})
         task["status"] = "done" if passed else "pending"
         if passed: task["commit"] = G.checkpoint(proj, task)
-        store.save(data)
         append_jsonl(proj.p("attempts.jsonl"), rec)
+        stuck = [] if passed else B.signals(proj, task)
+        if stuck:   # interim hand-off (Step G replaces this with the full ladder): never loop forever
+            task["status"] = "blocked"
+            task["blocked_question"] = "Stuck (" + "; ".join(m for _, m in stuck) + "). Last error: " + err_text(task, res)[-300:].replace("\n", " ")
+            append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
+                         "reason": task["blocked_question"][:300], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
+        store.save(data)
+    if stuck:
+        return {"event": "task_blocked", "task": task["id"], "attempt": attempt, "signals": [n for n, _ in stuck],
+                "question": task["blocked_question"], "tamper": tamper2}
     return {"event": "task_done" if passed else "task_failed", "task": task["id"], "attempt": attempt, "fresh": fresh,
             "check_rc": res["rc"], "tamper": tamper2, "out_tail": res["out"][-400:]}
 

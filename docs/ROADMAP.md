@@ -189,7 +189,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | B | F1 locked checks | **done** (10 tests) |
 | C | F2 git checkpoints | **done** (7 tests) |
 | D | F6 controlled replanning | **done** (22 tests) |
-| E | F3 budgets and stuck detection | todo |
+| E | F3 budgets and stuck detection | **done** (12 tests) |
 | F | F5 adaptive sizing | todo |
 | G | F4 escalation ladder | todo |
 | H | F7+F8 native worker | todo |
@@ -224,3 +224,11 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   satisfied task (a split parent, or a weak check) is marked done without wasting a model call, and weak checks are
   logged; (2) silent checks (`grep -q`, `test -f`) used to hand the worker an empty error, so a failing check with no
   output is now described ("check X exited with status 1 and printed nothing").
+- E: `budgets.py`. Signals: same_failure (identical normalised failure signature N times), task_budget, no_progress (N
+  attempts since any task last completed), edit_ping_pong (a file's content hash returns to an earlier value;
+  attempts now record `files: {path: sha}` from `git status`), plus project caps (MAX_ITERATIONS attempts,
+  PROJECT_MAX_MINUTES) that return `event: budget` before any worker runs. A signal blocks the task (interim
+  hand-off until the ladder, G) and the run continues with other tasks; dependents of a blocked task report
+  `stalled`, a finished run with blocked tasks reports `done_with_blocked`. A bounded-termination test runs an
+  always-failing worker and asserts the run ends. Failure signatures depend on check output, so a SILENT check
+  (grep -q) gives every failure the same signature; the planner prompt should prefer checks that print why.
