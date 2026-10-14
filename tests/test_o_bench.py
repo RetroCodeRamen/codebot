@@ -7,12 +7,13 @@ from codebot import bench, engine, preflight, worker, checks as C, tasks as T
 
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 class BenchHome(Sandboxed):
+    SUITE = "pyutils"
     """A temp home that has the real suite, modes and config, with the standard bench project laid out."""
     def setUp(self):
         super().setUp()
         for d in ("bench", "modes", "config", "lib", "bin"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "results", "runs"))
         with open(os.path.join(self.home, "config", "codebot.env"), "a") as f: f.write("\nITER_TIMEOUT=60\nCHECK_TIMEOUT=60\n")
-        self.name = bench.setup(self.home, "pyutils", "fixed", "b1"); self.state = os.path.join(self.home, "projects", "b1")
+        self.name = bench.setup(self.home, self.SUITE, "fixed", "b1"); self.state = os.path.join(self.home, "projects", "b1")
         self.code = os.path.join(self.home, "bench", "runs", "b1", "code")
     def proj(self):
         from codebot.config import Project; return Project("b1", self.home)
@@ -40,6 +41,31 @@ class TestSuite(BenchHome):
             if fname == "legacy.py": shutil.copy(os.path.join(ref, "main_app.py"), self.code)
             res = {t["id"]: C.run_check(self.proj(), t)["rc"] == 0 for t in T.TaskStore(self.proj()).load()["tasks"]}
             self.assertTrue(res[tid], (fname, res)); self.assertLessEqual(sum(res.values()), 2, (fname, res))
+
+class TestHardSuite(BenchHome):
+    SUITE = "pyhard"
+    def test_baseline_fails_loudly_and_the_guard_accepts_the_plan(self):
+        with open(os.path.join(self.state, "project.env"), "a") as f: f.write('CHECK_BASELINE_GUARD="1"\n')
+        engine.freeze_project(self.proj()); d = T.TaskStore(self.proj()).load(); self.assertEqual(len(d["tasks"]), 5)
+        for t in d["tasks"]:
+            r = C.run_check(self.proj(), t); self.assertNotEqual(r["rc"], 0, t["id"]); self.assertTrue(r["out"].strip(), f"{t['id']} fails silently")
+    def test_reference_solution_passes_everything_including_the_human_only_task(self):
+        engine.freeze_project(self.proj(), allow_passing=True); ref = os.path.join(self.home, "bench", "suite", "pyhard", "reference")
+        for f in os.listdir(ref): shutil.copy(os.path.join(ref, f), self.code)
+        for t in T.TaskStore(self.proj()).load()["tasks"]:
+            r = C.run_check(self.proj(), t); self.assertEqual(r["rc"], 0, f"{t['id']}: {r['out']}")
+    def test_the_license_task_cannot_be_passed_without_the_real_key(self):
+        engine.freeze_project(self.proj(), allow_passing=True); t5 = T.get(T.TaskStore(self.proj()).load(), "T5")
+        for guess in ("CHANGE-ME", "ZEBRA-9931-QUILL", "zebra-9931-quill-prod", ""):
+            with open(os.path.join(self.code, "config.json"), "w") as f: json.dump({"license_key": guess}, f)
+            r = C.run_check(self.proj(), t5); self.assertEqual(r["rc"], 1, guess); self.assertNotIn("ZEBRA", r["out"])          # the check does not leak the answer
+    def test_each_check_isolates_its_own_task(self):
+        engine.freeze_project(self.proj(), allow_passing=True); ref = os.path.join(self.home, "bench", "suite", "pyhard", "reference")
+        for fname, tid in (("calc.py", "T1"), ("lru.py", "T2"), ("inventory.py", "T3"), ("textwrap2.py", "T4"), ("config.json", "T5")):
+            subprocess.run(["git", "-C", self.code, "checkout", "-q", "--", "."], capture_output=True); subprocess.run(["git", "-C", self.code, "clean", "-fdq"], capture_output=True)
+            shutil.copy(os.path.join(ref, fname), self.code)
+            res = {t["id"]: C.run_check(self.proj(), t)["rc"] == 0 for t in T.TaskStore(self.proj()).load()["tasks"]}
+            self.assertEqual([k for k, v in res.items() if v], [tid], (fname, res))
 
 class TestEngineOnTheSuite(BenchHome):
     def test_scripted_solver_completes_the_suite_and_collect_reports_it(self):

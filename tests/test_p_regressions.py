@@ -71,4 +71,23 @@ class TestRunHasTheCheck(Sandboxed):
         rc, out = sandbox.run(p, "echo 'import sys; sys.exit(0)' > $CODEBOT_CHECKS/t.py 2>&1; echo rc=$?"); self.assertNotIn("rc=0", out)
         self.assertEqual(open(os.path.join(self.state, "checks", "t.py")).read(), CHECK)
 
+OPENCODE = os.path.join(REPO, "tools", "node_modules", ".bin", "opencode")
+@unittest.skipUnless(os.path.exists(OPENCODE), "opencode is not installed in this checkout")
+class TestOpencodeAgentCanWriteFiles(unittest.TestCase):
+    """`"patch": false` in an opencode agent config is mapped onto the whole edit permission and silently removes BOTH write and edit.
+    Everything built on opencode (the interactive planner, the legacy loop, the RE mode) could then only write files through bash heredocs."""
+    def agent(self, cfg, name):
+        r = subprocess.run([OPENCODE, "debug", "agent", name], capture_output=True, text=True, timeout=90, env=dict(os.environ, OPENCODE_CONFIG=os.path.join(REPO, "config", cfg)))
+        return json.loads(r.stdout[r.stdout.index("{"):])
+    def test_the_coding_agent_has_write_and_edit(self):
+        a = self.agent("opencode.json", "codebot"); self.assertTrue(a["tools"]["write"]); self.assertTrue(a["tools"]["edit"])
+        self.assertEqual([p for p in a["permission"] if p["permission"] == "edit" and p["action"] == "deny"], [])
+    def test_the_re_agent_has_write_and_edit(self):
+        subprocess.run([sys.executable, os.path.join(REPO, "bin", "codebot-mkconfig")], capture_output=True)
+        a = self.agent("opencode-re.json", "codebot-re"); self.assertTrue(a["tools"]["write"]); self.assertTrue(a["tools"]["edit"])
+    def test_the_config_never_disables_patch_again(self):
+        for f in ("opencode.json", "opencode-re.json"):
+            with open(os.path.join(REPO, "config", f)) as fh: c = json.load(fh)
+            for ag in c["agent"].values(): self.assertNotIn("patch", {k for k, v in ag["tools"].items() if v is False})
+
 if __name__ == "__main__": unittest.main()
