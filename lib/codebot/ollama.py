@@ -8,7 +8,7 @@ class ModelError(Exception):
 def base_url(proj):
     return f"http://127.0.0.1:{proj.get('OLLAMA_PORT', 11500, int)}"
 
-def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=None, timeout=900, retries=3):
+def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=None, timeout=900, retries=3, options=None):
     """One non-streaming chat call. `schema` constrains the output (structured outputs). Thinking is always off:
     the harness wants a single JSON action, not hidden reasoning. Returns dict(content, prompt_tokens, gen_tokens, secs)."""
     thermal.wait(proj)
@@ -17,6 +17,7 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
     if schema is not None: body["format"] = schema
     if temperature is not None: body["options"]["temperature"] = float(temperature)
     if num_predict: body["options"]["num_predict"] = int(num_predict)
+    if options: body["options"].update(options)            # e.g. num_thread / num_gpu for the thermal sweep
     data = json.dumps(body).encode()
     last = None
     for attempt in range(retries):

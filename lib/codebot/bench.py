@@ -155,6 +155,8 @@ def main(argv):
     from . import preflight
     ap = argparse.ArgumentParser(prog="codebot bench"); ap.add_argument("--home"); ap.add_argument("--suite", default="pyutils"); ap.add_argument("--plan", choices=["fixed", "auto"], default="fixed")
     ap.add_argument("--preflight", action="store_true"); ap.add_argument("--max-minutes", type=int, default=150); ap.add_argument("--plan-minutes", type=int, default=45)
+    ap.add_argument("--thermal", action="store_true", help="sweep thread/power/GPU configs for sustained speed vs heat"); ap.add_argument("--minutes", type=float, default=4.0)
+    ap.add_argument("--only", help="comma separated substrings of config names to run (thermal sweep)")
     ap.add_argument("--name"); ap.add_argument("--record", action="store_true", help="append the result to docs/ROADMAP.md"); ap.add_argument("--collect-only")
     a = ap.parse_args(argv); from .config import home_dir; home = a.home or home_dir()
     if a.preflight:
@@ -168,6 +170,26 @@ def main(argv):
             def p(s, *x): return os.path.join(home, "logs", *x)
         os.makedirs(os.path.join(home, "logs"), exist_ok=True)
         items = preflight.run(P(), home); print(preflight.render(items)); return 1 if any(s == "FAIL" for _, s, _ in items) else 0
+    if a.thermal:
+        from . import thermalbench as TB
+        class P:
+            def __init__(s): s.home, s.cfg, s.name, s.mode, s.rundir, s.state = home, read_env(os.path.join(home, "config", "codebot.env")), "thermal", "code", home, home
+            def get(s, k, d=None, cast=str):
+                v = os.environ.get(k, s.cfg.get(k))
+                try: return cast(v) if v not in (None, "") else d
+                except (TypeError, ValueError): return d
+            def p(s, *x): return os.path.join(home, "logs", *x)
+        os.environ["THERMAL_GUARD"] = "0"; os.makedirs(os.path.join(home, "logs"), exist_ok=True); res = []
+        cfgs = [c for c in TB.configs() if not a.only or any(o in c["name"] for o in a.only.split(","))]
+        for c in cfgs:
+            print(f"== {c['name']}", flush=True); r = TB.run_config(P(), c, a.minutes); res.append(r)
+            print("   skipped: " + r["skipped"] if r.get("skipped") else f"   steady {r['steady']}", flush=True)
+        md = TB.render(res, a.minutes); print("\n" + md)
+        os.makedirs(os.path.join(home, "bench", "results"), exist_ok=True)
+        with open(os.path.join(home, "bench", "results", f"thermal-{time.strftime('%m%d-%H%M%S')}.json"), "w") as f: json.dump(res, f, indent=1)
+        if a.record:
+            with open(os.path.join(home, "docs", "ROADMAP.md"), "a") as f: f.write("\n" + md + "\n")
+        return 0
     if a.collect_only:
         proj = Project(a.collect_only, home); res = collect(proj); print(json.dumps(res, indent=1)); return 0
     name = setup(home, a.suite, a.plan, a.name); plan_info = None; print(f"project {name}")
