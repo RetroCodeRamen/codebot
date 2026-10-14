@@ -6,3 +6,4 @@ memory/.archive/
 workspaces/
 bench/runs/
 bench/results/
+__pycache__/

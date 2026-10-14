@@ -1,5 +1,7 @@
 # codebot roadmap: a harness for small, slow, offline models
 
+> **Current state, what is in flight and the exact next steps are in `docs/HANDOFF.md`.** This file is the design record: decisions, per-step learnings, and real-model results.
+
 Identity: the autonomous coding agent built for small, slow, fully offline models (ornith:9b on CPU via the
 private Ollama on :11500) running unattended for hours. Every feature exists to make a weak model finish real
 projects without supervision.
@@ -82,8 +84,8 @@ Dependencies first. Each step commits, updates this file, and has its own test.
 | J | **F10** sandbox, audit log, `codebot audit` | wraps the worker's command execution (H); audit hooks are cheap to add once H exists |
 | K | **F11** pluggable modes | needs the real shape of prompts/allowlist/verifier first; converts REA and code |
 | L | **F12** morning report | consumes everything above |
-| M | Grill-me live test + planner emits checks | needs the real model; scheduled when the RE test finishes |
-| N | Real-model smoke runs; README/docs | README/docs **done**; real-model smoke **pending** |
+| M | Grill-me live test + planner emits checks | **partly done**: the unattended planner was run with the real model (found its failure modes, redesigned as harness-driven repair rounds, not yet re-run); the interactive grill-me flow is not yet re-run end to end with the `check:` format |
+| N | Real-model smoke runs; README/docs | README/docs **done and kept honest by `tests/test_r_docs.py`**; real-model: preflight **done**, easy suite **5/5 done**, hard suite / planner re-run / thermal sweep **pending** (see HANDOFF) |
 
 The earlier efficiency review (CLI-first for RE, short env-var paths, no narration, inline context) is absorbed
 by H (native worker) and K (modes); it is not applied to the legacy opencode path.
@@ -173,7 +175,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 - `modes/<name>/mode.json`: `{engine, prompts: {plan, work}, tools: [allowlist], memory: file, verifier: style}` plus the
   prompt and memory files in the folder. `modes/code` and `modes/re` replace `prompts/*` and the hard-coded MODE
   branches; unknown mode names load from the folder with no code change.
-- Tests: add a throwaway mode folder (`modes/docs`) and run it with zero code edits; existing `MODE="re"` projects keep working.
+- Tests: add a throwaway mode folder (a `docs` mode created by the test) and run it with zero code edits; existing `MODE="re"` projects keep working.
 
 ### F12 Morning report
 - `codebot report <name>` (and automatically at run end or on the first resume after a long idle): tasks
@@ -199,17 +201,18 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 | H | F7+F8 native worker | **done** (32 tests against a fake Ollama; real-model run pending) |
 | I | F9 evidence-backed memory | **done** (14 tests) |
 | J | F10 sandbox and audit | **done** (21 tests incl. 9 against real Docker) |
-| K | F11 modes | todo |
+| K | F11 pluggable modes | **done** (16 tests; format documented in `modes/README.md`) |
 | L | F12 morning report | **done** (12 tests + supervisor push test) |
-| M | Grill-me live test + planner emits checks | **pending: needs the real model** (user asked to keep the LLM off while the PC cools) |
+| M | Grill-me live test + planner emits checks | **partly done**: the unattended planner was run with the real model (found its failure modes, redesigned as harness-driven repair rounds, not yet re-run); the interactive grill-me flow is not yet re-run end to end with the `check:` format |
+| N | Real-model smoke runs; README/docs | README/docs **done and kept honest by `tests/test_r_docs.py`**; real-model: preflight **done**, easy suite **5/5 done**; hard suite, planner re-run and thermal sweep **pending** (see HANDOFF) |
 
 ## Notes and learnings (updated as work proceeds)
 
-- The running RE test uses the legacy loop and opencode; none of this work touches its files.
+- (History: the original RE test ran on the legacy opencode loop; that project, `re1`, is stopped. Engine projects and legacy projects coexist.)
 - A: `lib/codebot/` (config, tasks, planparse, checks, engine) + `bin/codebot-engine`; `tests/run.sh` runs the suite
   in a throwaway CODEBOT_HOME in <1s. Freeze is additive: PLAN.md is kept, then re-rendered from tasks.json
-  (`- [ ] T1. title` lines, so the bash counters keep working). The bash loop is not yet switched over; that happens
-  once the ladder (G) defines every event it must handle. Lesson: close files in library code (ResourceWarnings
+  (`- [ ] T1. title` lines, so the bash counters keep working). The bash loop was switched over in step G once the ladder
+  defined every event it must handle. Lesson: close files in library code (ResourceWarnings
   flagged leaks immediately).
 - B: tamper is a failed attempt even if the real check would pass (a worker that touches the locks gets no credit);
   everything is restored from `checks/.frozen`. `tasks.json` has a sha + known-good copy written on every harness
@@ -239,8 +242,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 - F: `sizing.py`. Auto-split: SPLIT_CMD hook (the model-driven splitter plugs in here in H) else a mechanical splitter
   (one child per listed file with a compile/exists check, or one child per top-level `&&` conjunct of the task's
   check, quote-aware). Children get their own frozen checks, the parent keeps its original check as the gate, and
-  stats record the split. `AUTO_SPLIT_AFTER=K` splits inside `step` after K failed attempts (default 0 = off; the
-  ladder, G, owns the rung order). Stats: per-project `stats.json` and machine-wide `memory/sizing.json`, by size
+  stats record the split. (`AUTO_SPLIT_AFTER=K` existed briefly here and was removed in G: the ladder owns the rung order.) Stats: per-project `stats.json` and machine-wide `memory/sizing.json`, by size
   (S/M/L) and by type (heuristic keywords): tasks/done/first-try/attempts/split/blocked. The planner prompt gets
   `{{SIZING}}` = e.g. "S: 100% first-try ... Cut tasks to size M or smaller." (default "no history: size S").
   Planner format now requires `check:`, `files:`, `size:` per task and tells it to write silent-check-proof
@@ -275,9 +277,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   task names or the check/error mention, inside CONTEXT_BUDGET (default 8k of the 32k window); history is compacted
   when the conversation outgrows WORKER_CONTEXT_TOKENS. `replan` and `note_lesson` are actions (replan goes through
   planops; lessons go to the raw log for F9). Model-driven splitter plugs into sizing with mechanical fallback.
-  NOT yet verified: the real ornith:9b obeying the anyOf grammar and actually solving a task. That is the smoke test
-  (step N) and needs the machine to be cool. Known limit until J: `run` is policy-checked, not isolated (a clever
-  command could still read outside the project); bwrap closes that.
+  (Verified later with the real model: see "Real-model results". Docker, not bwrap, provides the isolation: see D2 revised and step J.)
 - I: `memory.py`. Source of truth is `memory/lessons.raw.jsonl` (append-only; test asserts earlier bytes never change;
   duplicates are skipped but their provenance is kept). `lessons.status.json` holds, per lesson, which project/task
   produced it, how many attempts used it, how many passed, and a `pruned` flag with the reason; plus a baseline of
@@ -303,7 +303,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 - K: `modes.py` + `modes/<name>/`. A mode folder = `mode.json` (engine, extends, prompts / prompts_add, opencode config+agent+build, verifier
   helpers + guidance, command allowlist + deny regexes, sandbox mounts/env/PATH/memory, worker_rules, memory_file, wants_target) plus
   the files it names. `extends` merges (lists like deny/ro/env concatenate, other keys override; prompts = nearest full prompt + every
-  `prompts_add`). The old `prompts/` and `memory/rea.md` moved into `modes/code` and `modes/re` with `git mv`; the hard-coded MODE=re
+  `prompts_add`). The old `prompts/` folder and the REA cheat sheet (formerly under `memory/`, now `modes/re/memory.md`) moved into `modes/code` and `modes/re` with `git mv`; the hard-coded MODE=re
   branches in bash (oc_setup, render_prompt, mkconfig use) now read the mode: `codebot-engine mode-info|prompt-template|modes`.
   What a mode controls at runtime: the planner and legacy-worker prompts; extra rules appended to the native worker's system prompt;
   a notes file packed into context (MODE NOTES, capped); verifier helper scripts copied into the project's frozen `checks/` at freeze;
@@ -329,22 +329,17 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
   it and the file is still written). The push text leads with `N/M tasks verified`, then blocked questions, the first thing to review,
   and the safety line, capped at 1200 chars. Legacy (non-frozen) projects return a clear message instead of a report.
 
-## What is left (needs the real model; deliberately not run while the machine is hot)
+## What is left
 
-Everything above is verified without the model (fake Ollama + scripted workers + real Docker + the real bash supervisor). What has NOT been
-observed is ornith:9b itself inside the new pipeline. Run these when the machine is cool, one at a time (`sensors`, `ollama ps`):
+See `docs/HANDOFF.md` section 5 (in flight / not done) and section 6 (next steps, copy-paste). In short: re-run the unattended planner benchmark with the harness-driven repair rounds, run the
+hard suite (ladder steps and a blocked task), run the thermal sweep, re-run the interactive grill-me planner end to end, and record every result here.
 
-1. **M, grill planner live.** `codebot plan demo ~/some/scratch --quick` first (cheaper), then without `--quick`. Confirm: successive questions,
-   `GRILL.md` written, and PLAN.md tasks each carry `check:`/`files:`/`size:` that `codebot freeze demo` accepts. Likely fixes: the planner
-   forgetting `check:` lines or writing silent checks; adjust `modes/code/plan.md` (the strict freeze error says exactly which tasks lack one).
-2. **N1, constrained output.** One real attempt: `WORKER=native` on a 2-task toy. Confirm ornith obeys the `anyOf` action schema (if the
-   server rejects it the worker falls back to the flat schema automatically; `trace.jsonl` shows `HTTP 400` retries), measure seconds per
-   turn, and check the first-request prompt size in `packed.json`.
-3. **N2, a real project end to end** with `codebot audit <p> --probe` and `codebot report <p>` at the end.
-4. Then decide: tune `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`, `LADDER_TRIES` from `trace.jsonl` timings; set `ESCALATE_MODEL` if a bigger model fits.
+## Additions after the original 12 features (all implemented and tested)
 
-Open items worth a decision: the paused legacy `re1` project (old opencode loop) can be deleted or re-planned in engine mode (`codebot freeze`
-needs a `check:` per task); `SANDBOX=auto` could be tightened to `docker` so a missing image refuses to run instead of falling back.
+Baseline guard for checks (`guard.py`, `codebot check-plan`; rejects passing / broken / malformed checks, logs each rejection); explicit `num_ctx` and `keep_alive` on every request; a context
+estimate calibrated against the real server (`tokens.py`) and a hard fit so request + reply never exceed `NUM_CTX`; append-only conversations with a byte-stable prefix (compaction inserts one
+message after the prefix); truncated replies as their own kind; thermal guard (`thermal.py`); live preflight (`preflight.py`); benchmark runner and suites (`bench.py`, `bench/suite/`);
+thermal sweep (`thermalbench.py`); harness-driven unattended planner rounds (`bench.plan_auto`); worktrees moved to `workspaces/`; docs-vs-code consistency test.
 
 ## Real-model results (ornith:9b, CPU, private Ollama 0.40.3)
 
@@ -363,6 +358,19 @@ Worktrees were created INSIDE the state directory (`projects/<p>/work`), which t
 and `$CODEBOT_CHECKS` was empty for its commands. Tests only used in-place folders. Fixed: worktrees live in `workspaces/<p>` (inside the codebot dir, outside the state dir,
 old ones are migrated by `codebot start`), the engine refuses a code dir inside the state dir, and `run` gets `$CODEBOT_CHECKS` (read-only mount) and `$CODEBOT_RUNDIR`.
 6 regression tests (`tests/test_p_regressions.py`). Lesson: a harness needs at least one end-to-end run against the real model before its tests mean much.
+
+### Unattended planner, first attempt (opencode, 9B): what went wrong
+The opencode agent had no `write` tool at first (the `patch: false` bug above), so the first run only produced bash heredocs and invalid-tool errors; after the fix the planner wrote `GRILL.md`, `PLAN.md` and
+four test fixtures, but it **never ran `codebot check-plan`** (it decided to "run my own checkplan-like tool" and executed its test scripts instead), read "rewrite every rejected check until it says OK" as "make the
+checks pass", and started writing the implementation into a stray `projects/<p>/code/` folder (not the real code dir). Offline, the baseline guard on its plan rejected **2 of 4 checks**, both
+"malformed": prose after the closing backtick (`` `python3 main_app.py` prints 42 `` made the shell try to run `prints`). Conclusion: a 9B model cannot be trusted to drive its own repair loop. The
+harness now drives it (`bench.plan_auto`): after each round it runs `check-plan` itself, undoes any code the planner wrote (counted as violations), and sends back the exact rejection report; a
+`malformed` verdict names the problem. Tested with a scripted planner; **not yet re-run with the real model**.
+
+### Machine facts measured while doing this
+llama.cpp already runs `n_threads = 4` of 8 (the physical cores), so setting `num_thread 4` is a no-op; the package sits at 90-93 C under load with the CPU clocked down; `powerprofilesctl` is available
+(profile `balanced`); there is **no NVIDIA kernel driver** (`nvidia-smi` fails) so there is no GPU offload; the private Ollama already ships the CUDA libraries, so installing the driver would enable it.
+`codebot bench --thermal` (built, tested, not yet run for real) measures the options.
 
 ### Bench run `bench-fixed-2` (finished, 8.0 min wall)
 

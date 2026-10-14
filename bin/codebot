@@ -423,28 +423,33 @@ case "$c" in
   re-config) cmd_re_config;;
   install-service) cmd_install_service;;
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
-  *) cat <<USAGE
-codebot - local ralph-loop coding agent
-  plan <name> [workdir] [--mode <m>] [--target <path>] [--quick]   interactive planning (default: thorough "grill me" interview; --quick = short one; --re = --mode re)
-  modes                   list the modes (folders under modes/)
-  bench [--preflight] [--suite pyutils --plan fixed|auto] [--record]   run a suite through the real pipeline and record the metrics
-  start <name>            run the autonomous loop in the background
-  pause <name> [--soft]   stop now & free RAM (or --soft: after current iteration)
-  resume <name>           continue after pause
-  answer <name> <text>    reply to a BLOCKED notification
+  *) cat <<'USAGE'
+codebot - local-only autonomous coding agent for small offline models (run with no arguments for the menu)
+  plan <name> [workdir] [--mode <m>] [--target <path>] [--quick]   interactive planning ("grill me" interview; --quick = short; --re = --mode re)
+  check-plan <name>       test every check in PLAN.md against the code as it is now (a check that already passes, or is broken, is rejected and logged)
+  freeze <name> [--allow-unchecked] [--allow-passing-checks]   lock per-task checks and create tasks.json (`start` does this automatically)
+  start <name>            freeze if needed, then run the autonomous loop in the background
   status [name] | list    show state
   log <name>              follow the loop log
+  pause <name> [--soft]   stop now and free RAM (or --soft: after the current step)
+  resume <name>           continue after pause
   stop <name>             end the loop
-  diff <name>             show what codebot changed + how to merge it
+  answer <name> <text>    answer a blocked task ("T3: guidance"); resets its ladder
+  report <name> [--send|--short|--json]   morning report: done, blocked (exact question), diffs to review, lessons, time, safety
+  audit <name> [--probe]  what ran and changed, proof of offline operation (--probe tries the network from inside the sandbox)
+  diff <name>             what codebot changed and how to merge it
   prompt <name> [plan|work] [quick]   print the exact prompt the model receives
-  report <name> [--send|--short|--json]   morning report: done, blocked (with the exact question), diffs to review, lessons, time, safety
-  audit <name> [--probe]  what ran, what changed, proof of offline operation (--probe tests the sandbox network live)
-  freeze <name> [--allow-unchecked]   lock per-task checks and create tasks.json (needs a `check:` per task in PLAN.md)
-  tidy                    condense memory/lessons.md
+  modes                   list the modes (folders under modes/)
+  tidy                    prune lessons that correlate with failure and regenerate memory/lessons.md
+  bench --preflight       prove the context setup against the live model server (num_ctx, keep_alive, schema, KV cache)
+  bench [--suite pyutils|pyhard] [--plan fixed|auto] [--name N] [--max-minutes M] [--record]   run a suite through the real pipeline and record metrics
+  bench --thermal [--minutes M] [--only substr] [--record]   sweep threads / power profile / GPU configs for sustained speed vs heat
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
-  install-service         auto-restart active loops after reboot/login
+  install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)
+  resume-all              (watchdog) restart active loops that are not running
+  setup | notify-test     start the private Ollama / send a test ntfy message
+  engine <cmd> <name>     low-level access to codebot-engine (step, plan-op, split, sizing, memory, ...)
   (phone) publish pause|resume|stop|status|<answer> to <ntfy topic>-reply
-  setup | notify-test     start ollama / send test ntfy message
 USAGE
 ;;
 esac
