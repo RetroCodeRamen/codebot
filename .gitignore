@@ -3,3 +3,6 @@ tools/
 logs/
 projects/
 memory/.archive/
+workspaces/
+bench/runs/
+bench/results/

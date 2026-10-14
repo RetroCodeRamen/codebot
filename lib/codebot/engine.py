@@ -75,6 +75,9 @@ def step(proj, fresh=False):
     fresh=True forces a reset to the last verified checkpoint before the worker runs (the ladder does this at rung 2)."""
     store = T.TaskStore(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
+    if os.path.realpath(proj.rundir).startswith(os.path.realpath(proj.state) + os.sep):
+        return {"event": "error", "error": f"the code directory ({proj.rundir}) is inside the harness state directory, so the worker could touch nothing. "
+                                            f"Run `codebot start {proj.name}` once to migrate the worktree out."}
     over = B.project_budget(proj)
     if over: return {"event": "budget", "kind": over[0], "message": over[1]}
     with store.locked():

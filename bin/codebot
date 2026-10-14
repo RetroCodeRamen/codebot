@@ -145,10 +145,14 @@ cmd_start() {
   fi
   [[ -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
+  if [[ "${RUNDIR:-}" == "$S"/* && -d "$RUNDIR" ]]; then   # older layout: the worktree lived INSIDE the state dir, which the harness protects from the worker
+    local moved="$CODEBOT_HOME/workspaces/$NAME"; mkdir -p "$CODEBOT_HOME/workspaces"
+    git -C "$WORKDIR" worktree move "$RUNDIR" "$moved" && sed -i "s|^RUNDIR=.*|RUNDIR=\"$moved\"|" "$S/project.env" && RUNDIR="$moved" && echo "migrated the worktree out of the state dir: $moved"
+  fi
   if [[ ! -f "$S/.git-prepped" ]]; then
     if git -C "$WORKDIR" rev-parse HEAD >/dev/null 2>&1; then
       # existing repo with history: isolate in a worktree so your checkout/uncommitted work is never touched
-      RUNDIR="$S/work"
+      RUNDIR="$CODEBOT_HOME/workspaces/$NAME"; mkdir -p "$CODEBOT_HOME/workspaces"     # NOT inside the state dir: the worker may only touch the code dir
       git -C "$WORKDIR" worktree add -q -b "codebot/$NAME" "$RUNDIR" 2>/dev/null \
         || git -C "$WORKDIR" worktree add -q "$RUNDIR" "codebot/$NAME" 2>/dev/null || [[ -d "$RUNDIR" ]] \
         || die "could not create worktree for codebot/$NAME"

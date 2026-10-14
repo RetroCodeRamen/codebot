@@ -85,7 +85,10 @@ def run(proj, command, timeout=120, max_out=3000, task=None):
     except Denied as e:
         audit.log(proj, "command_denied", command=command[:500], reason=str(e), task=task); raise
     import time; t0 = time.time()
-    rc, out, label = execute(proj, ["bash", "-c", command], timeout=timeout)
+    from . import checks as C           # imported here: checks imports sandbox
+    # the worker must be able to run its own frozen check: $CODEBOT_CHECKS points at the (read-only) checks dir, $CODEBOT_RUNDIR at the code dir
+    rc, out, label = execute(proj, ["bash", "-c", command], timeout=timeout, ro=[C.checks_dir(proj)],
+                             env={"CODEBOT_CHECKS": C.checks_dir(proj), "CODEBOT_RUNDIR": proj.rundir})
     audit.log(proj, "command", command=command[:500], rc=rc, secs=round(time.time() - t0, 1), sandbox=label, task=task, out_sha=__import__("hashlib").sha1(out.encode()).hexdigest()[:10])
     if len(out) > max_out: out = f"[...{len(out) - max_out} chars cut...]\n" + out[-max_out:]
     return rc, out
