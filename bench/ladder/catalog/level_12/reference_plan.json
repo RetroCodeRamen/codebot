@@ -1,0 +1,582 @@
+{
+ "goal": "Build the tracker package described in SPEC.md.",
+ "context": "Python 3 stdlib only. Package tracker/ (core, search, api, maintenance, __init__) in the repo root.",
+ "done": "Every requirement of SPEC.md holds.",
+ "tasks": [
+  {
+   "title": "Package exports, exception classes and the SQLite-backed Tracker with atomic transactions",
+   "files": [
+    "tracker/__init__.py",
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nprint(issubclass(ValidationError, ValueError), all(issubclass(c, TrackerError) for c in (AuthError, PermissionDenied, NotFound, ValidationError, Conflict)))"
+     ],
+     "stdout": "True True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nprint(t.db.execute('PRAGMA busy_timeout').fetchone()[0] >= 30000)"
+     ],
+     "stdout": "True"
+    }
+   ]
+  },
+  {
+   "title": "Users: create_user rules, first admin bootstrap, get_user, list_users, set_active",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nprint(t.get_user('ALICE')['name'], raises(lambda: t.create_user('alice', 'password1', 'member', actor='root'), Conflict), raises(lambda: t.create_user('x1', 'short', 'member', actor='root'), ValidationError), raises(lambda: t.create_user('x2', 'password1', 'member', actor='bob'), PermissionDenied))"
+     ],
+     "stdout": "alice Conflict ValidationError PermissionDenied"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nt.set_active('bob', False, 'root'); print(raises(lambda: t.login('bob', 'password1'), AuthError), raises(lambda: t.list_projects('bob'), PermissionDenied), t.set_active('bob', True, 'root')['active'])"
+     ],
+     "stdout": "AuthError PermissionDenied True"
+    }
+   ]
+  },
+  {
+   "title": "Authentication: login tokens with 24 hour expiry, authenticate_token, logout",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ntok = t.login('bob', 'password1'); print(len(tok) >= 32, t.authenticate_token(tok)['name']); ts['v'] = '2024-03-02T08:59:59'; t.authenticate_token(tok); ts['v'] = '2024-03-02T09:00:00'; print(raises(lambda: t.authenticate_token(tok), AuthError))"
+     ],
+     "stdout": "True bob\nAuthError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ntok = t.login('bob', 'password1'); t.logout(tok); print(raises(lambda: t.authenticate_token(tok), AuthError)); print([raises(lambda: t.login(n, p), AuthError) for n, p in (('bob', 'wrongpass1'), ('nobody', 'password1'))])"
+     ],
+     "stdout": "AuthError\n['AuthError', 'AuthError']"
+    }
+   ]
+  },
+  {
+   "title": "Projects: create_project, visibility (public/private), members, archive",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nprint([p['key'] for p in t.list_projects('eve')], [p['key'] for p in t.list_projects('alice')], raises(lambda: t.get_project('SEC', 'eve'), NotFound), raises(lambda: t.create_project('ZZ', 'z', 'alice'), PermissionDenied), raises(lambda: t.create_project('WEB', 'z', 'root'), Conflict))"
+     ],
+     "stdout": "['WEB'] ['SEC', 'WEB'] NotFound PermissionDenied Conflict"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nprint(t.add_member('WEB', 'eve', 'reporter', 'alice'), [m['user'] for m in t.members('WEB', 'eve')], raises(lambda: t.add_member('WEB', 'eve', 'boss', 'alice'), ValidationError), raises(lambda: t.remove_member('WEB', 'nobody-in', 'alice'), (NotFound)))"
+     ],
+     "stdout": "{'user': 'eve', 'role': 'reporter'} ['alice', 'bob', 'carol', 'eve'] ValidationError NotFound"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nt.archive_project('WEB', 'root'); print(raises(lambda: t.create_issue('WEB', 'x', 'd', 'root'), PermissionDenied))"
+     ],
+     "stdout": "PermissionDenied"
+    }
+   ]
+  },
+  {
+   "title": "Permission matrix for manager, developer, reporter, global viewer, admin and archived projects",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    4
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'Mine', 'd', 'carol'); print(t.update_issue(i['key'], 'carol', title='Edited')['title'], raises(lambda: t.update_issue(i['key'], 'carol', priority='high'), PermissionDenied), raises(lambda: t.transition(i['key'], 'closed', 'carol'), PermissionDenied), raises(lambda: t.add_label(i['key'], 'x', 'carol'), PermissionDenied))"
+     ],
+     "stdout": "Edited PermissionDenied PermissionDenied PermissionDenied"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nt.create_user('vee', 'password1', 'viewer', actor='root'); t.add_member('WEB', 'vee', 'developer', 'root'); i = t.create_issue('WEB', 'x', 'd', 'bob'); print(raises(lambda: t.add_comment(i['key'], 'x', 'vee'), PermissionDenied), raises(lambda: t.add_comment(i['key'], 'x', 'eve'), PermissionDenied), t.get_issue(i['key'], 'eve')['title'])"
+     ],
+     "stdout": "PermissionDenied PermissionDenied x"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'x', 'd', 'bob'); print(t.update_issue(i['key'], 'bob', priority='critical', assignee='carol')['assignee'], raises(lambda: t.export_project('WEB', 'bob'), PermissionDenied), bool(t.export_project('WEB', 'alice')))"
+     ],
+     "stdout": "carol PermissionDenied True"
+    }
+   ]
+  },
+  {
+   "title": "Issues: create_issue numbering, get_issue, update_issue, workflow transitions with resolution",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    5
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\na = t.create_issue('WEB', 'Broken login', 'details', 'bob', priority='high', assignee='carol', labels=['Bug']); b = t.create_issue('SEC', 's', '', 'alice'); print(a['key'], b['key'], a['status'], a['priority'], a['labels'], a['reporter'], a['assignee'], a['closed'])"
+     ],
+     "stdout": "WEB-1 SEC-1 open high ['bug'] bob carol None"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']; print(raises(lambda: t.transition(k, 'resolved', 'bob'), ValidationError), t.transition(k, 'resolved', 'bob', ' fixed ')['resolution'], t.transition(k, 'closed', 'bob')['closed'], t.transition(k, 'open', 'bob')['resolution'], raises(lambda: t.transition(k, 'resolved', 'bob', 'x') and t.transition(k, 'in_progress', 'bob'), ValidationError))"
+     ],
+     "stdout": "ValidationError fixed 2024-03-01T09:00:00 None ValidationError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']; ts['v'] = '2024-03-02T10:00:00'; print(t.update_issue(k, 'bob', title='x')['updated'], t.update_issue(k, 'bob', title='New')['updated'], raises(lambda: t.update_issue(k, 'bob', status='closed'), ValidationError), raises(lambda: t.get_issue('WEB-99', 'bob'), NotFound))"
+     ],
+     "stdout": "2024-03-01T09:00:00 2024-03-02T10:00:00 ValidationError NotFound"
+    }
+   ]
+  },
+  {
+   "title": "Comments: add, edit own, delete (author, managers, admins)",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    6
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']; c = t.add_comment(k, '  hello  ', 'carol'); print(c['body'], c['edited'], t.edit_comment(c['id'], 'new', 'carol'), raises(lambda: t.edit_comment(c['id'], 'hijack', 'alice'), PermissionDenied)); print(t.get_issue(k, 'bob')['comments'][0]['edited'])"
+     ],
+     "stdout": "hello None {'id': 1, 'body': 'new'} PermissionDenied\n2024-03-01T09:00:00"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']; a = t.add_comment(k, 'a', 'carol'); b = t.add_comment(k, 'b', 'bob'); print(raises(lambda: t.delete_comment(b['id'], 'carol'), PermissionDenied)); t.delete_comment(a['id'], 'carol'); t.delete_comment(b['id'], 'alice'); print(t.get_issue(k, 'bob')['comments'])"
+     ],
+     "stdout": "PermissionDenied\n[]"
+    }
+   ]
+  },
+  {
+   "title": "Labels: normalisation, limit of 10, add/remove rights",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    6
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']; print(t.add_label(k, ' Bug ', 'bob')['labels'], t.add_label(k, 'BUG', 'bob')['labels'], t.remove_label(k, 'bug', 'bob')['labels'], raises(lambda: t.remove_label(k, 'bug', 'bob'), NotFound), raises(lambda: t.add_label(k, 'bad label', 'bob'), ValidationError), raises(lambda: t.add_label(k, 5, 'bob'), ValidationError))"
+     ],
+     "stdout": "['bug'] ['bug'] [] NotFound ValidationError ValidationError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nk = t.create_issue('WEB', 'x', 'd', 'bob')['key']\nfor n in range(10): t.add_label(k, 'l%d' % n, 'bob')\nprint(raises(lambda: t.add_label(k, 'eleven', 'bob'), ValidationError), raises(lambda: t.add_label(k, 'x', 'carol'), PermissionDenied))"
+     ],
+     "stdout": "ValidationError PermissionDenied"
+    }
+   ]
+  },
+  {
+   "title": "Search language, paging and sorting, project_stats",
+   "files": [
+    "tracker/search.py",
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    7,
+    8
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\na = t.create_issue('WEB', 'Login page broken', 'form crashes', 'bob', priority='high', assignee='carol', labels=['bug', 'ui']); b = t.create_issue('WEB', 'Dark mode', '', 'alice', priority='low', labels=['ui']); k = lambda q, **kw: [i['key'] for i in t.search(q, 'root', **kw)['items']]; print(k('label:ui label:bug'), k('priority:high,low', sort='number'), k('assignee:none'), k('login crashes'), k('status:closed'), k('project:web', sort='-number'))"
+     ],
+     "stdout": "['WEB-1'] ['WEB-1', 'WEB-2'] ['WEB-2'] ['WEB-1'] [] ['WEB-2', 'WEB-1']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nfor n in range(25): t.create_issue('WEB', 'bulk %d' % n, '', 'bob')\nr = t.search('bulk', 'root', limit=10, offset=5, sort='number'); print(r['total'], len(r['items']), r['items'][0]['title'], r['limit'], r['offset']); print([raises(lambda: t.search('', 'root', **kw), ValidationError) for kw in ({'limit': 0}, {'offset': -1}, {'sort': 'title'})], raises(lambda: t.search('color:red', 'root'), ValidationError))"
+     ],
+     "stdout": "25 10 bulk 5 10 5\n['ValidationError', 'ValidationError', 'ValidationError'] ValidationError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nt.create_issue('WEB', 'a', 'd', 'bob', assignee='carol', labels=['x']); t.create_issue('WEB', 'b', 'd', 'bob'); print(t.project_stats('WEB', 'eve'))"
+     ],
+     "stdout": "{'project': 'WEB', 'total': 2, 'by_status': {'open': 2}, 'by_priority': {'medium': 2}, 'by_assignee': {'-': 1, 'carol': 1}, 'by_label': {'x': 1}}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nt.create_issue('SEC', 'secret', 'd', 'alice'); print(t.search('', 'eve')['total'], t.search('', 'alice')['total'])"
+     ],
+     "stdout": "0 1"
+    }
+   ]
+  },
+  {
+   "title": "Audit log: entries for every change, denied entries, audit_entries filters and admin-only access",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    6,
+    7,
+    8
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nes = t.audit_entries('root'); print(es[0]['action'], es[0]['actor'], es[0]['changes'], [e['seq'] for e in es] == list(range(1, len(es) + 1)), raises(lambda: t.audit_entries('alice'), PermissionDenied))"
+     ],
+     "stdout": "user.create None {'name': [None, 'root'], 'role': [None, 'admin']} True PermissionDenied"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'T', 'd', 'bob', priority='high', labels=['x']); e = t.audit_entries('root')[-1]; print(e['action'], e['entity'], e['entity_id'], e['changes'])"
+     ],
+     "stdout": "issue.create issue WEB-1 {'title': [None, 'T'], 'priority': [None, 'high'], 'assignee': [None, None], 'labels': [[], ['x']]}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'T', 'd', 'bob'); raises(lambda: t.transition(i['key'], 'closed', 'carol'), PermissionDenied); e = t.audit_entries('root')[-1]; print(e['action'], e['outcome'], e['actor'], e['changes'], bool(e['reason'])); n = len(t.audit_entries('root')); raises(lambda: t.create_issue('WEB', '', 'd', 'bob'), ValidationError); print(len(t.audit_entries('root')) - n)"
+     ],
+     "stdout": "issue.transition denied carol {} True\n0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nraises(lambda: t.login('bob', 'wrong-pass'), AuthError); e = t.audit_entries('root')[-1]; print(e['action'], e['actor'], e['outcome'], e['reason'])"
+     ],
+     "stdout": "auth.login bob denied invalid credentials"
+    }
+   ]
+  },
+  {
+   "title": "Export, import (all-or-nothing) and CSV export",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    6,
+    8
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'First', 'd', 'bob', labels=['x']); t.add_comment(i['key'], 'hi', 'carol'); d = t.export_project('WEB', 'alice'); print(d['format'], d['version'], [x['number'] for x in d['issues']], d['issues'][0]['comments'][0]['body'], d['members'][0])"
+     ],
+     "stdout": "tracker-export 1 [1] hi {'user': 'alice', 'role': 'manager'}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\ni = t.create_issue('WEB', 'First', 'd', 'bob'); d = t.export_project('WEB', 'root'); f = Tracker(clock=lambda: ts['v']); f.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol'): f.create_user(n, 'password1', 'member', actor='root')\nf.import_project(d, 'root'); print(f.export_project('WEB', 'root') == d, f.create_issue('WEB', 'n', 'd', 'bob')['key'], raises(lambda: f.import_project(d, 'root'), Conflict), raises(lambda: f.import_project({}, 'root'), ValidationError))"
+     ],
+     "stdout": "True WEB-2 Conflict ValidationError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nd = t.export_project('WEB', 'root'); d['project']['key'] = 'NEW'; f = Tracker(); f.create_user('root', 'password1', 'admin'); print(raises(lambda: f.import_project(d, 'root'), ValidationError), f.list_projects('root'))"
+     ],
+     "stdout": "ValidationError []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nimport os, tempfile, csv\nt.create_issue('WEB', 'A, b', 'd', 'bob', assignee='carol', labels=['x', 'y']); p = os.path.join(tempfile.mkdtemp(), 'e.csv'); print(t.export_csv('WEB', 'alice', p)); print(list(csv.reader(open(p)))[0], list(csv.reader(open(p)))[1][:7])"
+     ],
+     "stdout": "1\n['key', 'title', 'status', 'priority', 'reporter', 'assignee', 'labels', 'created', 'updated'] ['WEB-1', 'A, b', 'open', 'medium', 'bob', 'carol', 'x|y']"
+    }
+   ]
+  },
+  {
+   "title": "HTTP API: make_server, routes, authentication, status codes, check order",
+   "files": [
+    "tracker/api.py"
+   ],
+   "size": "M",
+   "deps": [
+    9,
+    10,
+    11
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\nprint(call('GET', '/health')[:2], call('GET', '/me')[0], call('POST', '/login', {'name': 'bob', 'password': 'bad'})[:2])\ns.stop()\n"
+     ],
+     "stdout": "(200, {'status': 'ok'}) 401 (401, {'error': 'invalid credentials'})"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\ntok = call('POST', '/login', {'name': 'bob', 'password': 'password1'})[1]['token']; st, b, h = call('POST', '/projects/WEB/issues', {'title': 'x', 'labels': ['bug']}, tok); print(st, h['Location'], b['key'], call('GET', '/issues?q=label:bug', tok=tok)[1]['total'], call('GET', '/issues/WEB-1', tok=tok)[1]['title'], call('POST', '/logout', tok=tok)[0], call('GET', '/me', tok=tok)[0])\ns.stop()\n"
+     ],
+     "stdout": "201 /issues/WEB-1 WEB-1 1 x 204 401"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\ntok = call('POST', '/login', {'name': 'root', 'password': 'password1'})[1]['token']; st, b, h = call('DELETE', '/projects', tok=tok); print(st, h['Allow'], call('GET', '/nothing', tok=tok)[0], call('GET', '/issues?limit=0', tok=tok)[:2], call('GET', '/issues?sort=title', tok=tok)[0], call('POST', '/projects', {'key': 'WEB', 'name': 'x'}, tok)[0], call('POST', '/projects', {'key': 'x', 'name': 'x'}, tok)[0])\ns.stop()\n"
+     ],
+     "stdout": "405 GET, POST 404 (400, {'error': 'invalid limit'}) 422 409 422"
+    }
+   ]
+  },
+  {
+   "title": "HTTP API: issue, comment, label, member, stats, export and audit endpoints with rights",
+   "files": [
+    "tracker/api.py"
+   ],
+   "size": "M",
+   "deps": [
+    12
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\nb = call('POST', '/login', {'name': 'bob', 'password': 'password1'})[1]['token']; r = call('POST', '/login', {'name': 'root', 'password': 'password1'})[1]['token']; call('POST', '/projects/WEB/issues', {'title': 'x'}, b); print(call('POST', '/issues/WEB-1/comments', {'body': 'hi'}, b)[0], call('PATCH', '/issues/WEB-1', {'title': 'New'}, b)[1]['title'], call('POST', '/issues/WEB-1/transition', {'status': 'resolved', 'resolution': 'ok'}, b)[1]['status'], call('POST', '/issues/WEB-1/labels', {'label': 'ui'}, b)[1]['labels'], call('DELETE', '/issues/WEB-1/labels/ui', tok=b)[1]['labels'])\ns.stop()\n"
+     ],
+     "stdout": "201 New resolved ['ui'] []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\nb = call('POST', '/login', {'name': 'bob', 'password': 'password1'})[1]['token']; r = call('POST', '/login', {'name': 'root', 'password': 'password1'})[1]['token']; call('POST', '/projects/WEB/issues', {'title': 'x'}, b); print(call('GET', '/projects/WEB/stats', tok=b)[1]['total'], call('GET', '/projects/WEB/export', tok=b)[0], call('GET', '/projects/WEB/export', tok=r)[1]['format'], call('GET', '/audit?action=issue.create', tok=r)[1]['total'], call('GET', '/audit', tok=b)[0])\ns.stop()\n"
+     ],
+     "stdout": "1 403 tracker-export 1 403"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json, urllib.request, urllib.error\nsys.path.insert(0, '.')\nfrom tracker import *\nfrom tracker.api import make_server\nt = Tracker(); t.create_user('root', 'password1', 'admin'); t.create_user('bob', 'password1', 'member', actor='root'); t.create_project('WEB', 'Web', 'root', public=True); t.add_member('WEB', 'bob', 'developer', 'root')\ns = make_server(t).start()\ndef call(m, p, b=None, tok=None):\n    req = urllib.request.Request('http://127.0.0.1:%d%s' % (s.port, p), method=m, data=None if b is None else json.dumps(b).encode(), headers={'Authorization': 'Bearer ' + tok} if tok else {})\n    try:\n        with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read() or 'null'), dict(r.headers)\n    except urllib.error.HTTPError as e: return e.code, json.loads(e.read() or 'null'), dict(e.headers)\nimport http.client\nc = http.client.HTTPConnection('127.0.0.1', s.port); c.request('POST', '/login', body=b'{nope'); r = c.getresponse(); print(r.status, r.read().decode()); c = http.client.HTTPConnection('127.0.0.1', s.port); c.request('POST', '/login', body=b'x' * 1200000); r = c.getresponse(); print(r.status)\ns.stop()\n"
+     ],
+     "stdout": "400 {\"error\": \"invalid JSON\"}\n413"
+    }
+   ]
+  },
+  {
+   "title": "Maintenance: run_once closes stale resolved issues and purges tokens; check_integrity; background thread",
+   "files": [
+    "tracker/maintenance.py"
+   ],
+   "size": "M",
+   "deps": [
+    6,
+    9
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nm = Maintenance(t, close_after_days=14); k = t.create_issue('WEB', 'x', 'd', 'bob')['key']; t.transition(k, 'resolved', 'bob', 'ok'); ts['v'] = '2024-03-15T09:00:00'; print(m.run_once()['closed']); ts['v'] = '2024-03-15T09:00:01'; r = m.run_once(); print(r['closed'], t.get_issue(k, 'bob')['status'], m.runs, m.last_report == r); e = t.audit_entries('root')[-1]; print(e['actor'], e['action'], e['changes'])"
+     ],
+     "stdout": "[]\n['WEB-1'] closed 2 True\nsystem issue.transition {'status': ['resolved', 'closed']}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nm = Maintenance(t); t.login('bob', 'password1'); ts['v'] = '2024-03-03T00:00:00'; r = m.run_once(); print(r['tokens_purged'], t.audit_entries('root')[-1]['changes'], m.check_integrity())"
+     ],
+     "stdout": "1 {'deleted': [0, 1]} []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nm = Maintenance(t); t.create_issue('WEB', 'x', 'd', 'bob'); t.db.execute(\"UPDATE projects SET next_number = 1 WHERE key = 'WEB'\"); t.db.execute(\"UPDATE issues SET closed = 'x' WHERE number = 1\"); print(m.check_integrity())"
+     ],
+     "stdout": "['project WEB: next_number 1 is not above the highest issue number 1', 'issue WEB-1: closed time and status disagree']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nimport time\nm = Maintenance(t); print(m.start(interval=0.05) is m); end = time.time() + 10\nwhile m.runs < 3 and time.time() < end: time.sleep(0.02)\nm.stop(); print(m.runs >= 3, m.last_error)"
+     ],
+     "stdout": "True\nTrue None"
+    }
+   ]
+  },
+  {
+   "title": "Consistency under concurrency: unique issue numbers across threads, no gaps in the audit log, failed operations leave no trace",
+   "files": [
+    "tracker/core.py"
+   ],
+   "size": "M",
+   "deps": [
+    6,
+    10
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nimport threading, tempfile, os\np = os.path.join(tempfile.mkdtemp(), 'c.db'); c = Tracker(p); c.create_user('root', 'password1', 'admin'); c.create_user('bob', 'password1', 'member', actor='root'); c.create_project('WEB', 'w', 'root'); c.add_member('WEB', 'bob', 'developer', 'root'); keys, lock = [], threading.Lock()\ndef work():\n    x = Tracker(p)\n    for _ in range(10):\n        k = x.create_issue('WEB', 't', 'd', 'bob')['key']\n        with lock: keys.append(k)\n    x.close()\nts_ = [threading.Thread(target=work) for _ in range(8)]\n[th.start() for th in ts_]; [th.join() for th in ts_]\nprint(sorted(int(k.split('-')[1]) for k in keys) == list(range(1, 81)), Maintenance(c).check_integrity())"
+     ],
+     "stdout": "True []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, json\nsys.path.insert(0, '.')\nfrom tracker import *\nts = {'v': '2024-03-01T09:00:00'}\nt = Tracker(clock=lambda: ts['v'])\nt.create_user('root', 'password1', 'admin')\nfor n in ('alice', 'bob', 'carol', 'eve'): t.create_user(n, 'password1', 'member', actor='root')\nt.create_project('WEB', 'Website', 'root', public=True); t.create_project('SEC', 'Security', 'root')\nfor n, r in (('alice', 'manager'), ('bob', 'developer'), ('carol', 'reporter')): t.add_member('WEB', n, r, 'root')\nt.add_member('SEC', 'alice', 'manager', 'root')\ndef raises(f, exc):\n    try: f(); return 'no error'\n    except exc as e: return exc.__name__\nraises(lambda: t.create_issue('WEB', '', 'd', 'bob'), ValidationError); raises(lambda: t.create_issue('WEB', 'x', 'd', 'eve'), PermissionDenied); print(t.create_issue('WEB', 'ok', 'd', 'bob')['key'], Maintenance(t).check_integrity())"
+     ],
+     "stdout": "WEB-1 []"
+    }
+   ]
+  }
+ ]
+}
