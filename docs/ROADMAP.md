@@ -445,3 +445,32 @@ New design: the planner and splitter emit ASSERTIONS as data (`call` a function 
 ### Native planner, first real-model run, `bench-auto-6`, 2026-10-15 (easy suite, GPU auto-offload)
 
 From `spec.md` to a verified project with no human input: planning 178 s (1 round, 0 rejected checks, 0 violations), then 5/5 tasks verified, 1 attempt each, 6.7 min wall (28 model turns, 0 malformed replies, generation 9.0 tok/s, cold prompt 347 tok/s, KV reuse 0.82 on later turns, largest prompt 4k of 32k tokens, 0 ladder steps, CPU max 93 C, 3 thermal pauses of 20 s). For comparison the free-form opencode planner needed 2572 s for two rounds and produced an unusable plan. The model's assertions covered the spec's examples and edge cases (they include one invented edge, `parse_kv("x=")`, which a natural implementation satisfies). Caveats: the easy suite never exercises the ladder or a split, and one run is one sample of a 9B model; the "Goal" and "Definition of done" in the generated PLAN.md describe only the first task (cosmetic).
+
+### Model comparison: ornith:9b vs qwen2.5-coder:7b, 2026-10-15
+
+Setup: `qwen2.5-coder:7b` (Q4_K_M, dense, 7.6B) imported into the private Ollama from the weights the system Ollama already had (no download; `config/Modelfile.qwen-coder`, model `qwen-coder-model`, 32k context, 63%/37% CPU/GPU). `codebot bench --model <name>` stores the model in the project (planner, worker and splitter all use it); `codebot bench --compare <run> ...` prints a side-by-side table from stored results; token calibration is now per model. Preflight passed for both (qwen reuses the KV cache across diverging prompts, 69%, where the hybrid ornith reuses 32%). Everything below is the pyutils suite, one thing varied at a time, on the GPU auto-offload setup.
+
+**Worker, same hand-written plan (`--plan fixed`), one run each:**
+
+| | ornith:9b | qwen2.5-coder:7b |
+|---|---|---|
+| tasks verified | 5/5 | 4/5 (T5 blocked) |
+| attempts per task | 1 | 2 (T2 3 attempts; T5 4, blocked) |
+| model turns / wall | 17 / 5.0 min | 79 / 12.0 min |
+| generation tok/s | 9.5 | 11.2 |
+| cold prompt tok/s | 338 | 716 |
+| ladder steps / blocked | 0 / 0 | 5 / 1 |
+| malformed replies | 0 | 0 |
+
+Qwen is faster per token (about 18% generation, about 2x prompt processing) but needs 4.6x the turns, so it is 2.4x slower overall and less reliable. Its blocked task is a real model failure: it renamed the function but left `from legacy import old_name` on line 1 of `main_app.py`, although the check output named that exact line in all four attempts (identical failure signature, so the ladder gave up). One run each: treat as indicative, not a rate.
+
+**Unattended planner, `--plan auto --plan-only`, three plans per model per prompt version, audited against the suite's reference solution** (every generated spec must fail on the seed and hold on the reference). The baseline guard accepted all 12 plans, so it cannot tell a good plan from an unusable one; the audit is the only thing that does.
+
+| prompt | ornith: tasks sound | qwen: tasks sound | plans fully sound |
+|---|---|---|---|
+| first prompt | 7/13 (54%) | 1/17 (6%) | 0/6 |
+| revised prompt (finished-state wording, neutral examples, no invented edge cases or CLIs, contradiction check) | 5/7 (71%) | 9/15 (60%) | 0/6 |
+
+With the revised prompt ornith collapsed the plan to a single task in 2 of 3 samples (planned only the first spec item), qwen made 5-task plans with some unsound tasks and needed a repair round in 2 of 3. Remaining unsound checks are over-specification the spec does not support (`def double` required in `main_app.py`, invented edge cases such as `parse_kv('d=')`, `main_app.py` expected to print 84 when the spec says 42). Mean planning time 88 s (ornith) and 183 s (qwen). Not yet built: a completeness check (a plan with fewer tasks than the spec has numbered items) and a grounding check (a `file_contains` text the spec never mentions).
+
+Findings that changed the code along the way: the first strict schema made `args` optional on `call` assertions (fixed: required); `clean()` dropped empty-string expectations (fixed); the planner prompt's worked examples were copied from the pyutils suite (replaced with an unrelated domain, so earlier planner samples were slightly easier than later ones).
