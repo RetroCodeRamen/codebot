@@ -1,6 +1,6 @@
 # codebot: handoff (read this first in a new session)
 
-Last updated: 2026-10-14, end of a long working session. Everything described here is committed (`git log` in this repo). The last commit that changed engine code is `a1cd39c`; the commit after it is documentation only (README, this file, ROADMAP, modes/README.md, memory/README.md, the `codebot help` text, config comments, and `tests/test_r_docs.py`).
+Last updated: 2026-10-15, after the declarative-checks redesign and its first real-model run. Everything described here is committed (`git log` in this repo); the full suite (333 tests) was green at the last engine change.
 This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/ROADMAP.md` has
 the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
 
@@ -30,7 +30,7 @@ Repo: `/home/aj/Documents/Development/codebot` (git, branch with ~27 commits; `p
 | `modes/<name>/` | `code` (default) and `re` (reverse engineering with REA, `extends` code). `mode.json` + prompts (`plan.md`, `plan-quick.md`, `plan-auto.md`, `plan-repair.md`, `work.md`) + `worker.md` + notes + `verifiers/` |
 | `config/codebot.env` | all settings (documented inline). `config/Modelfile` (num_ctx 32768), `config/opencode.json`, `config/opencode-re.json` (generated) |
 | `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json` |
-| `tests/` | 300 test methods (`tests/run.sh [file]`, about 2.5 min for all, almost no CPU). **Verification status: the last full green run was 284 tests, before the documentation pass; `tests/test_r_docs.py` (16 docs-vs-code tests, added in that pass) was run on its own and passes; the full suite has NOT been re-run since the help text (`bin/codebot` usage heredoc) and `config/codebot.env` comments were edited. Re-run `tests/run.sh` first thing.** `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs |
+| `tests/` | 333 test methods (`tests/run.sh [file]`, about 2.5 min for all, almost no CPU). **Verification status: the last full green run was 284 tests, before the documentation pass; `tests/test_r_docs.py` (16 docs-vs-code tests, added in that pass) was run on its own and passes; the full suite has NOT been re-run since the help text (`bin/codebot` usage heredoc) and `config/codebot.env` comments were edited. Re-run `tests/run.sh` first thing.** `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs |
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
@@ -71,36 +71,26 @@ Real-model (ornith:9b) evidence so far (details in ROADMAP "Real-model results")
 
 ## 5. In flight / not done (the honest list)
 
-1. **Planner benchmark with the real model, new harness-driven flow**: `codebot bench --suite pyutils --plan auto` (not run since the redesign). Needed: how many
-   planner-written checks the guard rejected per round, violations, rounds to OK, then the worker stage on the planner's own checks.
-2. **Hard suite**: `codebot bench --suite pyhard --plan fixed` was built and proven solvable (reference solution + isolation tests) but **never run** with the model. It is
-   designed to make ladder steps fire (hard tasks) and to end one task **blocked** (T5 needs a license key only the user knows; check holds only its sha256). Needed to
-   answer the user's request: "every escalation ladder step that fired and every task that ended blocked, with the [exact question / reason]" (their message was cut off).
-3. **Thermal sweep** (`codebot bench --thermal --minutes 4`): tool built and unit-tested, **never run for real**. Configs: 4/3/2 threads, 4 threads + `power-saver`
-   profile (`powerprofilesctl`, restored afterwards), GPU offload (only when `nvidia-smi` works; skipped otherwise). 3-5 min per config with cooldown to 72 C first.
-   llama.cpp already uses `n_threads = 4` (physical cores) so making `num_thread 4` explicit in the Modelfile would be a no-op; decide after the sweep whether 3 or 2
-   threads or power-saver is worth it. Recreate the model after changing the Modelfile: `OLLAMA_HOST=127.0.0.1:11500 tools/ollama/bin/ollama create codebot-model -f config/Modelfile`.
-4. **Interactive grill-me planner live test** (`codebot plan demo ~/scratch`): ran partially earlier (it asks questions, writes plan) but never end-to-end with the new
-   `check:` format. Easier to run after item 1 shows the planner behaves.
-5. Record all real-model numbers in `docs/ROADMAP.md` (the user asked for this explicitly): `codebot bench ... --record` appends; the thermal sweep takes `--record` too.
-6. Loose ends: `bench-fixed-2` project is kept as a reference result (can be deleted); the old legacy RE project `re1` is stopped (delete or re-plan in engine mode);
-   `SANDBOX=auto` could become `docker`; user may install the NVIDIA driver (`sudo apt install nvidia-driver-580-open` + reboot); user was told a cooling pad / repaste are
-   the real fixes if the sweep still shows 90 C+.
+Done since the last handoff (details and numbers in `docs/ROADMAP.md`): NVIDIA driver installed and offload measured (thermal sweep, auto-fit puts about 35% of the layers on the 4 GB GPU: 3.4x the throughput of CPU-only, still 90+ C); hard suite run twice with the real model (4/5 verified, T5 blocked as designed, all ladder steps seen); the splitter bug found there fixed (guard on split children, children inherit `files`); the free-form opencode planner found unusable after three real runs and replaced by **declarative checks** (planner and splitter emit assertion data, the harness owns the runner, paths and check commands, exit status 0/1/2 is a contract the guard enforces). First real run of the new planner (`bench-auto-6`): plan in 178 s with 0 rejected checks, 5/5 tasks verified, 1 attempt each, 6.7 min.
+
+1. **Harder real-model evidence for the new planner.** `bench-auto-6` used the easy suite: no ladder step fired. Needed: a hard-suite spec run through `--plan auto` (needs a `spec.md` for `bench/suite/pyhard`, which has only a fixed plan today), and a few repeated runs to see how often the planner needs repair rounds and writes weak or unsatisfiable assertions.
+2. **Splitter with declarative assertions has only been tested with the fake model** (`tests/test_s_declarative.py`, `tests/test_h_worker.py`). It needs a real run where a task actually splits (the hard suite does this).
+3. **Interactive grill-me planner** (`codebot plan demo ~/scratch`) still uses the free-form format with raw shell checks (protected by the guard's static checks). Decide whether it should also produce assertions; not live-tested end to end with the `check:` format.
+4. **No user-facing command for the native planner** yet: it is reachable through `codebot bench --plan auto` only. A `codebot plan-auto <name>` that reads a spec file is the obvious next step.
+5. **Assertion types may need growing** (for example: run a command and compare to a file, import-time side effects, exit status only). Measure how often the planner needs a raw shell check before adding types.
+6. Loose ends: `bench-fixed-2` kept as a reference result (can be deleted); the legacy RE project `re1` is stopped (delete or re-plan in engine mode); `SANDBOX=auto` could become `docker`; the laptop still runs at 90-96 C under load (power-saver gives 65 C at 54% speed; a cooling pad or repaste is the real fix).
 
 ## 6. Next steps, in order (copy-paste)
 
 ```
 cd /home/aj/Documents/Development/codebot
-codebot setup                      # starts the private Ollama (model is unloaded after a reboot; first request reloads it)
-nvidia-smi -L                      # if the driver was installed, GPU offload becomes testable
-tests/run.sh                       # full suite, about 2.5 min (not run since the documentation pass: do this first)
-codebot bench --preflight          # about 5 min, must say PREFLIGHT OK (recalibrates the token ratio too)
-nohup codebot bench --suite pyutils --plan auto --name bench-auto-3 --max-minutes 120 --plan-minutes 50 > /tmp/b-auto.out 2>&1 &
-nohup codebot bench --suite pyhard  --plan fixed --name bench-hard-1 --max-minutes 150 > /tmp/b-hard.out 2>&1 &   # one at a time, not both
-codebot bench --thermal --minutes 4                                                                              # about 40 min
+codebot setup                      # starts the private Ollama (the model is unloaded after a reboot; the first request reloads it)
+tests/run.sh                       # full suite, about 2.5 min
+codebot bench --preflight          # about 5 min, must say PREFLIGHT OK
+nohup codebot bench --suite pyutils --plan auto --name bench-auto-N --max-minutes 120 --plan-minutes 40 > /tmp/b-auto.out 2>&1 &   # about 10 min with the native planner
+nohup codebot bench --suite pyhard  --plan fixed --name bench-hard-N --max-minutes 90 > /tmp/b-hard.out 2>&1 &                    # about 70 min; one model job at a time, never both
 ```
-Run model jobs **one at a time** and watch `sensors | grep Package` (the user's laptop sits at 90-93 C under load). Use a `Monitor` that reports only state changes
-(tasks.json statuses), not per-turn noise. After each run: put the results in `docs/ROADMAP.md`, commit, and tell the user what was found including what failed.
+Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Monitor` that reports only state changes (tasks.json statuses), not per-turn noise. After each run: put the results in `docs/ROADMAP.md`, commit, and tell the user what was found including what failed. Do not edit `lib/` while a bench is running (every engine step imports it fresh).
 
 ## 7. Working agreements and gotchas (learned the hard way)
 
@@ -122,14 +112,9 @@ Run model jobs **one at a time** and watch `sensors | grep Package` (the user's 
 
 ## 8. State of the working tree and the machine when this was written
 
-- Nothing is running: no loops, no benchmark, no model loaded (`ollama ps` empty), no `.active` project flags (so the login watchdog restarts nothing), no containers.
-- The user was about to **reboot the machine** (and may have installed the NVIDIA driver first). After a reboot: `codebot setup`; the first model request reloads the model.
-- User instruction at the end of the session: "right now should just be current state documentation, no more updates or regression tests". So this commit is documentation only; resume engineering
-  work (section 6) only when the user asks.
-- Leftover projects: `bench-fixed-2` (the 5/5 reference run, safe to keep or delete), `re1` (stopped legacy RE project). The abandoned planner attempts were deleted; their transcript
-  findings are in ROADMAP "Unattended planner, first attempt".
+- Nothing is running: no loops, no benchmark, model unloaded (`ollama ps` empty), no `.active` project flags, no containers. NVIDIA 595-open driver loaded (`nvidia-smi` works).
+- Bench projects from today's runs are kept under `projects/` (`bench-hard-1/2`, `bench-auto-3..6`; only `bench-auto-6` has a usable plan) and can be deleted. `bench-auto-3/4/5` hold real planner outputs worth keeping as examples of the mistakes the guard now catches.
 
 ## 9. Questions still open for the user
 
-Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Install the NVIDIA driver (needs sudo + reboot, enables the GPU sweep config)? Cooling pad or repaste if the sweep
-still shows 90 C+? The user's earlier message listing the bench metrics was truncated at "...every task that ended blocked, with the": confirm it means the exact question/reason.
+Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Add `codebot plan-auto`? Cooling pad or repaste? Should the interactive planner also move to declarative checks?
