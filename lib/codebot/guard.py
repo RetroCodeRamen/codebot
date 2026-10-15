@@ -17,6 +17,10 @@ def static_flaw(proj, check_text):
     if "`" in check_text: return "the command contains a backtick, which the shell runs as a command substitution; write the command itself with no backticks inside the outer backticks"
     if re.search(r"<[^<>\s]*[/.$][^<>\s]*>", check_text) or re.search(r"<[A-Za-z_ -]+>", check_text):
         return "the command contains an angle-bracket <placeholder>, which the shell reads as a redirect; write the real command, for example python3 $CODEBOT_CHECKS/t1_test.py"
+    if re.search(r"(?<![\w$}])(?:\S*/)?checks/[\w.\-]+", re.sub(r"\$\{?CODEBOT_CHECKS\}?/[\w.\-]+", "", check_text)):
+        return "the command names a script under checks/ by a relative or absolute path, but checks run inside the code directory where that path does not exist; use $CODEBOT_CHECKS/<name>"
+    if re.search(r"\bpython3?\s+\S+\.sh\b", check_text) or re.search(r"\b(?:ba)?sh\s+\S+\.py\b", check_text):
+        return "a .sh script must be run with bash and a .py script with python3 (the command runs one with the other's interpreter)"
     for m in re.finditer(r"\$\{?CODEBOT_CHECKS\}?/([\w.\-]+)", check_text):
         path = os.path.join(C.checks_dir(proj), m.group(1))
         if not os.path.isfile(path): return f"the script {m.group(1)} does not exist in the checks directory; write it there first"

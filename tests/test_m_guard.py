@@ -123,5 +123,16 @@ class TestStaticFlaws(Base):
     def test_ordinary_redirect_and_comparison_checks_are_not_flagged(self):
         for good in ("test -f a.txt", "grep -q hi a.txt", "python3 -c 'import sys; sys.exit(1 if 1 < 2 else 0)'", "cat a.txt | grep -q hi"):
             self.assertIsNone(guard.static_flaw(self.proj(), good), good)
+    def test_relative_or_absolute_checks_path_is_broken(self):
+        for bad in ("python3 checks/t1_test.py", "python3 ./checks/t1_test.py", "bash /x/projects/p/checks/t4.sh"):
+            r = self.verdict(bad); self.assertEqual(r["verdict"], "broken", bad); self.assertIn("$CODEBOT_CHECKS", r["out"])
+    def test_wrong_interpreter_is_broken(self):
+        self.script("t4.sh", "exit 1\n"); self.script("t5.py", "import sys; sys.exit(1)\n")
+        for bad in ("python3 $CODEBOT_CHECKS/t4.sh", "bash $CODEBOT_CHECKS/t5.py"):
+            r = self.verdict(bad); self.assertEqual(r["verdict"], "broken", bad); self.assertIn("interpreter", r["out"])
+    def test_codebot_checks_variable_form_is_not_flagged(self):
+        self.script("t1_test.py", "import sys; sys.exit(1)\n")
+        for good in ("python3 $CODEBOT_CHECKS/t1_test.py", "python3 ${CODEBOT_CHECKS}/t1_test.py"):
+            self.assertIsNone(guard.static_flaw(self.proj(), good), good)
 
 if __name__ == "__main__": unittest.main()
