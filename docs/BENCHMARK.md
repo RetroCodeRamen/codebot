@@ -56,7 +56,7 @@ Project level: wall time, planning time, tasks planned/verified/timed out/blocke
 
 ## Integrity
 
-Specs, tests, scoring and results live outside the workspace and the Docker sandbox; the worker only sees its workspace. Trial workspaces are created fresh (`bench/runs/<trial>/code`) and a run never reuses one; a re-planned trial is destroyed and recreated. Data are versioned (`version` in each manifest, recorded with every trial).
+Specs, tests, scoring and results live outside the workspace and the Docker sandbox; the worker only sees its workspace. Trial workspaces are created fresh (`bench/runs/<trial>/code`) and a run never reuses one; a re-planned trial is destroyed and recreated. Each trial also gets a private, empty memory (`MEMORY_DIR=projects/<trial>/memory`: lessons and sizing stats), so trials are independent of each other and of your real projects, and a benchmark never changes the shared `memory/` the real agent uses. Lessons a worker saves during a trial carry over to later tasks of that same trial only. Data are versioned (`version` in each manifest, recorded with every trial).
 
 ## Known limits (read before quoting numbers)
 

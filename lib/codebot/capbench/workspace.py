@@ -34,6 +34,7 @@ def create(home, name, seed_dirs, spec_text, cfg):
     if not os.listdir(code): open(os.path.join(code, ".gitkeep"), "w").close()
     _git(code, "init", "-q", "-b", "main"); _git(code, "add", "-A"); _git(code, "commit", "-qm", "seed")
     os.makedirs(state)
+    cfg = {"MEMORY_DIR": os.path.join(state, "memory"), **cfg}                                      # private lessons + sizing stats: trials stay independent and never touch the real agent's memory
     with open(os.path.join(state, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\n' + env_lines(cfg))
     for fn in ("PROGRESS.md", "ANSWERS.md"): open(os.path.join(state, fn), "w").close()
     with open(os.path.join(state, "SPEC.md"), "w") as f: f.write(spec_text)

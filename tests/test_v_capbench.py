@@ -85,6 +85,18 @@ class TestIsolation(CapCase):
             self.assertTrue(os.path.realpath(p.workdir).startswith(os.path.realpath(os.path.join(self.home, "bench", "runs")) + os.sep))
         with self.assertRaises(SystemExit): W.create(self.home, "cap-a", [M.seed_dir(m)], "spec", {})             # never reuses a workspace
         W.destroy(self.home, "cap-a"); self.assertFalse(os.path.exists(a.workdir)); self.assertTrue(os.path.exists(b.workdir))        # a clean reset touches only its own trial
+    def test_trials_keep_lessons_and_sizing_stats_private(self):
+        from codebot import memory, sizing
+        shared = os.path.join(self.home, "memory"); os.makedirs(shared, exist_ok=True)
+        before = sorted(os.listdir(shared))
+        m = M.load(self.home, 1); a = W.create(self.home, "cap-m1", [M.seed_dir(m)], "spec", W.project_settings(self.home, 1)); b = W.create(self.home, "cap-m2", [M.seed_dir(m)], "spec", W.project_settings(self.home, 1))
+        self.assertEqual(a.memdir, a.p("memory"))
+        lid = memory.add(a, "close files after parsing them", a.name, "T1"); memory.record_outcome(a, [lid], True)
+        sizing.record(a, {"id": "T1", "title": "add parse", "size": "S", "attempts": 1}, "done")
+        self.assertTrue(os.path.exists(a.p("memory", "lessons.raw.jsonl")) and os.path.exists(a.p("memory", "sizing.json")))
+        self.assertEqual(sorted(os.listdir(shared)), before)                                                                      # the real agent's memory is untouched
+        self.assertEqual(memory.select(b, {"title": "parse files", "files": []}), []); self.assertIn("no history", sizing.advice_line(b))   # and the next trial starts from nothing
+        os.remove(a.p("project.env")); self.assertEqual(Project("cap-m1", self.home).memdir, shared)                              # an ordinary project still uses the shared store
     def test_the_docker_sandbox_mounts_only_the_code_dir_never_the_catalog(self):
         from codebot import sandbox
         m = M.load(self.home, 1); p = W.create(self.home, "cap-c", [M.seed_dir(m)], "spec", W.project_settings(self.home, 1))

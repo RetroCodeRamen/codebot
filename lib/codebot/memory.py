@@ -5,7 +5,8 @@ import fcntl, hashlib, json, os, re
 from .config import now, append_jsonl
 
 def _paths(home):
-    d = os.path.join(home, "memory")
+    """`home` is the codebot home (its shared memory/ folder) or a Project, whose MEMORY_DIR may point elsewhere (benchmark trials get their own)."""
+    d = getattr(home, "memdir", None) or os.path.join(home, "memory")
     return d, os.path.join(d, "lessons.raw.jsonl"), os.path.join(d, "lessons.status.json"), os.path.join(d, "lessons.md")
 
 def _lid(text): return hashlib.sha1(re.sub(r"\s+", " ", text.strip().lower()).encode()).hexdigest()[:8]
@@ -57,9 +58,9 @@ def rate(e): return (e["pass"] + 1) / (e["used"] + 2)       # Laplace-smoothed p
 
 def select(proj, task, k=4, cap=700):
     """Relevant, non-pruned lessons for a task: [{"id","text"}]. Ranked by word overlap, then by evidence."""
-    raw = load_raw(proj.home)
+    raw = load_raw(proj)
     if not raw: return []
-    with _Status(proj.home) as s: st = {i: dict(e) for i, e in s["lessons"].items()}
+    with _Status(proj) as s: st = {i: dict(e) for i, e in s["lessons"].items()}
     words = set(re.findall(r"[a-z]{4,}", (task["title"] + " " + " ".join(task.get("files") or [])).lower()))
     scored = []
     for lid, r in raw.items():
@@ -101,7 +102,7 @@ def rebuild_md(home, cap=None):
     """Regenerate lessons.md from the raw log: active lessons, best evidence first, within the size cap."""
     d, _, _, md = _paths(home)
     if cap is None:
-        try: cap = int(next((l.split("=")[1].split("#")[0].strip().strip('"') for l in open(os.path.join(home, "config", "codebot.env")) if l.startswith("LESSONS_MAX=")), 4000))
+        try: cap = int(next((l.split("=")[1].split("#")[0].strip().strip('"') for l in open(os.path.join(getattr(home, "home", home), "config", "codebot.env")) if l.startswith("LESSONS_MAX=")), 4000))
         except (OSError, ValueError, StopIteration): cap = 4000
     raw = load_raw(home)
     with _Status(home) as s: st = {i: dict(e) for i, e in s["lessons"].items()}

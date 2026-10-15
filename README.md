@@ -90,7 +90,7 @@ A mode is a folder under `modes/` (`mode.json`, prompts, worker rules, a notes f
 
 `memory/lessons.raw.jsonl` is append-only and never rewritten. Every attempt records which lessons were in its context and whether it passed; lessons whose attempts pass clearly less often
 than the baseline get pruned (flagged, never deleted). `memory/lessons.md` is generated from the raw log, best evidence first, under `LESSONS_MAX`. `memory/sizing.json` and
-`projects/<p>/stats.json` track which task sizes succeed first try on this machine and feed the planner ("cut tasks to size S"). Edit `memory/expertise.md` freely.
+`projects/<p>/stats.json` track which task sizes succeed first try on this machine and feed the planner ("cut tasks to size S"). Edit `memory/expertise.md` freely. A project can point `MEMORY_DIR` (in its `project.env`) at its own folder; benchmark trials do this so they never read or change the shared memory.
 
 ## Per-project files (`projects/<name>/`)
 

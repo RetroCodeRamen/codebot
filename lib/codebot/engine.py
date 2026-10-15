@@ -189,7 +189,7 @@ def _step(proj, fresh, box):
             with open(proj.p("packed.json")) as f: packed = json.load(f).get("lessons", [])
         except (OSError, ValueError): pass
         rec["lessons"] = packed
-        M.record_outcome(proj.home, packed, passed); M.prune(proj.home)
+        M.record_outcome(proj, packed, passed); M.prune(proj)
         append_jsonl(proj.p("attempts.jsonl"), rec)
         task["history"].append({**{k: v for k, v in rec.items() if k != "files"}, "out_tail": err_text(task, res) if not passed else ""})
         action, signals, new_rung, why = None, [], None, ""

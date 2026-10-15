@@ -105,7 +105,7 @@ def record(proj, task, outcome):
     """Terminal outcome of a task: done | split | blocked. Updates project stats and the machine-wide stats."""
     size, kind, att = (task.get("size") or "M").upper(), kind_of(task["title"]), max(1, task.get("attempts", 1))
     _update(proj.p("stats.json"), size, kind, outcome, att)
-    _update(os.path.join(proj.home, "memory", "sizing.json"), size, kind, outcome, att)
+    _update(os.path.join(proj.memdir, "sizing.json"), size, kind, outcome, att)
 
 def load_stats(path):
     try:
@@ -114,7 +114,7 @@ def load_stats(path):
 
 def advice_line(proj, min_samples=5, target=0.7):
     """One line for the planner prompt: the largest size whose first-try success meets the target on this machine."""
-    mine, glob = load_stats(proj.p("stats.json")), load_stats(os.path.join(proj.home, "memory", "sizing.json"))
+    mine, glob = load_stats(proj.p("stats.json")), load_stats(os.path.join(proj.memdir, "sizing.json"))
     src = mine if sum(b["tasks"] for b in mine["by_size"].values()) >= min_samples else glob
     sizes = src["by_size"]
     if sum(b["tasks"] for b in sizes.values()) < min_samples:

@@ -35,6 +35,8 @@ class Project:
         self.workdir = penv.get("WORKDIR", "")
         self.rundir = penv.get("RUNDIR") or self.workdir
         self.mode = penv.get("MODE", "code")
+        md = penv.get("MEMORY_DIR")                                       # shared lessons + sizing stats; a benchmark trial gets a private one
+        self.memdir = os.path.join(self.home, md) if md else os.path.join(self.home, "memory")
     def p(self, *a): return os.path.join(self.state, *a)
     def get(self, key, default=None, cast=str):
         v = os.environ.get(key, self.cfg.get(key))

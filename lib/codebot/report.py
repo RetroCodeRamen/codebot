@@ -60,9 +60,9 @@ def build(proj):
     plan_log = _jsonl(proj.p("plan.log")); started = _started(proj); elapsed = time.time() - started if started else None
     done = [t for t in tasks if t["status"] == "done"]; blocked = [t for t in tasks if t["status"] == "blocked"]
     pending = [t for t in tasks if t["status"] in ("pending", "running")]
-    mem_raw = memory.load_raw(proj.home); since = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(started)) if started else ""
+    mem_raw = memory.load_raw(proj); since = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(started)) if started else ""
     new_lessons = [r for r in mem_raw.values() if r["ts"] >= since and r.get("project") == proj.name]
-    with memory._Status(proj.home) as st: pruned = [dict(id=i, **e) for i, e in st["lessons"].items() if e.get("pruned") and e.get("pruned_at", "") >= since]
+    with memory._Status(proj) as st: pruned = [dict(id=i, **e) for i, e in st["lessons"].items() if e.get("pruned") and e.get("pruned_at", "") >= since]
     aud = audit.report(proj); mine = [e for e in audit.entries(proj) if e.get("kind") == "model_request"]
     worker_secs = sum(a.get("worker_secs") or 0 for a in atts); check_secs = sum(a.get("secs") or 0 for a in atts)
     esc = [l for l in plan_log if l.get("op") == "escalate"]; model_ops = [l for l in plan_log if l.get("actor") == "model"]

@@ -145,7 +145,7 @@ def do_action(ctx, a):
         r = planops.apply(proj, op, "model")
         return json.dumps(r)[:600]
     if name == "note_lesson":
-        lid = memory.add(proj.home, str(a["text"]), proj.name, ctx.task["id"], ctx.attempt)
+        lid = memory.add(proj, str(a["text"]), proj.name, ctx.task["id"], ctx.attempt)
         if lid is None: raise ActionError("lesson too short or already known")
         return f"lesson {lid} saved"
     if name == "finish":

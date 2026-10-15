@@ -1,6 +1,6 @@
 # codebot: handoff (read this first in a new session)
 
-Last updated: 2026-10-15, after the declarative-checks redesign and its first real-model run. Everything described here is committed (`git log` in this repo); the full suite (333 tests) was green at the last engine change.
+Last updated: 2026-10-15 (late), after the Capability Ladder Benchmark, its first real-model smoke run, a project review and per-trial memory isolation. Everything described here is committed (`git log` in this repo); the full suite (401 tests) is green.
 This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/ROADMAP.md` has
 the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
 
@@ -30,8 +30,8 @@ Repo: `/home/aj/Documents/Development/codebot` (git, branch with ~27 commits; `p
 | `lib/codebot/capbench/` + `bench/ladder/catalog/` | Capability Ladder Benchmark (12 levels + growing notes project, hidden reference tests, per-task 90 min budget via `taskclock` setting `TASK_MAX_MINUTES`, resumable runs in `bench/results/ladder/`). Modules: `manifests`, `reference`/`refrun` (hidden-test oracle), `workspace`, `runner`, `results`, `metrics`, `classify`, `reports`, `notify`, `cli`. Tests `tests/test_v_capbench.py`, `tests/test_u_taskclock.py`. Docs: `docs/BENCHMARK.md` |
 | `modes/<name>/` | `code` (default) and `re` (reverse engineering with REA, `extends` code). `mode.json` + prompts (`plan.md`, `plan-quick.md`, `plan-auto.md`, `plan-repair.md`, `work.md`) + `worker.md` + notes + `verifiers/` |
 | `config/codebot.env` | all settings (documented inline). `config/Modelfile` (num_ctx 32768), `config/opencode.json`, `config/opencode-re.json` (generated) |
-| `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json` |
-| `tests/` | 400 test methods (`tests/run.sh [file]`, about 2.5 min for all, almost no CPU). **Verification status: the last full green run was 284 tests, before the documentation pass; `tests/test_r_docs.py` (16 docs-vs-code tests, added in that pass) was run on its own and passes; the full suite has NOT been re-run since the help text (`bin/codebot` usage heredoc) and `config/codebot.env` comments were edited. Re-run `tests/run.sh` first thing.** `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs |
+| `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json`. Shared by all projects unless a project sets `MEMORY_DIR` (benchmark trials do: `projects/<trial>/memory`). Committed to git but rewritten at run time, so runs leave it modified |
+| `tests/` | 401 test methods (`tests/run.sh [file]`, about 6 min for all, almost no CPU; full suite green on 2026-10-15). `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
@@ -74,6 +74,12 @@ Real-model (ornith:9b) evidence so far (details in ROADMAP "Real-model results")
 
 ## 5. In flight / not done (the honest list)
 
+**Capability Ladder Benchmark (`docs/BENCHMARK.md`): built, validated, smoke-tested once.** Catalog of 12 levels + 8-stage growing project, all oracles validated (`codebot bench validate`). One real-model trial (level 1, 4 min per task instead of 90): 6/8 tasks verified internally, 2 TIMEOUT, hidden tests 41/64 (64%), 3 VERIFICATION_GAP tasks (internal assertions accepted code the hidden tests reject). No capability numbers exist yet. Since the review on 2026-10-15 each trial has a private memory (`MEMORY_DIR`); the smoke run and every earlier bench run wrote into the shared `memory/` (the uncommitted `memory/sizing.json` and `memory/lessons.status.json` changes come from those runs; the user has not yet decided whether to keep or revert them).
+
+Project review (2026-10-15), weakest points in order: (a) the planner's assertions are often unsound or too weak (0/3 fully sound plans on pyutils after the grounding fixes; 3 verification gaps in the smoke run), and no audit exists that works without a reference solution; (b) no capability numbers; (c) no user-facing native planner command (item 4 below); (d) interactive planner still on raw shell checks; (e) splitter with assertions only fake-tested; (f) heat limits how much real evidence can be gathered.
+
+Older items:
+
 Done since the last handoff (details and numbers in `docs/ROADMAP.md`): NVIDIA driver installed and offload measured (thermal sweep, auto-fit puts about 35% of the layers on the 4 GB GPU: 3.4x the throughput of CPU-only, still 90+ C); hard suite run twice with the real model (4/5 verified, T5 blocked as designed, all ladder steps seen); the splitter bug found there fixed (guard on split children, children inherit `files`); the free-form opencode planner found unusable after three real runs and replaced by **declarative checks** (planner and splitter emit assertion data, the harness owns the runner, paths and check commands, exit status 0/1/2 is a contract the guard enforces). First real run of the new planner (`bench-auto-6`): plan in 178 s with 0 rejected checks, 5/5 tasks verified, 1 attempt each, 6.7 min.
 
 1. **Harder real-model evidence for the new planner.** `bench-auto-6` used the easy suite: no ladder step fired. Needed: a hard-suite spec run through `--plan auto` (needs a `spec.md` for `bench/suite/pyhard`, which has only a fixed plan today), and a few repeated runs to see how often the planner needs repair rounds and writes weak or unsatisfiable assertions.
@@ -92,6 +98,8 @@ tests/run.sh                       # full suite, about 2.5 min
 codebot bench --preflight          # about 5 min, must say PREFLIGHT OK
 nohup codebot bench --suite pyutils --plan auto --name bench-auto-N --max-minutes 120 --plan-minutes 40 > /tmp/b-auto.out 2>&1 &   # about 10 min with the native planner
 nohup codebot bench --suite pyhard  --plan fixed --name bench-hard-N --max-minutes 90 > /tmp/b-hard.out 2>&1 &                    # about 70 min; one model job at a time, never both
+codebot bench run --level 1 --repeats 3      # the first real capability number: up to 90 min per task, several hours per trial; only when the user asks (overnight)
+codebot bench run --level 1 --repeats 1 --mode reference-plan   # then: does the validated plan raise the hidden-test rate? (planning vs implementation)
 ```
 Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Monitor` that reports only state changes (tasks.json statuses), not per-turn noise. After each run: put the results in `docs/ROADMAP.md`, commit, and tell the user what was found including what failed. Do not edit `lib/` while a bench is running (every engine step imports it fresh).
 
@@ -115,9 +123,10 @@ Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Moni
 
 ## 8. State of the working tree and the machine when this was written
 
+- Ladder smoke run `20261015-152626-smoke1` is kept in `bench/results/ladder/` with its trial project `cap-20261015-152626-smoke1-l01-r1`.
 - Nothing is running: no loops, no benchmark, model unloaded (`ollama ps` empty), no `.active` project flags, no containers. NVIDIA 595-open driver loaded (`nvidia-smi` works).
 - Bench projects from today's runs are kept under `projects/` (`bench-hard-1/2`, `bench-auto-3..6`; only `bench-auto-6` has a usable plan) and can be deleted. `bench-auto-3/4/5` hold real planner outputs worth keeping as examples of the mistakes the guard now catches.
 
 ## 9. Questions still open for the user
 
-Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Add `codebot plan-auto`? Cooling pad or repaste? Should the interactive planner also move to declarative checks?
+Keep or revert the bench-polluted `memory/sizing.json` / `lessons.status.json`? Run level 1 at 90 min x3 overnight? Delete the old `bench-*`, `cmp*` and `cap-*` projects? Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Add `codebot plan-auto`? Cooling pad or repaste? Should the interactive planner also move to declarative checks?
