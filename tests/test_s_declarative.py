@@ -110,6 +110,16 @@ class TestPlanner(Sandboxed):
         good = {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}; self.start(["not json at all", good])
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info); self.assertEqual(info["rounds"][0]["ok"], False)
         self.assertIn("not valid JSON", self.fake.requests[1]["messages"][1]["content"])
+    def test_ungrounded_source_text_is_dropped_but_quoted_spec_text_is_kept(self):
+        spec = "1. Rename old_name to double in legacy.py."; keep = {"type": "file_not_contains", "path": "legacy.py", "text": "old_name"}; call = {"type": "call", "module": "m", "func": "f", "expect": 1}
+        drop = {"type": "file_contains", "path": "legacy.py", "text": "def double"}
+        self.assertEqual(planner.ungrounded([keep, call, drop], spec), ([keep, call], [drop]))
+        self.assertEqual(planner.spec_items("1. a\n2) b\n  3. c\nnot 4. item"), 3)
+    def test_a_plan_with_fewer_tasks_than_spec_items_is_sent_back(self):
+        good = {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}; two = {**PLAN_REPLY, "tasks": [PLAN_REPLY["tasks"][0], {**PLAN_REPLY["tasks"][0], "title": "Also"}]}
+        self.start([good, two]); open(os.path.join(self.state, "SPEC.md"), "w").write("1. Add slugify.\n2. Add title.\n")
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
+        self.assertEqual(info["rounds"][0]["rc"], 1); self.assertIn("numbered items", self.fake.requests[1]["messages"][1]["content"])
     def test_no_spec_means_no_plan(self):
         self.fake = FakeOllama([]); self.addCleanup(self.fake.stop); self.set_env(OLLAMA_PORT=self.fake.port)
         self.assertEqual(planner.plan_auto(self.home, self.name, 60, log=lambda *_: None)["rounds"], [])

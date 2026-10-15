@@ -42,12 +42,27 @@ def _chat(proj, system, user, schema, left, num_predict=5000):
     try: return json.loads(r["content"]), None
     except ValueError: return None, "the reply was not valid JSON (cut off by the token limit?)" if r.get("done_reason") == "length" else "the reply was not valid JSON"
 
-def _write(proj, plan):
+def spec_items(spec):
+    """Number of numbered items ('1. ...' or '2) ...') at the start of a line in the specification."""
+    return len(re.findall(r"^\s*\d+[.)]\s", spec, re.M))
+
+def ungrounded(asserts, spec):
+    """Source-text assertions (file_contains / file_not_contains) must quote text the specification itself contains; anything else is the model's own
+    invention (`def double` where the spec only says 'rename to double'). Returns (kept assertions, dropped assertions)."""
+    flat = " ".join(spec.split()); kept, dropped = [], []
+    for a in asserts if isinstance(asserts, list) else []:
+        bad = isinstance(a, dict) and a.get("type") in ("file_contains", "file_not_contains") and isinstance(a.get("text"), str) and " ".join(a["text"].split()) not in flat
+        (dropped if bad else kept).append(a)
+    return kept, dropped
+
+def _write(proj, plan, spec=""):
     """Validate and write every task's spec, then PLAN.md. Returns {task number: error} for tasks whose assertions are unusable (no spec is written for them)."""
     bad, tasks = {}, []
     K.ensure_runner(proj)                                  # the trusted runner must be in checks/ before the guard runs the checks (freeze would copy it anyway)
     for i, t in enumerate(plan["tasks"], 1):
-        asserts = K.prepare(t.get("asserts")); err = A.validate(asserts)
+        asserts = K.prepare(t.get("asserts"))
+        if spec and isinstance(asserts, list): asserts, _ = ungrounded(asserts, spec)         # over-specification is dropped, not argued about: the model repeated it in every repair round
+        err = A.validate(asserts)
         if err: bad[i] = err
         else: K.write_spec(proj, f"T{i}", asserts)
         deps = [d for d in (t.get("deps") or []) if isinstance(d, int) and 1 <= d < i]
@@ -66,7 +81,7 @@ def _evaluate(proj, bad):
     return sorted(rejected, key=lambda r: int(r["id"][1:]))
 
 def _why(r):
-    if r["verdict"] == "passes": return "ALL assertions already hold on the current code, so they test nothing; assert behaviour that does not exist yet"
+    if r["verdict"] == "passes": return "ALL assertions already hold on the current code, so they test nothing. Assert what is DIFFERENT after the work: call or run the new behaviour or new name, and for anything the task removes or renames use file_not_contains with the OLD text (never file_contains for it)"
     return "the assertions are unusable: " + (r["out"] or "unknown error").strip().replace("\n", " ")[:300]
 
 def _sizing(home, name):
@@ -88,6 +103,9 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print):
             if plan is None:
                 user = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n{repo or '(empty)'}\n\n{('SIZING HISTORY: ' + sizing) if sizing else ''}\n{note}\nReply with the JSON plan."
                 plan, err = _chat(proj, GUIDE, user, plan_schema(), left)
+                want = spec_items(spec)
+                if plan is not None and plan.get("tasks") and len(plan["tasks"]) < want:
+                    err, plan = f"it had {len(plan['tasks'])} task(s) but the specification has {want} numbered items; plan one task per item", None
                 if plan is None or not plan.get("tasks"): plan, note, rc = None, f"Your previous reply was rejected: {err or 'it had no tasks'}. Reply with the complete JSON plan.", 1
             else:
                 lines = [f"T{r['id'][1:]} \"{r['title'][:70]}\": {_why(r)}\n  current assertions: {json.dumps((K.read_spec(proj, r['id']) or plan['tasks'][int(r['id'][1:]) - 1].get('asserts')))[:700]}" for r in last]
@@ -99,7 +117,7 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print):
                         if isinstance(t.get("id"), int) and 1 <= t["id"] <= len(plan["tasks"]): plan["tasks"][t["id"] - 1]["asserts"] = t.get("asserts")
         except ollama.ModelError as e: log(f"planner round {k}: model error: {e}"); rc = 1; note = ""
         if plan is not None and rc == 0:
-            bad = _write(proj, plan); rejected = _evaluate(proj, bad)
+            bad = _write(proj, plan, spec); rejected = _evaluate(proj, bad)
             for r in rejected: guard.log_rejection(proj, r["id"], r["title"], r["check"], r["verdict"], r["out"], "planner")
         ok = plan is not None and rc == 0 and not rejected
         info["rounds"].append({"n": k, "secs": round(time.time() - r0), "rc": rc, "rejected": [f"{r['id']}:{r['verdict']}" for r in rejected], "violations": [], "ok": ok})

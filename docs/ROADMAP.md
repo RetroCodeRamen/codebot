@@ -474,3 +474,15 @@ Qwen is faster per token (about 18% generation, about 2x prompt processing) but 
 With the revised prompt ornith collapsed the plan to a single task in 2 of 3 samples (planned only the first spec item), qwen made 5-task plans with some unsound tasks and needed a repair round in 2 of 3. Remaining unsound checks are over-specification the spec does not support (`def double` required in `main_app.py`, invented edge cases such as `parse_kv('d=')`, `main_app.py` expected to print 84 when the spec says 42). Mean planning time 88 s (ornith) and 183 s (qwen). Not yet built: a completeness check (a plan with fewer tasks than the spec has numbered items) and a grounding check (a `file_contains` text the spec never mentions).
 
 Findings that changed the code along the way: the first strict schema made `args` optional on `call` assertions (fixed: required); `clean()` dropped empty-string expectations (fixed); the planner prompt's worked examples were copied from the pyutils suite (replaced with an unrelated domain, so earlier planner samples were slightly easier than later ones).
+
+### Planner: completeness and grounding checks, 2026-10-15
+
+Harness-side, generic: (1) a plan with fewer tasks than the spec has numbered items is rejected and re-requested (`planner.spec_items`); (2) `file_contains`/`file_not_contains` text that the spec never contains is DROPPED (`planner.ungrounded`; first tried as a rejection, but ornith repeated `def double` in every repair round); (3) the "already holds" repair message says what to assert for removals/renames. Ornith, `--plan auto --plan-only`, 3 plans per variant, audited against the reference solution:
+
+| variant | plans passing the guard | fully sound plans | notes |
+|---|---|---|---|
+| grounding as rejection (cmp6) | 1/3 | 1/3 | the other two stuck on `def double` / `def add(a, b):` in every round; no single-task collapses |
+| grounding as drop (cmp7) | 1/3 | 0/3 | T5 (rename) left with only "prints 42", which already holds on the seed (2x); one plan asserted `old_name` still present |
+| drop + better repair hint (cmp8) | 2/3 | 0/3 | unsound T5 copied the prompt's `shapes` example (`double(3,4)==12`, `raises ValueError`); unsound T3 once |
+
+Conclusion: completeness removed the single-task collapses; grounding removes invented source text; but the 9B model still cannot reliably write rename/removal assertions, and the baseline guard cannot tell (it accepted plans the reference audit calls unsound). Prompt tweaking has reached diminishing returns on this suite. Next levers: a human-reviewed plan for important projects (`codebot plan`), or a harness-side audit that does not need a reference solution.
