@@ -13,7 +13,9 @@ def main():
     task, err = d["task"], d.get("error", "")
     rm, _ = packer.repo_map(proj.rundir, 2500)
     prompt = (f"A task keeps failing and must be split into 2-4 smaller steps done in order. Each step needs its own acceptance check: ONE shell "
-              f"command run in the code directory that exits 0 only when that step is done and FAILS right now. Steps must be small (one file or one behaviour).\n\n"
+              f"command run in the code directory that exits 0 only when that step is done and FAILS right now. Steps must be small (one file or one behaviour). "
+              f"A check must ASSERT the behaviour (compare the result and exit non-zero when it is wrong); never just print, cat or grep. If a step requires an error to be raised, "
+              f"catch it inside the check (try/except) and exit 0 only when it was raised; an uncaught error makes the check fail even when the code is right.\n\n"
               f"TASK: {task['title']}\nFINAL CHECK (kept as the last gate): {task.get('check')}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
     try:
         r = ollama.chat(proj, [{"role": "system", "content": "You decompose coding tasks. Reply with JSON only."}, {"role": "user", "content": prompt}],

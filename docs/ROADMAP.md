@@ -412,3 +412,13 @@ The default (Ollama auto-fit) now offloads about 35% of the layers to the RTX 30
 | CPU only, 4 threads (`num_gpu=0`) | 1.82 | 6.8 | 36 | 90.9 (95) | 3268 |
 
 Findings: GPU offload is 3.4x the throughput of CPU-only (cold prompt about 10x, generation +34%) but does not run cooler, since the CPU still does 65% of the work. Fewer threads only lose speed at the same ~91 C. Power-saver is the only config that runs cool (65 C) at 54% of the default throughput. The thermal guard (pause at 92 C) is bypassed in the sweep itself (`THERMAL_GUARD=0`). Not yet tried: smaller `num_ctx` to leave VRAM for more GPU layers.
+
+### Hard suite (pyhard, fixed plan), first real-model run, 2026-10-14 (stopped by the user before the end)
+
+Run `bench-hard-1`, GPU auto-offload. T1 and T2 passed on attempt 1. T3 failed 4 attempts, was split (T3.1-3.3, all done). T4 (textwrap `wrap`) failed 4 attempts (rung 1 then 2), split into T4.1-4.3, T4.3 failed 7 attempts, split again (T4.3.1-2) and ended **blocked** with all ladder steps used (retry-with-error, reset+retry fresh, split, alternate prompt; stuck signals `same_failure`, `no_progress`). T5 (license key only the user knows) ran the whole ladder, split (T5.1-2) and ended **blocked** with the intended question: `T5 "Set license_key in config.json to the production license key (known only to the user, not to you)" failed through the whole ladder ... What should I do?`.
+
+Bugs this run found in the splitter (the ladder itself behaved as designed):
+- Split children never went through the baseline guard. Children passed with 0 attempts on checks that cannot fail: `cat config.json`, a `grep`, a `print(...)` with no comparison, a check ending in `echo "exit=$?"`.
+- A child check could be impossible to pass: T4.3's check called `wrap('a', 0)` without catching the ValueError, so the model's correct code crashed the check. T4.3 was blocked by that check, and the question sent to the user was misleading.
+- Children lost the parent's `files`.
+Fixes (tested, `tests/test_d_planops.py::TestSplitGuard`): `_split` probes every child check with the baseline guard (a rejected split falls through to the next rung as "no split available"), children inherit the parent's `files`, and the splitter prompt now requires asserting checks that catch expected exceptions. The guard cannot detect an impossible check; only the prompt change addresses that. The hard suite needs a re-run to confirm the effect.

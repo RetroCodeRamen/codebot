@@ -59,10 +59,20 @@ def _split(proj, data, op):
     subs = op.get("subtasks") or []
     if not (2 <= len(subs) <= 6): raise Rejected("split needs 2-6 subtasks")
     for s in subs: _need_check(proj, s)
+    fx_before = set(os.listdir(C.checks_dir(proj))) if os.path.isdir(C.checks_dir(proj)) else set()
     _fixtures(proj, op.get("fixtures"))
+    if GD.enabled(proj):                                          # same guard as add_task: a child check that already passes (or is broken) tests nothing
+        for i, s in enumerate(subs, 1):
+            pr = GD.probe(proj, s["check"], proj.get("CHECK_TIMEOUT", 600, int)) if (s.get("check") or "").strip() else {"verdict": "ok", "out": ""}
+            if pr["verdict"] != "ok":
+                for n in set(os.listdir(C.checks_dir(proj))) - fx_before:
+                    try: os.remove(os.path.join(C.checks_dir(proj), n))
+                    except OSError: pass
+                GD.log_rejection(proj, f"{parent['id']}.{i}", s.get("title", ""), s["check"], pr["verdict"], pr["out"], op.get("_actor", "model"))
+                raise Rejected(f"subtask {i}: " + GD.REASON[pr["verdict"]])
     kids, prev_dep = [], list(parent["deps"])
     for i, s in enumerate(subs, 1):
-        k = T.new_task(f"{parent['id']}.{i}", s["title"].strip(), s.get("check") or None, s.get("files"), s.get("size") or "S", list(prev_dep), parent["id"])
+        k = T.new_task(f"{parent['id']}.{i}", s["title"].strip(), s.get("check") or None, s.get("files") or list(parent.get("files") or []), s.get("size") or "S", list(prev_dep), parent["id"])
         kids.append(k); prev_dep = [k["id"]]                 # children run in order
     idx = data["tasks"].index(parent); data["tasks"][idx:idx] = kids
     parent["deps"] = list(parent["deps"]) + [k["id"] for k in kids]   # parent keeps its ORIGINAL check as the final gate

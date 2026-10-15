@@ -108,4 +108,21 @@ class TestPrecheck(Base):
         self.write_code("a.txt", "wrong\n"); engine.step(self.proj())
         seen = self.read("seen_error"); self.assertNotEqual(seen, "EMPTY"); self.assertIn("exited with status", seen)
 
+class TestSplitGuard(Base):
+    """Split children go through the same baseline guard as add_task, and inherit the parent's files."""
+    def setUp(self): super().setUp(); self.set_env(CHECK_BASELINE_GUARD="1")
+    def split(self, c1, c2): return self.op(op="split_task", task="T1", reason="too big", subtasks=[{"title": "one", "check": c1}, {"title": "two", "check": c2}])
+    def test_child_check_that_already_passes_rejects_the_split(self):
+        r = self.split("cat /dev/null", "test -f a2.txt")                   # always exits 0: tests nothing
+        self.assertFalse(r["ok"], r); self.assertIn("subtask 1", r["error"] if "error" in r else str(r)); self.assertEqual(self.ids(), ["T1", "T2"])
+        self.assertTrue(any(l.get("op") == "check_rejected" and l["task"] == "T1.1" for l in self.planlog()))
+    def test_broken_child_check_rejects_the_split(self):
+        r = self.split("test -f a1.txt", "no_such_command_xyz"); self.assertFalse(r["ok"], r); self.assertEqual(self.ids(), ["T1", "T2"])
+    def test_good_children_inherit_parent_files(self):
+        r = self.split("test -f a1.txt", "test -f a2.txt"); self.assertTrue(r["ok"], r)
+        self.assertEqual(T.get(self.data(), "T1.1")["files"], ["a.txt"]); self.assertEqual(T.get(self.data(), "T1.2")["files"], ["a.txt"])
+    def test_child_keeps_its_own_files_when_given(self):
+        r = self.op(op="split_task", task="T1", reason="r", subtasks=[{"title": "one", "check": "test -f a1.txt", "files": ["x.py"]}, {"title": "two", "check": "test -f a2.txt"}])
+        self.assertTrue(r["ok"], r); self.assertEqual(T.get(self.data(), "T1.1")["files"], ["x.py"])
+
 if __name__ == "__main__": unittest.main()
