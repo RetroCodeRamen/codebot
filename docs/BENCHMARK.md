@@ -65,3 +65,7 @@ Specs, tests, scoring and results live outside the workspace and the Docker sand
 - Reference plans exist for levels 1-12 only; the growing project has none, so `--mode reference-plan` is unavailable there.
 - Interactive mode (`--interactive`, a blocked task waits for `codebot answer`) is covered by unit tests, not by a live run. The supervisor loop path is covered by the existing loop tests and one short real-model smoke run; no full 90-minute run, no full ladder and no growing run has been executed by the author of this framework. A full ladder with 3 repeats takes many days on this machine.
 - Results from different models, seeds or `--task-minutes` values are not comparable; the report records all three.
+
+## Smoke test on record (2026-10-15, ornith:9b, CPU, `codebot bench run --level 1 --task-minutes 4 --plan-minutes 10 --repeats 1`)
+
+One trial through the real planner, bash supervisor, worker, assertion runner and hidden tests: plan 6.3 min (8 tasks, sound), coding 18.3 min, 6 of 8 tasks verified internally, 2 tasks hit the 4-minute budget and were recorded `TIMEOUT` (the other tasks continued), hidden tests 41/64 (64%), 3 `VERIFICATION_GAP` classifications (tasks the internal check accepted but the hidden tests reject), thermal pauses counted inside the budgets (0.0-0.7 min per task), CPU 85-94 C throughout. This proves the pipeline end to end with a shortened budget; it says nothing about the 90-minute capability numbers.
