@@ -43,7 +43,7 @@ def mode(proj):
 def _docker_argv(proj, name, cwd, env, rw, ro, image):
     mc = modes.sandbox_cfg(proj)
     mem, pids = mc["memory"] or proj.get("SANDBOX_MEMORY", "2g"), proj.get("SANDBOX_PIDS", "512")
-    a = ["docker", "run", "--rm", "--name", name, "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+    a = ["docker", "run", "--rm", "--name", name, "--label", f"codebot.project={proj.name}", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
          "--pids-limit", pids, "--memory", mem, "--user", f"{os.getuid()}:{os.getgid()}", "--tmpfs", "/tmp:rw,exec,size=512m",
          "-v", "/usr:/usr:ro", "-v", "/etc/passwd:/etc/passwd:ro", "-v", "/etc/group:/etc/group:ro", "-w", cwd]
     for p in rw: a += ["-v", f"{p}:{p}"]

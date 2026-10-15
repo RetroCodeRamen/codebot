@@ -1,7 +1,7 @@
 """Controlled replanning. The model may ADD, SPLIT or REORDER tasks. It may never delete a task, edit or weaken a
 check, rename, or set a status. Every op (accepted or rejected) is logged with a reason in plan.log."""
 import os, re
-from . import tasks as T, checks as C, guard as GD
+from . import taskclock as TC, tasks as T, checks as C, guard as GD
 from .config import now, append_jsonl
 
 ALLOWED = ("add_task", "split_task", "reorder")
@@ -35,6 +35,7 @@ def _add(proj, data, op):
     for d in deps:
         if T.get(data, d) is None: raise Rejected(f"unknown dep {d}")
     t = T.new_task(f"T{_next_num(data)}", spec["title"].strip(), (spec.get("check") or None), spec.get("files"), spec.get("size"), deps)
+    if os.environ.get("CODEBOT_TASK_ID"): t["budget_root"] = TC.root_of(os.environ["CODEBOT_TASK_ID"])      # a task the worker adds while running Tn spends Tn's time budget
     pos = len(data["tasks"])
     if op.get("after"):
         a = T.get(data, op["after"])
@@ -73,6 +74,7 @@ def _split(proj, data, op):
     kids, prev_dep = [], list(parent["deps"])
     for i, s in enumerate(subs, 1):
         k = T.new_task(f"{parent['id']}.{i}", s["title"].strip(), s.get("check") or None, s.get("files") or list(parent.get("files") or []), s.get("size") or "S", list(prev_dep), parent["id"])
+        if parent.get("budget_root"): k["budget_root"] = parent["budget_root"]
         kids.append(k); prev_dep = [k["id"]]                 # children run in order
     idx = data["tasks"].index(parent); data["tasks"][idx:idx] = kids
     parent["deps"] = list(parent["deps"]) + [k["id"] for k in kids]   # parent keeps its ORIGINAL check as the final gate

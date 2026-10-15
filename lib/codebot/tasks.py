@@ -3,7 +3,8 @@ import hashlib, json, os, fcntl, shutil, tempfile, re
 from contextlib import contextmanager
 from .config import now
 
-STATUSES = ("pending", "running", "done", "blocked")
+STATUSES = ("pending", "running", "done", "blocked", "timeout", "skipped")
+TERMINAL_BAD = ("timeout", "skipped")          # timeout = the task's wall-clock budget ran out; skipped = a prerequisite ended without being verified
 
 def new_task(tid, title, check=None, files=None, size=None, deps=None, parent=None):
     return {"id": tid, "title": title, "check": check, "files": files or [], "size": size or "M",
@@ -62,7 +63,20 @@ def counts(data):
     for t in data["tasks"]: c[t["status"]] += 1
     return c
 
-_BOX = {"pending": " ", "running": " ", "done": "x", "blocked": "!"}
+_BOX = {"pending": " ", "running": " ", "done": "x", "blocked": "!", "timeout": "T", "skipped": "-"}
+
+def resolve_skips(data, block_terminal=False):
+    """Pending tasks whose prerequisite can never be verified (timeout / skipped, and blocked when a block is terminal) become `skipped`: they must not run
+    against code that lacks their prerequisite. Repeats until stable. Returns the ids that changed."""
+    dead = {"timeout", "skipped"} | ({"blocked"} if block_terminal else set()); changed = []
+    while True:
+        by = {t["id"]: t for t in data["tasks"]}; hit = False
+        for t in data["tasks"]:
+            if t["status"] != "pending": continue
+            bad = [d for d in t["deps"] if d in by and by[d]["status"] in dead]
+            if bad:
+                t["status"] = "skipped"; t["skip_reason"] = f"prerequisite {bad[0]} ended as {by[bad[0]]['status']}"; changed.append(t["id"]); hit = True
+        if not hit: return changed
 
 def render_plan(proj, data):
     """Regenerate PLAN.md (human view). Keeps `- [ ] ` / `- [x] ` lines the bash side counts."""
@@ -72,6 +86,7 @@ def render_plan(proj, data):
         if t.get("check"): out.append(f"  - check: `{t['check']}`")
         if t.get("files"): out.append(f"  - files: {', '.join(t['files'])}")
         if t["status"] == "blocked" and t.get("blocked_question"): out.append(f"  - blocked: {t['blocked_question']}")
+        if t["status"] in ("timeout", "skipped"): out.append(f"  - {t['status']}: {t.get('skip_reason') or t.get('timeout_reason') or ''}".rstrip())
     tmp = proj.p(".PLAN.md.tmp")
     with open(tmp, "w") as f: f.write("\n".join(out).strip() + "\n")
     os.replace(tmp, proj.p("PLAN.md"))

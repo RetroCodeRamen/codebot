@@ -242,6 +242,10 @@ loop_engine() {
           notify "codebot: $NAME needs you ($tid)" "$(jq -r .question <<< "$ev")
 
 (The run continues with other tasks. You can also answer from your phone via $NTFY_TOPIC-reply, e.g. \"$tid: your guidance\")" urgent sos 1; fi ;;
+      task_timeout) notify "codebot: $NAME task timed out" "$(jq -r .root <<< "$ev") used its whole time budget ($(jq -r '(.used_s/60|floor)' <<< "$ev") min of $(jq -r '(.limit_s/60|floor)' <<< "$ev")). Unfinished: $(jq -r '.unfinished|join(", ")' <<< "$ev"); skipped dependents: $(jq -r '.skipped|join(", ")' <<< "$ev"). The run continues with independent tasks." default hourglass_flowing_sand ;;
+      finished_incomplete)
+        notify "codebot: $NAME finished (incomplete)" "Every task reached a final state but not all were verified: $(jq -c .counts <<< "$ev")" high warning
+        send_report; finished=1; rm -f "$S/.active" ;;
       done_with_blocked|stalled)
         if [[ "$idle_note" != "$(jq -c .counts <<< "$ev")" ]]; then idle_note="$(jq -c .counts <<< "$ev")"
           notify "codebot: $NAME waiting on you" "Everything it can do is done. $(jq -r '.counts.blocked' <<< "$ev") blocked task(s) need an answer: codebot answer $NAME \"T#: guidance\"" high hourglass 1; send_report; fi
@@ -410,6 +414,8 @@ cmd_tidy() {   # evidence-backed memory needs no model: prune lessons that corre
   ensure_ollama; tidy_memory; }
 cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" -n 20 2>/dev/null; echo; git -C "$WORKDIR" diff --stat "HEAD...codebot/$NAME" 2>/dev/null || git -C "$RUNDIR" diff --stat
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
+cmd_notify() { # <title> <message> [priority] [tags]: push through the same ntfy path (and egress log) the loops use; honours NTFY_ENABLED
+  [[ -n "${2:-}" ]] || die "usage: codebot notify <title> <message> [priority] [tags]"; notify "$1" "$2" "${3:-default}" "${4:-robot}"; }
 cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_mark; echo "sent to $NTFY_SERVER/$NTFY_TOPIC"; }
 
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
@@ -418,6 +424,7 @@ case "$c" in
   setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|report|__loop) "cmd_$c" "$@";;
   check-plan) cmd_check_plan "$@";;
   bench) cmd_bench "$@";;
+  notify) cmd_notify "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
   re-config) cmd_re_config;;
@@ -448,6 +455,7 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
+  notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)
   engine <cmd> <name>     low-level access to codebot-engine (step, plan-op, split, sizing, memory, ...)
   (phone) publish pause|resume|stop|status|<answer> to <ntfy topic>-reply
 USAGE

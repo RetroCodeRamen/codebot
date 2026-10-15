@@ -1,7 +1,8 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, re, subprocess, sys, time
-from . import tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD, guard as GD
+from . import taskclock as TC, tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD, guard as GD
 from .config import Project, now, append_jsonl
+from .proc import kill_group
 from .planparse import parse_plan
 
 def freeze_project(proj, allow_unchecked=False, allow_passing=False):
@@ -38,9 +39,16 @@ def _worker_cmd(proj):
     if proj.get("WORKER") == "native": return f"{sys.executable} -m codebot.worker"
     return None
 
-def run_worker(proj, task, attempt, last_error, extra_env=None):
+def kill_sandbox_containers(proj):
+    """A killed worker may leave a sandbox container running to its own timeout; containers carry the project label."""
+    try:
+        ids = subprocess.run(["docker", "ps", "-q", "--filter", f"label=codebot.project={proj.name}"], capture_output=True, text=True, timeout=20).stdout.split()
+        if ids: subprocess.run(["docker", "kill", *ids], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError): pass
+
+def run_worker(proj, task, attempt, last_error, extra_env=None, timeout=None):
     """Pluggable worker. Contract: runs in the code dir, gets the task via env/file, may edit code; its exit
-    status and any claim of success are ignored: only the frozen check decides."""
+    status and any claim of success are ignored: only the frozen check decides. `timeout` (seconds) is enforced by killing the whole process group."""
     cmd = _worker_cmd(proj)
     if not cmd: return {"rc": None, "note": "no WORKER_CMD configured"}
     tfile = proj.p(".current_task.json"); C.jdump(tfile, task, indent=1)
@@ -50,12 +58,13 @@ def run_worker(proj, task, attempt, last_error, extra_env=None):
                CODEBOT_LAST_ERROR_FILE=efile, CODEBOT_RUNDIR=proj.rundir, CODEBOT_STATE=proj.state,
                CODEBOT_CHECKS=C.checks_dir(proj), CODEBOT_ANSWERS_FILE=proj.p("ANSWERS.md"), CODEBOT_HOME=proj.home,
                CODEBOT_PROJECT=proj.name, PYTHONPATH=LIBDIR + os.pathsep + os.environ.get("PYTHONPATH", ""), **(extra_env or {}))
-    t0 = time.time()
+    t0 = time.time(); limit = timeout if timeout is not None else proj.get("ITER_TIMEOUT", 2700, int)
+    proc = subprocess.Popen(cmd, shell=True, cwd=proj.rundir, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
     try:
-        r = subprocess.run(cmd, shell=True, cwd=proj.rundir, env=env, capture_output=True, text=True,
-                           timeout=proj.get("ITER_TIMEOUT", 2700, int))
-        return {"rc": r.returncode, "secs": round(time.time() - t0, 1), "tail": (r.stdout + r.stderr)[-800:]}
+        out, _ = proc.communicate(timeout=limit)
+        return {"rc": proc.returncode, "secs": round(time.time() - t0, 1), "tail": (out or "")[-800:]}
     except subprocess.TimeoutExpired:
+        kill_group(proc); kill_sandbox_containers(proj)
         return {"rc": 124, "secs": round(time.time() - t0, 1), "tail": "[worker timed out]"}
 
 def err_text(task, res):
@@ -70,10 +79,43 @@ def _block(proj, task, why_text, res):
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
                  "reason": task["blocked_question"][:400], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
 
+def block_terminal(proj): return str(proj.get("BLOCK_TERMINAL", "0")).lower() in ("1", "true", "yes")
+
+def _expire_exhausted(proj, data):
+    """Tasks whose root budget is already used up (e.g. after a restart) end as `timeout` before anything runs. Returns the ids changed."""
+    lim = TC.limit_s(proj)
+    if not lim: return []
+    out = []
+    for t in data["tasks"]:
+        if t["status"] in ("pending", "running") and TC.used(proj, TC.root_of(t)) >= lim:
+            t["status"] = "timeout"; t["timeout_reason"] = f"the {int(lim // 60)} min budget of {TC.root_of(t)} was already used up"; out.append(t["id"])
+    return out
+
+def _time_out(proj, store, data, task, clk, why):
+    """The root task's budget ran out: every unfinished task of that root ends as `timeout`, dependents become `skipped`, and the code goes back
+    to the last verified checkpoint so later tasks (and the final reference check) see a consistent tree. Caller holds the store lock."""
+    root = TC.root_of(task); fam = [t for t in data["tasks"] if TC.root_of(t) == root and t["status"] in ("pending", "running")]
+    for t in fam: t["status"] = "timeout"; t["timeout_reason"] = why
+    skipped = T.resolve_skips(data, block_terminal(proj))
+    G.reset_to_last_good(proj); store.save(data)
+    used = round(clk.used(), 1) if clk else None
+    append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "timeout", "ok": True, "reason": f"{root}: {why}",
+                 "before": [(t["id"], "pending") for t in fam], "after": [(t["id"], "timeout") for t in fam]})
+    append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "timeout", "task": task["id"], "root": root, "used_s": used, "skipped": skipped})
+    TC.mark(proj, root, "timeout", clk.remaining() if clk else None)
+    return {"event": "task_timeout", "task": task["id"], "root": root, "used_s": used, "limit_s": TC.limit_s(proj), "unfinished": [t["id"] for t in fam], "skipped": skipped}
+
 def step(proj, fresh=False):
+    """One attempt at the next task (see _step). The task's budget interval is always closed, even when the step raises."""
+    box = {"clk": None}
+    try: return _step(proj, fresh, box)
+    finally:
+        if box["clk"]: box["clk"].end()
+
+def _step(proj, fresh, box):
     """One attempt at the next task. Returns an event dict for the supervisor (the bash loop) to act on.
     fresh=True forces a reset to the last verified checkpoint before the worker runs (the ladder does this at rung 2)."""
-    store = T.TaskStore(proj)
+    store = T.TaskStore(proj); TC.settle(proj)
     if not store.exists(): return {"event": "error", "error": "not frozen: run `codebot freeze`"}
     if os.path.realpath(proj.rundir).startswith(os.path.realpath(proj.state) + os.sep):
         return {"event": "error", "error": f"the code directory ({proj.rundir}) is inside the harness state directory, so the worker could touch nothing. "
@@ -91,20 +133,24 @@ def step(proj, fresh=False):
             if t["status"] == "running":
                 t["status"] = "pending"; t["attempts"] = max(0, t["attempts"] - 1)
                 append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "interrupted", "task": t["id"]})
+        _expire_exhausted(proj, data); T.resolve_skips(data, block_terminal(proj))
         task = T.next_task(data)
         if task is None:
             c = T.counts(data); store.save(data)
             if c["pending"] == 0 and c["running"] == 0:
-                return {"event": "all_done" if c["blocked"] == 0 else "done_with_blocked", "counts": c, "tamper": tamper}
+                if c["blocked"] == 0 and not c["timeout"] and not c["skipped"]: return {"event": "all_done", "counts": c, "tamper": tamper}
+                if c["blocked"] and not block_terminal(proj) and not c["timeout"] and not c["skipped"]: return {"event": "done_with_blocked", "counts": c, "tamper": tamper}
+                return {"event": "finished_incomplete", "counts": c, "tamper": tamper}     # some tasks ended as timeout/skipped (or a block is terminal): nothing more can happen
             return {"event": "stalled", "counts": c, "tamper": tamper, "note": "remaining tasks wait on blocked ones"}
         if not task.get("check") and not proj.get("ALLOW_UNCHECKED", None, str):
             return {"event": "error", "task": task["id"], "error": "task has no check"}
-        G.ensure_baseline(proj)
+        G.ensure_baseline(proj); box["clk"] = TC.begin(proj, task); clk = box["clk"]
         do_fresh, extra_env = L.mods(proj, task)
         if fresh or do_fresh: G.reset_to_last_good(proj)
         # Run the check BEFORE the worker: if it already passes there is nothing to do (the final gate of a split task,
         # or a weak check), and if it fails its output is the freshest, most accurate error for the worker.
-        pre = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else None
+        ct = proj.get("CHECK_TIMEOUT", 600, int)
+        pre = C.run_check(proj, task, clk.cap(ct) if clk else ct) if task.get("check") else None
         if pre is not None and pre["rc"] == 0:
             task["status"] = "done"; task["commit"] = G.checkpoint(proj, task)
             task["history"].append({"ts": now(), "precheck_pass": True, "gate": bool(task.get("split_into"))})
@@ -115,12 +161,13 @@ def step(proj, fresh=False):
                 append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "weak_check", "ok": True,
                              "reason": f"{task['id']} check passed before any work"})
             return {"event": "task_done", "task": task["id"], "attempt": task["attempts"], "precheck": True, "tamper": tamper}
+        if clk and clk.expired(): return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out before an attempt could start")
         task["status"] = "running"; task["attempts"] += 1; attempt = task["attempts"]
         store.save(data)
         last = err_text(task, pre) if pre else ""
     try: os.remove(proj.p("packed.json"))
     except OSError: pass
-    w = run_worker(proj, task, attempt, last, extra_env)
+    w = run_worker(proj, task, attempt, last, extra_env, timeout=clk.cap(proj.get("ITER_TIMEOUT", 2700, int)) if clk else None)
     need_split = False
     with store.locked():
         tamper2 = [] if store.check_integrity() else ["tasks.json:edited-outside-engine"]
@@ -129,7 +176,10 @@ def step(proj, fresh=False):
         if tamper2:
             C.restore(proj, data, tamper2)
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "tamper", "task": task["id"], "findings": tamper2})
-        res = C.run_check(proj, task, proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
+        if clk and clk.expired() and w.get("rc") == 124:       # the worker was killed because the budget ran out: nothing more to judge
+            append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "attempt": attempt, "event": "attempt_cut_by_budget", "worker_secs": w.get("secs")})
+            return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out during attempt {attempt}")
+        res = C.run_check(proj, task, clk.cap(proj.get("CHECK_TIMEOUT", 600, int)) if clk else proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
         passed = res["rc"] == 0 and not tamper2
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"), "worker_secs": w.get("secs"),
                "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
@@ -154,9 +204,11 @@ def step(proj, fresh=False):
                 L.log_escalation(proj, task, old, new_rung, why); task["ladder"] = new_rung; task["rung_tries"] = 0
             if new_rung == 3 and not task.get("split_into"): need_split = True
             if action == "block": _block(proj, task, err_text(task, res), res)
+        if not passed and clk and clk.expired():
+            return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out while attempt {attempt} was being judged")
         store.save(data)
     if need_split:     # split needs the store lock itself, so it runs after we release it
-        r = Z.auto_split(proj, task["id"], err_text(task, res))
+        r = Z.auto_split(proj, task["id"], err_text(task, res), timeout=clk.cap(1800) if clk else 1800)
         if r["ok"]: return {"event": "task_split", "task": task["id"], "children": r["children"], "attempt": attempt, "tamper": tamper2}
         with store.locked():                                   # no split available: skip straight to the next rung
             data = store.load(); t2 = T.get(data, task["id"]); nr = L.next_rung(proj, 3)

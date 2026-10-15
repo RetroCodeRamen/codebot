@@ -1,6 +1,7 @@
 """Adaptive task sizing: split tasks that keep failing, remember what size works on this machine, tell the planner."""
 import fcntl, json, os, re, shlex, subprocess, sys
 from . import planops, tasks as T
+from .proc import run_group
 from .config import now, append_jsonl
 
 # ---------- splitting ----------
@@ -39,7 +40,7 @@ def mechanical_split(task):
                              for i, p in enumerate(parts, 1)]}
     return None
 
-def propose(proj, task, last_error=""):
+def propose(proj, task, last_error="", timeout=1800):
     """SPLIT_CMD (a hook: reads CODEBOT_TASK_FILE, prints JSON {"subtasks":[...],"fixtures":{...}}); with WORKER=native the
     model-driven splitter is the default hook and the mechanical splitter is the fallback."""
     cmd = proj.get("SPLIT_CMD")
@@ -49,22 +50,22 @@ def propose(proj, task, last_error=""):
         tfile = proj.p(".split_task.json")
         with open(tfile, "w") as f: json.dump({"task": task, "error": last_error}, f)
         try:
-            r = subprocess.run(cmd, shell=True, cwd=proj.rundir, capture_output=True, text=True, timeout=1800,
-                               env=dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_STATE=proj.state, CODEBOT_RUNDIR=proj.rundir,
+            rc, out, _, timed_out = run_group(cmd, timeout, cwd=proj.rundir,
+                               env=dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_TASK_ID=task["id"], CODEBOT_STATE=proj.state, CODEBOT_RUNDIR=proj.rundir,
                                         CODEBOT_HOME=proj.home, CODEBOT_PROJECT=proj.name,
                                         PYTHONPATH=os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + os.pathsep + os.environ.get("PYTHONPATH", "")))
-            prop = json.loads(r.stdout)
+            prop = None if timed_out else json.loads(out)
             if isinstance(prop, dict) and prop.get("subtasks"): return prop
-        except (subprocess.TimeoutExpired, ValueError, OSError): pass
+        except (ValueError, OSError): pass
         if proj.get("SPLIT_CMD"): return None             # an explicit hook that fails means "no split", not "guess"
     return mechanical_split(task)
 
-def auto_split(proj, tid, last_error="", actor="harness"):
+def auto_split(proj, tid, last_error="", actor="harness", timeout=1800):
     """Split one task into subtasks with their own frozen checks. Returns {"ok":..., "children":[...]} (ok False = no split)."""
     store = T.TaskStore(proj); data = store.load(); task = T.get(data, tid)
     if task is None: return {"ok": False, "error": f"unknown task {tid}"}
     if task.get("split_into"): return {"ok": False, "error": "already split"}
-    prop = propose(proj, task, last_error)
+    prop = propose(proj, task, last_error, timeout)
     if not prop: return {"ok": False, "error": "no split available"}
     subs = [s for s in prop["subtasks"] if (s.get("check") or "").strip() != (task.get("check") or "").strip()]
     if len(subs) < 2: return {"ok": False, "error": "split would not simplify the task"}

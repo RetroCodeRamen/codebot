@@ -23,9 +23,9 @@ def wait(proj, sleep=time.sleep, reader=read_temp):
     hot, cool, cap = proj.get("THERMAL_MAX", 92, float), proj.get("THERMAL_RESUME", 84, float), proj.get("THERMAL_MAX_WAIT", 1800, int)
     t = reader()
     if t is None or t < hot: return 0
-    waited = 0; append_jsonl(proj.p("thermal.jsonl"), {"ts": now(), "event": "pause", "temp": t})
+    waited = 0; append_jsonl(proj.p("thermal.jsonl"), {"ts": now(), "event": "pause", "temp": t, "task": os.environ.get("CODEBOT_TASK_ID")})
     while waited < cap:
         sleep(20); waited += 20; t = reader()
         if t is None or t <= cool: break
-    append_jsonl(proj.p("thermal.jsonl"), {"ts": now(), "event": "resume", "temp": t, "waited": waited})
+    append_jsonl(proj.p("thermal.jsonl"), {"ts": now(), "event": "resume", "temp": t, "waited": waited, "task": os.environ.get("CODEBOT_TASK_ID")})
     return waited
