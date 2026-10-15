@@ -219,6 +219,12 @@ def render_md(res, run, plan_info=None):
 
 def main(argv):
     import argparse
+    from .capbench import cli as _cap            # `codebot bench list|run|status|report|resume|cancel|validate|coverage`: the capability ladder (flag-style options below are unchanged)
+    words = [x for i, x in enumerate(argv) if not x.startswith("-") and (i == 0 or argv[i - 1] != "--home")]
+    if words and words[0] in _cap.SUBCOMMANDS and argv.index(words[0]) <= 2:
+        from .config import home_dir
+        home = argv[argv.index("--home") + 1] if "--home" in argv else home_dir(); rest = [x for i, x in enumerate(argv) if x != "--home" and (i == 0 or argv[i - 1] != "--home")]
+        return _cap.main(rest, home)
     from . import preflight, planner as PL
     ap = argparse.ArgumentParser(prog="codebot bench"); ap.add_argument("--home"); ap.add_argument("--suite", default="pyutils"); ap.add_argument("--plan", choices=["fixed", "auto"], default="fixed"); ap.add_argument("--planner", choices=["native", "opencode"], default="native", help="--plan auto: native = one constrained call + declarative assertions (default); opencode = the free-form agent")
     ap.add_argument("--preflight", action="store_true"); ap.add_argument("--max-minutes", type=int, default=150); ap.add_argument("--plan-minutes", type=int, default=45)

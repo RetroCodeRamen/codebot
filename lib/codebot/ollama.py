@@ -17,6 +17,7 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
     if schema is not None: body["format"] = schema
     if temperature is not None: body["options"]["temperature"] = float(temperature)
     if num_predict: body["options"]["num_predict"] = int(num_predict)
+    if proj.get("MODEL_SEED"): body["options"]["seed"] = proj.get("MODEL_SEED", 0, int)       # reproducibility knob for benchmarks (unset = the server's default sampling)
     if options: body["options"].update(options)            # e.g. num_thread / num_gpu for the thermal sweep
     data = json.dumps(body).encode()
     last = None

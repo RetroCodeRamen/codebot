@@ -1,0 +1,516 @@
+{
+ "goal": "Build the utility library described in SPEC.md as plain modules in the code directory.",
+ "context": "Python 3, standard library only. Modules: textutil.py, numutil.py, fileutil.py, netutil.py in the repo root.",
+ "done": "Every function in SPEC.md behaves as specified.",
+ "tasks": [
+  {
+   "title": "textutil.slugify",
+   "files": [
+    "textutil.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      "Hello World"
+     ],
+     "expect": "hello-world"
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      "  Foo,  Bar!! "
+     ],
+     "expect": "foo-bar"
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      "a--b"
+     ],
+     "expect": "a-b"
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      "Café au lait"
+     ],
+     "expect": "caf-au-lait"
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      ""
+     ],
+     "expect": ""
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      "---"
+     ],
+     "expect": ""
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "slugify",
+     "args": [
+      5
+     ],
+     "raises": "TypeError"
+    }
+   ]
+  },
+  {
+   "title": "textutil.truncate",
+   "files": [
+    "textutil.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "truncate",
+     "args": [
+      "hello world",
+      8
+     ],
+     "expect": "hello..."
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "truncate",
+     "args": [
+      "hello world",
+      2
+     ],
+     "expect": ".."
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "truncate",
+     "args": [
+      "hello",
+      0
+     ],
+     "expect": ""
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "truncate",
+     "args": [
+      "hi",
+      8
+     ],
+     "expect": "hi"
+    },
+    {
+     "type": "call",
+     "module": "textutil",
+     "func": "truncate",
+     "args": [
+      "abc",
+      -1
+     ],
+     "raises": "ValueError"
+    }
+   ]
+  },
+  {
+   "title": "numutil.clamp",
+   "files": [
+    "numutil.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "clamp",
+     "args": [
+      5,
+      1,
+      3
+     ],
+     "expect": 3
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "clamp",
+     "args": [
+      -1,
+      0,
+      10
+     ],
+     "expect": 0
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "clamp",
+     "args": [
+      2.5,
+      0,
+      10
+     ],
+     "expect": 2.5
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "clamp",
+     "args": [
+      1,
+      5,
+      2
+     ],
+     "raises": "ValueError"
+    }
+   ]
+  },
+  {
+   "title": "numutil.is_prime",
+   "files": [
+    "numutil.py"
+   ],
+   "size": "S",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      2
+     ],
+     "expect": true
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      97
+     ],
+     "expect": true
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      1
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      -7
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      561
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      1000000007
+     ],
+     "expect": true
+    },
+    {
+     "type": "call",
+     "module": "numutil",
+     "func": "is_prime",
+     "args": [
+      true
+     ],
+     "raises": "TypeError"
+    }
+   ]
+  },
+  {
+   "title": "fileutil.safe_filename",
+   "files": [
+    "fileutil.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      "report 2024.pdf"
+     ],
+     "expect": "report_2024.pdf"
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      "../etc/passwd"
+     ],
+     "expect": "_etc_passwd"
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      "naïve.txt"
+     ],
+     "expect": "na_ve.txt"
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      "..."
+     ],
+     "expect": "unnamed"
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      ""
+     ],
+     "expect": "unnamed"
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "safe_filename",
+     "args": [
+      "a  b"
+     ],
+     "expect": "a__b"
+    }
+   ]
+  },
+  {
+   "title": "fileutil.split_ext",
+   "files": [
+    "fileutil.py"
+   ],
+   "size": "S",
+   "deps": [
+    5
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "split_ext",
+     "args": [
+      "archive.tar.gz"
+     ],
+     "expect": [
+      "archive.tar",
+      ".gz"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "split_ext",
+     "args": [
+      "README"
+     ],
+     "expect": [
+      "README",
+      ""
+     ]
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "split_ext",
+     "args": [
+      ".bashrc"
+     ],
+     "expect": [
+      ".bashrc",
+      ""
+     ]
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "split_ext",
+     "args": [
+      "a."
+     ],
+     "expect": [
+      "a.",
+      ""
+     ]
+    },
+    {
+     "type": "call",
+     "module": "fileutil",
+     "func": "split_ext",
+     "args": [
+      "dir/f.txt"
+     ],
+     "raises": "ValueError"
+    }
+   ]
+  },
+  {
+   "title": "netutil.is_valid_ipv4",
+   "files": [
+    "netutil.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      "192.168.1.1"
+     ],
+     "expect": true
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      "256.1.1.1"
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      "01.2.3.4"
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      "1.2.3"
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      "1.2.3.4\n"
+     ],
+     "expect": false
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "is_valid_ipv4",
+     "args": [
+      null
+     ],
+     "expect": false
+    }
+   ]
+  },
+  {
+   "title": "netutil.ipv4_to_int",
+   "files": [
+    "netutil.py"
+   ],
+   "size": "S",
+   "deps": [
+    7
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "ipv4_to_int",
+     "args": [
+      "0.0.0.1"
+     ],
+     "expect": 1
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "ipv4_to_int",
+     "args": [
+      "192.168.0.1"
+     ],
+     "expect": 3232235521
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "ipv4_to_int",
+     "args": [
+      "255.255.255.255"
+     ],
+     "expect": 4294967295
+    },
+    {
+     "type": "call",
+     "module": "netutil",
+     "func": "ipv4_to_int",
+     "args": [
+      "256.0.0.0"
+     ],
+     "raises": "ValueError"
+    }
+   ]
+  }
+ ]
+}

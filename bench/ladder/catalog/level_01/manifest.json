@@ -1,0 +1,18 @@
+{
+  "id": "level_01", "level": 1, "title": "Python utility library", "version": "1.0.0",
+  "difficulty": "trivial: single functions with fully specified edge cases",
+  "primary_challenge": "Simple implementation accuracy",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 6000},
+  "requirements": [
+    {"id": "R1", "title": "slugify", "keywords": ["slugify"]},
+    {"id": "R2", "title": "truncate", "keywords": ["truncate"]},
+    {"id": "R3", "title": "clamp", "keywords": ["clamp"]},
+    {"id": "R4", "title": "is_prime", "keywords": ["is_prime"]},
+    {"id": "R5", "title": "safe_filename", "keywords": ["safe_filename"]},
+    {"id": "R6", "title": "split_ext", "keywords": ["split_ext"]},
+    {"id": "R7", "title": "is_valid_ipv4", "keywords": ["is_valid_ipv4"]},
+    {"id": "R8", "title": "ipv4_to_int", "keywords": ["ipv4_to_int"]}
+  ]
+}

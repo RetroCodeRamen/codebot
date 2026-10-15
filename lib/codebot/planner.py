@@ -10,9 +10,9 @@ from .config import Project
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
                       "deps": {"type": "array", "items": {"type": "integer"}}, "asserts": K.assert_schema()}
 
-def plan_schema():
+def plan_schema(max_tasks=10):
     s = {"type": "string"}
-    return {"type": "object", "properties": {"goal": s, "context": s, "done": s, "tasks": {"type": "array", "minItems": 1, "maxItems": 10, "items": {
+    return {"type": "object", "properties": {"goal": s, "context": s, "done": s, "tasks": {"type": "array", "minItems": 1, "maxItems": max_tasks, "items": {
         "type": "object", "properties": TASK_PROPS(), "required": ["title", "files", "size", "asserts"], "additionalProperties": False}}},
         "required": ["goal", "context", "done", "tasks"], "additionalProperties": False}
 
@@ -88,7 +88,7 @@ def _sizing(home, name):
     try: return subprocess.run([sys.executable, os.path.join(home, "bin", "codebot-engine"), "sizing", name, "--home", home], capture_output=True, text=True, timeout=60).stdout.strip()
     except (OSError, subprocess.SubprocessError): return ""
 
-def plan_auto(home, name, timeout=2700, rounds=3, log=print):
+def plan_auto(home, name, timeout=2700, rounds=3, log=print, max_tasks=10, num_predict=5000):
     """Same return shape as the opencode planner loop: {"rounds": [{n, secs, rc, rejected, violations, ok}], "ok", "secs"}."""
     proj = Project(name, home); t0 = time.time(); info = {"rounds": [], "ok": False, "secs": 0}
     try:
@@ -102,7 +102,7 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print):
         try:
             if plan is None:
                 user = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n{repo or '(empty)'}\n\n{('SIZING HISTORY: ' + sizing) if sizing else ''}\n{note}\nReply with the JSON plan."
-                plan, err = _chat(proj, GUIDE, user, plan_schema(), left)
+                plan, err = _chat(proj, GUIDE, user, plan_schema(max_tasks), left, num_predict)
                 want = spec_items(spec)
                 if plan is not None and plan.get("tasks") and len(plan["tasks"]) < want:
                     err, plan = f"it had {len(plan['tasks'])} task(s) but the specification has {want} numbered items; plan one task per item", None
@@ -125,6 +125,11 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print):
         if ok: info["ok"] = True; break
         last = rejected
     info["secs"] = round(time.time() - t0); return info
+
+def install_plan(proj, plan):
+    """Write a ready-made plan (same shape as the model's reply: goal, context, done, tasks[{title, files, size, deps, asserts}]) exactly as the planner would:
+    spec files, PLAN.md, then the baseline guard. Used for the reference-plan diagnostic arm. Returns the rejected tasks (empty = every check is a real, working failing test)."""
+    bad = _write(proj, plan); return _evaluate(proj, bad)
 
 def audit_against_reference(home, name, suite):
     """Planner quality, measured: run every generated spec against the seed code (a real test FAILS there: rc 1) and against the suite's reference solution
