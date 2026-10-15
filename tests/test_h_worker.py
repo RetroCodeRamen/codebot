@@ -2,7 +2,7 @@
 import json, os, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama, A
-from codebot import engine, worker, packer, planops, sizing, tasks as T
+from codebot import engine, worker, packer, planops, sizing, checkspec as K, tasks as T
 
 PLAN = """
 # Goal
@@ -212,10 +212,14 @@ class TestPacker(Base):
 
 class TestModelSplitter(Base):
     def test_model_split_is_used_when_valid(self):
-        self.model([{"subtasks": [{"title": "stub", "check": "test -f a.py"}, {"title": "impl", "check": "python3 -c 'import a; a.add'"}]}])
+        self.model([{"subtasks": [{"title": "stub", "asserts": [{"type": "file_exists", "path": "a.py"}]},
+                                  {"title": "impl", "asserts": [{"type": "call", "module": "a", "func": "add", "args": [1, 2], "expect": 3}]}]}])
         self.set_env(WORKER="native")
         r = sizing.auto_split(self.proj(), "T1"); self.assertTrue(r["ok"], r); self.assertEqual(r["children"], ["T1.1", "T1.2"])
         self.assertFalse(self.fake.requests[0]["think"])
+        kids = [t for t in T.TaskStore(self.proj()).load()["tasks"] if t.get("parent") == "T1"]       # the model wrote data; the harness wrote the check commands and spec files
+        self.assertEqual([k["check"] for k in kids], [K.command_for("T1.1"), K.command_for("T1.2")])
+        self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "T1.1.spec.json")))
 
     def test_garbage_from_the_model_falls_back_to_mechanical(self):
         planops.apply(self.proj(), {"op": "add_task", "title": "two files", "check": "test -f p.py && test -f q.py", "reason": "r"})

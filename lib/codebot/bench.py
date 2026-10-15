@@ -198,8 +198,8 @@ def render_md(res, run, plan_info=None):
 
 def main(argv):
     import argparse
-    from . import preflight
-    ap = argparse.ArgumentParser(prog="codebot bench"); ap.add_argument("--home"); ap.add_argument("--suite", default="pyutils"); ap.add_argument("--plan", choices=["fixed", "auto"], default="fixed")
+    from . import preflight, planner as PL
+    ap = argparse.ArgumentParser(prog="codebot bench"); ap.add_argument("--home"); ap.add_argument("--suite", default="pyutils"); ap.add_argument("--plan", choices=["fixed", "auto"], default="fixed"); ap.add_argument("--planner", choices=["native", "opencode"], default="native", help="--plan auto: native = one constrained call + declarative assertions (default); opencode = the free-form agent")
     ap.add_argument("--preflight", action="store_true"); ap.add_argument("--max-minutes", type=int, default=150); ap.add_argument("--plan-minutes", type=int, default=45)
     ap.add_argument("--thermal", action="store_true", help="sweep thread/power/GPU configs for sustained speed vs heat"); ap.add_argument("--minutes", type=float, default=4.0)
     ap.add_argument("--only", help="comma separated substrings of config names to run (thermal sweep)")
@@ -240,7 +240,7 @@ def main(argv):
         proj = Project(a.collect_only, home); res = collect(proj); print(json.dumps(res, indent=1)); return 0
     name = setup(home, a.suite, a.plan, a.name); plan_info = None; print(f"project {name}")
     if a.plan == "auto":
-        print("planner running (unattended, harness-driven repair rounds)...", flush=True); pi = plan_auto(home, name, a.plan_minutes * 60)
+        print("planner running (unattended, harness-driven repair rounds)...", flush=True); pi = (plan_auto if a.planner == "opencode" else PL.plan_auto)(home, name, a.plan_minutes * 60)
         plan_info = (f"{len(pi['rounds'])} round(s), {pi['secs']} s, final check-plan {'OK' if pi['ok'] else 'REJECTED'}. " + "; ".join(
             f"round {r['n']}: rejected {r['rejected'] or 'none'}, violations {r['violations'] or 'none'}" for r in pi["rounds"])); print(plan_info, flush=True)
         if not os.path.exists(os.path.join(home, "projects", name, "PLAN.md")):

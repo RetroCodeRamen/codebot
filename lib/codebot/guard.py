@@ -2,7 +2,7 @@
 broken (syntax error, command not found) tests nothing either. Both are rejected before the check is frozen, and every
 rejection is logged to plan.log (op `check_rejected`) so the planner's mistakes can be counted."""
 import os, re, subprocess, tempfile
-from . import checks as C, sandbox
+from . import checks as C, checkspec, sandbox
 from .config import now, append_jsonl
 
 class GuardError(Exception):
@@ -36,6 +36,7 @@ def probe(proj, check_text, timeout=120):
     'ok' (fails now, for a real reason), 'passes' (exit 0: tests nothing) or 'broken'."""
     flaw = static_flaw(proj, check_text)
     if flaw: return {"verdict": "broken", "rc": 2, "out": flaw}
+    strict = checkspec.is_runner_check(check_text)       # a declarative check has an exit-status contract (assertions.py): ONLY 1 means "a real test that fails now"
     script = f'cd "$CODEBOT_RUNDIR" || exit 99\n{check_text}\n'
     with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as f: f.write(script); tmp = f.name
     try:
@@ -46,6 +47,7 @@ def probe(proj, check_text, timeout=120):
     finally: os.unlink(tmp)
     out = out.strip()[-400:]
     if rc == 0: return {"verdict": "passes", "rc": 0, "out": out}
+    if strict and rc != 1: return {"verdict": "broken", "rc": rc, "out": out or f"the assertion runner exited {rc} (only 0 and 1 are valid)"}
     if rc in (126, 127) or re.search(r"command not found|No such file or directory: .*\.sh", out): return {"verdict": "broken", "rc": rc, "out": out}
     return {"verdict": "ok", "rc": rc, "out": out}
 
