@@ -1,0 +1,349 @@
+{
+ "goal": "Extend the helpdesk with an audit log, severity, labels and merge while keeping everything that worked.",
+ "context": "Python 3 stdlib only. Package helpdesk/ in the repo root; run tests with python3 -m unittest discover -s tests; existing behaviour, names, exports and CLI output must be kept.",
+ "done": "Every requirement of SPEC.md holds and the existing unit tests still pass.",
+ "tasks": [
+  {
+   "title": "helpdesk/audit.py: AuditLog with record, entries, count_by_action; entries stored in store.audit and saved with the change",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\ne = hd.audit.record(7, 'x.y', 'widget', 9, {'f': [1, 2]}); print(e['seq'], e['actor'], e['outcome'], e['reason'], sorted(e))"
+     ],
+     "stdout": "4 7 ok None ['action', 'actor', 'changes', 'entity', 'entity_id', 'outcome', 'reason', 'seq', 'ts']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nmk(); hd.store.save(); doc = json.load(open(p)); print([e['action'] for e in doc['audit']][-1], [e['seq'] for e in doc['audit']])"
+     ],
+     "stdout": "ticket.create [1, 2, 3, 4]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nmk(); print(hd.audit.count_by_action(), len(hd.audit.entries(entity='user')), len(Helpdesk(p, lambda: '2024-03-01T09:00:00').audit.entries()))"
+     ],
+     "stdout": "{'ticket.create': 1, 'user.create': 3} 3 4"
+    }
+   ]
+  },
+  {
+   "title": "Audit every successful change with the documented actions and changes; audit PermissionDenied as outcome denied; no entries for no-ops or validation errors",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk(priority='urgent'); hd.tickets.assign(t.id, bob.id, ada.id); es = hd.audit.entries(entity='ticket'); print([(e['action'], e['changes']) for e in es])"
+     ],
+     "stdout": "[('ticket.create', {'title': [None, 'T'], 'severity': [None, 'critical'], 'category': [None, 'general'], 'requester_id': [None, 3]}), ('ticket.assign', {'assignee_id': [None, 2], 'status': ['open', 'in_progress']})]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk()\nfrom helpdesk.errors import PermissionDenied\ntry: hd.tickets.assign(t.id, bob.id, cy.id)\nexcept PermissionDenied: pass\ne = hd.audit.entries()[-1]; print(e['action'], e['outcome'], e['actor'], e['entity_id'], e['changes'], bool(e['reason']))"
+     ],
+     "stdout": "ticket.assign denied 3 1 {} True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk(); hd.tickets.watch(t.id, bob.id, ada.id); n = len(hd.audit.entries()); hd.tickets.watch(t.id, bob.id, ada.id)\nfrom helpdesk.errors import ValidationError\ntry: hd.tickets.set_status(t.id, 'resolved', bob.id)\nexcept ValidationError: pass\nprint(len(hd.audit.entries()) - n)"
+     ],
+     "stdout": "0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nu = hd.users.create_user('Eve', 'agent', actor_id=ada.id); e = hd.audit.entries()[-1]; print(e['action'], e['actor'], e['changes'])"
+     ],
+     "stdout": "user.create 1 {'name': [None, 'Eve'], 'role': [None, 'agent']}"
+    }
+   ]
+  },
+  {
+   "title": "Severity: new field with the old priority vocabulary kept as an alias on Ticket, create, set_priority and the services",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk.models import Ticket\nt = Ticket(1, 'T', 'd', 3, None, 'open', 'urgent'); print(t.severity, t.priority); t.severity = 'low'; print(t.priority, 'priority' in t.to_dict(), t.to_dict()['severity'])"
+     ],
+     "stdout": "critical urgent\nlow False low"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk(priority='urgent'); s = hd.tickets.create(cy.id, 'S', 'd', actor_id=cy.id, severity='high'); print(t.severity, t.sla_due, s.priority, s.sla_due)"
+     ],
+     "stdout": "critical 2024-03-01T13:00:00 high 2024-03-01T17:00:00"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk(); hd.tickets.set_severity(t.id, 'critical', bob.id); print(hd.tickets.get(t.id).priority, hd.tickets.get(t.id).sla_due); hd.tickets.set_priority(t.id, 'low', bob.id); print(hd.tickets.get(t.id).severity)"
+     ],
+     "stdout": "urgent 2024-03-01T13:00:00\nlow"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk.search import search\na = mk('Alpha', priority='urgent'); b = mk('Beta'); ts = list(hd.store.tickets.values()); print([t.id for t in search(ts, 'severity:critical')], [t.id for t in search(ts, 'priority:urgent')], [t.id for t in search(ts, 'severity:medium')])"
+     ],
+     "stdout": "[1] [1] [2]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk import export, reports\nmk(priority='urgent'); d = os.path.dirname(p); export.export_csv(hd.store, d + '/t.csv'); export.export_json(hd.store, d + '/t.json'); import csv\nrows = list(csv.reader(open(d + '/t.csv'))); print(rows[0][3], rows[0][10:], rows[1][3], rows[1][10:]); j = json.load(open(d + '/t.json'))['tickets'][0]; print(j['priority'], j['severity'], j['labels'], j['merged_into']); print(reports.summary(hd.store, '2024-03-01T10:00:00')['by_severity'])"
+     ],
+     "stdout": "priority ['severity', 'labels', 'merged_into'] urgent ['critical', '', '']\nurgent critical [] None\n{'critical': 1}"
+    }
+   ]
+  },
+  {
+   "title": "Data file version 2: migrate version 1 files on open (severity, labels, merged_into, audit entry, .v1.bak backup)",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "\nimport sys, os, tempfile, json, shutil\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nd = tempfile.mkdtemp(); p = os.path.join(d, \"old.json\")\nt = lambda i, pr: {\"id\": i, \"title\": \"T%d\" % i, \"description\": \"d\", \"requester_id\": 3, \"assignee_id\": None, \"status\": \"open\", \"priority\": pr, \"category\": \"general\", \"created\": \"2024-02-01T08:00:00\", \"updated\": \"2024-02-01T08:00:00\", \"sla_due\": \"2024-02-02T08:00:00\", \"closed_at\": None, \"resolution\": None, \"comments\": [], \"watchers\": [], \"attachments\": [], \"links\": []}\ndoc = {\"version\": 1, \"next\": {\"user\": 4, \"ticket\": 5, \"comment\": 1, \"notification\": 1}, \"users\": [{\"id\": 1, \"name\": \"Ada\", \"role\": \"admin\", \"email\": \"\", \"active\": True}, {\"id\": 2, \"name\": \"Bob\", \"role\": \"agent\", \"email\": \"\", \"active\": True}, {\"id\": 3, \"name\": \"Cy\", \"role\": \"customer\", \"email\": \"\", \"active\": True}], \"tickets\": [t(1, \"low\"), t(2, \"normal\"), t(3, \"high\"), t(4, \"urgent\")], \"notifications\": []}\njson.dump(doc, open(p, \"w\")); original = open(p).read()\nhd = Helpdesk(p, lambda: \"2024-03-01T09:00:00\"); new = json.load(open(p))\nprint(new['version'], [x['severity'] for x in new['tickets']], all('priority' not in x for x in new['tickets']), new['tickets'][0]['labels'], new['tickets'][0]['merged_into'])"
+     ],
+     "stdout": "2 ['low', 'medium', 'high', 'critical'] True [] None"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "\nimport sys, os, tempfile, json, shutil\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nd = tempfile.mkdtemp(); p = os.path.join(d, \"old.json\")\nt = lambda i, pr: {\"id\": i, \"title\": \"T%d\" % i, \"description\": \"d\", \"requester_id\": 3, \"assignee_id\": None, \"status\": \"open\", \"priority\": pr, \"category\": \"general\", \"created\": \"2024-02-01T08:00:00\", \"updated\": \"2024-02-01T08:00:00\", \"sla_due\": \"2024-02-02T08:00:00\", \"closed_at\": None, \"resolution\": None, \"comments\": [], \"watchers\": [], \"attachments\": [], \"links\": []}\ndoc = {\"version\": 1, \"next\": {\"user\": 4, \"ticket\": 5, \"comment\": 1, \"notification\": 1}, \"users\": [{\"id\": 1, \"name\": \"Ada\", \"role\": \"admin\", \"email\": \"\", \"active\": True}, {\"id\": 2, \"name\": \"Bob\", \"role\": \"agent\", \"email\": \"\", \"active\": True}, {\"id\": 3, \"name\": \"Cy\", \"role\": \"customer\", \"email\": \"\", \"active\": True}], \"tickets\": [t(1, \"low\"), t(2, \"normal\"), t(3, \"high\"), t(4, \"urgent\")], \"notifications\": []}\njson.dump(doc, open(p, \"w\")); original = open(p).read()\nhd = Helpdesk(p, lambda: \"2024-03-01T09:00:00\"); new = json.load(open(p))\nprint(open(p + '.v1.bak').read() == original, new['audit'])"
+     ],
+     "stdout": "True [{'seq': 1, 'ts': '2024-03-01T09:00:00', 'actor': None, 'action': 'store.migrate', 'entity': 'store', 'entity_id': None, 'outcome': 'ok', 'changes': {'version': [1, 2]}, 'reason': None}]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "\nimport sys, os, tempfile, json, shutil\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nd = tempfile.mkdtemp(); p = os.path.join(d, \"old.json\")\nt = lambda i, pr: {\"id\": i, \"title\": \"T%d\" % i, \"description\": \"d\", \"requester_id\": 3, \"assignee_id\": None, \"status\": \"open\", \"priority\": pr, \"category\": \"general\", \"created\": \"2024-02-01T08:00:00\", \"updated\": \"2024-02-01T08:00:00\", \"sla_due\": \"2024-02-02T08:00:00\", \"closed_at\": None, \"resolution\": None, \"comments\": [], \"watchers\": [], \"attachments\": [], \"links\": []}\ndoc = {\"version\": 1, \"next\": {\"user\": 4, \"ticket\": 5, \"comment\": 1, \"notification\": 1}, \"users\": [{\"id\": 1, \"name\": \"Ada\", \"role\": \"admin\", \"email\": \"\", \"active\": True}, {\"id\": 2, \"name\": \"Bob\", \"role\": \"agent\", \"email\": \"\", \"active\": True}, {\"id\": 3, \"name\": \"Cy\", \"role\": \"customer\", \"email\": \"\", \"active\": True}], \"tickets\": [t(1, \"low\"), t(2, \"normal\"), t(3, \"high\"), t(4, \"urgent\")], \"notifications\": []}\njson.dump(doc, open(p, \"w\")); original = open(p).read()\nhd = Helpdesk(p, lambda: \"2024-03-01T09:00:00\"); new = json.load(open(p))\nprint([hd.tickets.get(i).priority for i in (1, 2, 3, 4)], new['users'] == doc['users'], new['next'] == doc['next'])"
+     ],
+     "stdout": "['low', 'normal', 'high', 'urgent'] True True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "\nimport sys, os, tempfile, json, shutil\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nd = tempfile.mkdtemp(); p = os.path.join(d, \"old.json\")\nt = lambda i, pr: {\"id\": i, \"title\": \"T%d\" % i, \"description\": \"d\", \"requester_id\": 3, \"assignee_id\": None, \"status\": \"open\", \"priority\": pr, \"category\": \"general\", \"created\": \"2024-02-01T08:00:00\", \"updated\": \"2024-02-01T08:00:00\", \"sla_due\": \"2024-02-02T08:00:00\", \"closed_at\": None, \"resolution\": None, \"comments\": [], \"watchers\": [], \"attachments\": [], \"links\": []}\ndoc = {\"version\": 1, \"next\": {\"user\": 4, \"ticket\": 5, \"comment\": 1, \"notification\": 1}, \"users\": [{\"id\": 1, \"name\": \"Ada\", \"role\": \"admin\", \"email\": \"\", \"active\": True}, {\"id\": 2, \"name\": \"Bob\", \"role\": \"agent\", \"email\": \"\", \"active\": True}, {\"id\": 3, \"name\": \"Cy\", \"role\": \"customer\", \"email\": \"\", \"active\": True}], \"tickets\": [t(1, \"low\"), t(2, \"normal\"), t(3, \"high\"), t(4, \"urgent\")], \"notifications\": []}\njson.dump(doc, open(p, \"w\")); original = open(p).read()\nhd = Helpdesk(p, lambda: \"2024-03-01T09:00:00\"); new = json.load(open(p))\nbefore = open(p).read(); os.remove(p + '.v1.bak'); Helpdesk(p, lambda: 'x'); print(open(p).read() == before, os.path.exists(p + '.v1.bak'))"
+     ],
+     "stdout": "True False"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "\nimport sys, os, tempfile, json, shutil\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nd = tempfile.mkdtemp(); p = os.path.join(d, \"old.json\")\nt = lambda i, pr: {\"id\": i, \"title\": \"T%d\" % i, \"description\": \"d\", \"requester_id\": 3, \"assignee_id\": None, \"status\": \"open\", \"priority\": pr, \"category\": \"general\", \"created\": \"2024-02-01T08:00:00\", \"updated\": \"2024-02-01T08:00:00\", \"sla_due\": \"2024-02-02T08:00:00\", \"closed_at\": None, \"resolution\": None, \"comments\": [], \"watchers\": [], \"attachments\": [], \"links\": []}\ndoc = {\"version\": 1, \"next\": {\"user\": 4, \"ticket\": 5, \"comment\": 1, \"notification\": 1}, \"users\": [{\"id\": 1, \"name\": \"Ada\", \"role\": \"admin\", \"email\": \"\", \"active\": True}, {\"id\": 2, \"name\": \"Bob\", \"role\": \"agent\", \"email\": \"\", \"active\": True}, {\"id\": 3, \"name\": \"Cy\", \"role\": \"customer\", \"email\": \"\", \"active\": True}], \"tickets\": [t(1, \"low\"), t(2, \"normal\"), t(3, \"high\"), t(4, \"urgent\")], \"notifications\": []}\njson.dump(doc, open(p, \"w\")); original = open(p).read()\nhd = Helpdesk(p, lambda: \"2024-03-01T09:00:00\"); new = json.load(open(p))\ndoc['version'] = 99; json.dump(doc, open(p, 'w'))\nfrom helpdesk.errors import StoreError\ntry: Helpdesk(p, lambda: 'x')\nexcept StoreError as e: print('99' in str(e))"
+     ],
+     "stdout": "True"
+    }
+   ]
+  },
+  {
+   "title": "Labels: add_label / remove_label with validation, the label permission, search label:, list label= and by_label in the summary",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk(); print(list(hd.tickets.add_label(t.id, ' Bug ', bob.id).labels), list(hd.tickets.add_label(t.id, 'bug', bob.id).labels), list(hd.tickets.remove_label(t.id, 'BUG', bob.id).labels))"
+     ],
+     "stdout": "['bug'] ['bug'] []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk()\nfrom helpdesk.errors import PermissionDenied, ValidationError, NotFound\nfor call, exc in ((lambda: hd.tickets.add_label(t.id, 'x', cy.id), PermissionDenied), (lambda: hd.tickets.add_label(t.id, 'bad label', bob.id), ValidationError), (lambda: hd.tickets.remove_label(t.id, 'nope', bob.id), NotFound)):\n    try: call()\n    except exc: print(exc.__name__)"
+     ],
+     "stdout": "PermissionDenied\nValidationError\nNotFound"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nt = mk()\nfor i in range(8): hd.tickets.add_label(t.id, 'l%d' % i, bob.id)\nfrom helpdesk.errors import ValidationError\ntry: hd.tickets.add_label(t.id, 'one-too-many', bob.id)\nexcept ValidationError: print('at most 8')"
+     ],
+     "stdout": "at most 8"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk.search import parse_query, search\na = mk('A'); b = mk('B'); hd.tickets.add_label(a.id, 'bug', bob.id); hd.tickets.add_label(b.id, 'bug', bob.id); hd.tickets.add_label(b.id, 'ui', bob.id); ts = list(hd.store.tickets.values())\nprint(parse_query('label:a label:B').filters, [t.id for t in search(ts, 'label:bug label:ui')], [t.id for t in hd.tickets.list(ada.id, label='bug')])\nfrom helpdesk import reports\nprint(reports.summary(hd.store, '2024-03-01T10:00:00')['by_label'])"
+     ],
+     "stdout": "{'label': ['a', 'b']} [2] [1, 2]\n{'bug': 2, 'ui': 1}"
+    }
+   ]
+  },
+  {
+   "title": "Merge: TicketService.merge moves comments, labels and watchers, redirects links, closes the source and writes one audit entry",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    5
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\na = mk('A'); b = mk('B'); ts['v'] = '2024-03-01T11:00:00'; hd.tickets.add_comment(b.id, cy.id, 'same'); ts['v'] = '2024-03-02T08:00:00'; print(hd.tickets.merge(b.id, a.id, bob.id)); s = hd.tickets.get(b.id); t = hd.tickets.get(a.id); print(s.status, s.resolution, s.merged_into, s.comments, [c.body for c in t.comments], t.comments[0].ticket_id)"
+     ],
+     "stdout": "1\nclosed merged into #1 1 [] ['same'] 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\na = mk('A'); b = mk('B'); hd.tickets.merge(b.id, a.id, bob.id); e = hd.audit.entries()[-1]; print(e['action'], e['entity_id'], e['actor'], e['changes'])"
+     ],
+     "stdout": "ticket.merge 2 2 {'merged_into': [None, 1], 'status': ['open', 'closed'], 'comments_moved': [0, 0]}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\na = mk('A'); b = mk('B'); c = mk('C'); hd.links.link(c.id, 'related', b.id, bob.id); hd.links.link(c.id, 'related', a.id, bob.id); hd.tickets.merge(b.id, a.id, bob.id); print(hd.links.outgoing(c.id))"
+     ],
+     "stdout": "[{'kind': 'related', 'target': 1}]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\na = mk('A'); b = mk('B')\nfrom helpdesk.errors import ValidationError, PermissionDenied\nfor call, exc in ((lambda: hd.tickets.merge(a.id, a.id, bob.id), ValidationError), (lambda: hd.tickets.merge(b.id, a.id, cy.id), PermissionDenied)): \n    try: call()\n    except exc as e: print(exc.__name__)\nhd.tickets.merge(b.id, a.id, bob.id)\ntry: hd.tickets.merge(b.id, a.id, bob.id)\nexcept ValidationError as e: print('merged into #1' in str(e))"
+     ],
+     "stdout": "ValidationError\nPermissionDenied\nTrue"
+    }
+   ]
+  },
+  {
+   "title": "Audit access: audit list and report audit commands, timeline rows from the audit log, housekeeping checks",
+   "files": [
+    "helpdesk/audit.py",
+    "helpdesk/tickets.py"
+   ],
+   "size": "M",
+   "deps": [
+    2,
+    6
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export HELPDESK_FILE=\"$D/h.json\" HELPDESK_NOW=2024-03-01T09:00:00 PYTHONPATH=\"$W\"; h() { python3 -m helpdesk \"$@\"; }; h user add Ada --role admin >/dev/null; h --as 1 user add Bob --role agent >/dev/null; h --as 1 user add Cy >/dev/null; h --as 3 ticket add T --description d >/dev/null; h --as 3 ticket assign 1 2 2>/dev/null; h --as 1 audit list --outcome denied; h --as 2 audit list 2>/dev/null; echo \"rc=$?\"; h --as 1 report audit"
+     ],
+     "stdout": "#5 2024-03-01T09:00:00 actor=3 ticket.assign ticket:1 denied\nrc=3\nticket.assign: 1\nticket.create: 1\nuser.create: 3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk import timeline\nt = mk(); ts['v'] = '2024-03-01T10:00:00'; hd.tickets.assign(t.id, bob.id, ada.id); ts['v'] = '2024-03-01T12:00:00'; hd.tickets.set_status(t.id, 'closed', bob.id)\nprint([l.strip() for l in timeline.render(hd.tickets.get(t.id), hd.store).splitlines()[1:]])"
+     ],
+     "stdout": "['2024-03-01T09:00:00  created by Cy with priority normal', '2024-03-01T10:00:00  assigned to Bob by Ada', '2024-03-01T12:00:00  closed']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom helpdesk.app import Helpdesk\nts = {\"v\": \"2024-03-01T09:00:00\"}\np = os.path.join(tempfile.mkdtemp(), \"h.json\")\nhd = Helpdesk(p, lambda: ts[\"v\"])\nada = hd.users.create_user(\"Ada\", \"admin\"); bob = hd.users.create_user(\"Bob\", \"agent\", actor_id=ada.id); cy = hd.users.create_user(\"Cy\", \"customer\", actor_id=ada.id)\ndef mk(title=\"T\", **kw): return hd.tickets.create(cy.id, title, \"d\", actor_id=cy.id, **kw)\nfrom helpdesk import housekeeping\na = mk('A'); b = mk('B'); hd.tickets.merge(b.id, a.id, bob.id); print(housekeeping.check_integrity(hd.store)); del hd.store.tickets[a.id]; print(housekeeping.check_integrity(hd.store)[0]); hd.store.audit[1]['seq'] = 9; print([x for x in housekeeping.check_integrity(hd.store) if x.startswith('audit')])"
+     ],
+     "stdout": "[]\nticket #2: merged into missing ticket #1\n['audit entry 2: sequence number is 9']"
+    }
+   ]
+  }
+ ]
+}

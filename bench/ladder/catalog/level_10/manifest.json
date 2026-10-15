@@ -1,0 +1,80 @@
+{
+  "id": "level_10",
+  "level": 10,
+  "title": "Extend an existing codebase (helpdesk)",
+  "version": "1.0.0",
+  "difficulty": "very hard: interconnected changes across ~20 modules of an unfamiliar ~2,000-line codebase",
+  "primary_challenge": "Understanding and safely modifying larger unfamiliar software",
+  "spec": "SPEC.md",
+  "seed": "seed",
+  "reference_solution": "reference_solution",
+  "reference_tests": "reference_tests",
+  "expected_tasks": 9,
+  "planner": {
+    "max_tasks": 10,
+    "num_predict": 9000
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "title": "AuditLog module, entries, persistence",
+      "keywords": [
+        "audit"
+      ]
+    },
+    {
+      "id": "R2",
+      "title": "audited operations, denied attempts, no-ops",
+      "keywords": [
+        "audited",
+        "denied",
+        "audit"
+      ]
+    },
+    {
+      "id": "R3",
+      "title": "severity data model with old vocabulary compatibility",
+      "keywords": [
+        "severity",
+        "priority"
+      ]
+    },
+    {
+      "id": "R4",
+      "title": "data file version 2 migration",
+      "keywords": [
+        "migrat",
+        "version"
+      ]
+    },
+    {
+      "id": "R5",
+      "title": "labels",
+      "keywords": [
+        "label"
+      ]
+    },
+    {
+      "id": "R6",
+      "title": "merge tickets",
+      "keywords": [
+        "merge"
+      ]
+    },
+    {
+      "id": "R7",
+      "title": "audit CLI, report and timeline",
+      "keywords": [
+        "timeline",
+        "audit list"
+      ]
+    },
+    {
+      "id": "R8",
+      "title": "compatibility: existing behaviour keeps working",
+      "regression": true,
+      "unnumbered": true,
+      "keywords": []
+    }
+  ]
+}
