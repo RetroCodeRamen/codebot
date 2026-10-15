@@ -32,7 +32,7 @@ def main():
     prompt = (f"A task keeps failing and must be split into 2-4 smaller steps done in order. Each step needs its own ASSERTIONS (data, evaluated by a trusted runner in the code directory) "
               f"that FAIL right now and hold once that step is done. Steps must be small (one function, one file or one behaviour); together they must lead to the final check passing. "
               f"Assertion types: call {{\"type\":\"call\",\"module\":\"m\",\"func\":\"f\",\"args\":[..],\"expect\":value or \"raises\":\"ValueError\"}}; "
-              f"run {{\"type\":\"run\",\"argv\":[\"python3\",\"cli.py\",..],\"stdout\":\"..\"}} (also exit, stdout_contains, stdout_json); file_exists/file_contains/file_not_contains with path (+ text). "
+              f"run {{\"type\":\"run\",\"argv\":[\"python3\",\"tool.py\",..],\"stdout\":\"..\"}} (also exit, stdout_contains, stdout_json); file_exists/file_contains/file_not_contains with path (+ text). "
               f"Use plain relative file names, never absolute paths.\n\nTASK: {task['title']}\n{final}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
     try:
         r = ollama.chat(proj, [{"role": "system", "content": "You decompose coding tasks. Reply with JSON only."}, {"role": "user", "content": prompt}],

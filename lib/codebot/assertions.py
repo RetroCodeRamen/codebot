@@ -47,6 +47,10 @@ def validate(asserts):
         else:
             if not _safe_rel(a["path"]): return f"assertion {i}: path must be a relative path inside the code directory"
             if t != "file_exists" and not (isinstance(a["text"], str) and a["text"]): return f"assertion {i}: text must be a non-empty string"
+    seen = {(a["type"], a["path"], a["text"]) for a in asserts if a["type"] in ("file_contains", "file_not_contains")}
+    for a in asserts:
+        if a["type"] == "file_not_contains" and ("file_contains", a["path"], a["text"]) in seen:
+            return f"contradiction: {a['path']} is asserted both to contain and not to contain {_short(a['text'], 40)}; assertions describe the finished state"
     return None
 
 def _same(got, want):

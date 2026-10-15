@@ -61,6 +61,12 @@ class TestCheckspec(Sandboxed):
         self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "expect": ""}); self.assertIsNone(A.validate([a]))      # "" is a real expectation
         r = K.clean({"type": "run", "argv": ["python3", "cli.py", "slug", ""], "stdout": ""}); self.assertEqual(r["stdout"], ""); self.assertIsNone(A.validate([r]))
         self.assertNotIn("expect", K.clean({"type": "call", "module": "m", "func": "f", "expect": 1, "raises": "ValueError"}))
+    def test_a_self_contradicting_assertion_list_is_unusable(self):
+        both = [{"type": "file_contains", "path": "a.py", "text": "def f"}, {"type": "file_not_contains", "path": "a.py", "text": "def f"}]
+        self.assertIn("contradiction", A.validate(both))
+        self.assertIsNone(A.validate([{"type": "file_contains", "path": "a.py", "text": "def f"}, {"type": "file_not_contains", "path": "b.py", "text": "def f"}]))
+    def test_the_planner_prompt_says_assertions_describe_the_finished_state(self):
+        for frag in ("FINISHED state", "never assert that something the task creates is absent", "never invent a command-line interface", "never to mean 'does not work yet'"): self.assertIn(frag, planner.GUIDE)
     def test_command_has_no_path_or_shell_syntax(self):
         c = K.command_for("T3"); self.assertEqual(c, "python3 $CODEBOT_CHECKS/assert_runner.py $CODEBOT_CHECKS/T3.spec.json"); self.assertNotIn("`", c)
     def test_rendered_plan_parses_back_with_its_checks(self):

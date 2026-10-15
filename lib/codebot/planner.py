@@ -25,13 +25,16 @@ Nobody can answer questions. You only plan; you never write code.
 
 For every task give: title (one concrete sentence), files (the repo-relative files it creates or changes), size (S, M or L), deps (numbers of earlier tasks it needs, usually empty),
 and ASSERTIONS: the acceptance test, written as data. A trusted runner evaluates them in the code directory after the task is implemented. Assertion types:
-  {"type":"call","module":"textutil","func":"slugify","args":["Hello World"],"expect":"hello-world"}     call a function and compare the return value
-  {"type":"call","module":"stats","func":"mean","args":[[]],"expect":0.0}
-  {"type":"call","module":"calc","func":"evaluate","args":["1/0"],"raises":"ValueError"}                  the call must raise this exception class
-  {"type":"run","argv":["python3","cli.py","slug","Hello World"],"stdout":"hello-world"}                   run a command: stdout (exact), stdout_contains (list), stdout_json, exit (default 0)
-  {"type":"file_contains","path":"legacy.py","text":"def double"}   {"type":"file_not_contains","path":"main_app.py","text":"old_name"}   {"type":"file_exists","path":"cli.py"}
-The assertions MUST FAIL on the code as it is today (the feature does not exist yet) and hold once the task is truly done. Use 3 to 8 assertions per task covering the examples in the
-spec and the edge cases it names. Use plain file names relative to the code directory, never an absolute path. Also give: goal (one sentence), context (stack, conventions, off-limits),
+  {"type":"call","module":"shapes","func":"area","args":[3,4],"expect":12}                                  call a function and compare the return value
+  {"type":"call","module":"shapes","func":"area","args":[[]],"expect":0.0}
+  {"type":"call","module":"shapes","func":"area","args":[-1,2],"raises":"ValueError"}                          the call must raise this exception class
+  {"type":"run","argv":["python3","greet.py","Ada"],"stdout":"Hello, Ada!"}                                   run a command: stdout (exact), stdout_contains (list), stdout_json, exit (default 0)
+  {"type":"file_contains","path":"settings.py","text":"DEBUG = False"}   {"type":"file_not_contains","path":"app.py","text":"legacy_mode"}   {"type":"file_exists","path":"greet.py"}
+Assertions describe the FINISHED state: what must be true once the task is done. They fail today only because the work has not been done yet. So never assert that something the task creates is absent
+(no file_not_contains for a function you are asked to add), and never assert two things that cannot both hold. file_not_contains is only for things the task REMOVES (for example the old name in a rename).
+Use `call` to test a function (give its module, name, args and the expected return value or exception). Use `run` ONLY for a program the spec says is a command-line tool (for example `python3 greet.py Ada`);
+never invent a command-line interface for a library function. Use 3 to 8 assertions per task covering the examples in the spec and the edge cases it names, and nothing the spec does not say: test only inputs whose result the spec states (never invent an edge case it does not define), use `raises` only when the spec says an error is raised (never to mean 'does not work yet'), and use file_contains only for text the spec names for that exact file (prefer testing behaviour with call or run over looking at source text). Use plain file names
+relative to the code directory, never an absolute path. Also give: goal (one sentence), context (stack, conventions, off-limits),
 done (how the whole thing is verified)."""
 
 def _chat(proj, system, user, schema, left, num_predict=5000):
