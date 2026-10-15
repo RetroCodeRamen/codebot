@@ -1,0 +1,639 @@
+{
+ "goal": "Build confparse.py as described in SPEC.md.",
+ "context": "Python 3 standard library only; one module confparse.py in the repo root exposing parse, parse_file and ParseError.",
+ "done": "Every rule in SPEC.md holds.",
+ "tasks": [
+  {
+   "title": "Sections and key/value lines: parse(text) returns {section: {key: value}}",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[a]\nx = 1\ny = hello\n[b]\nz = no\n"
+     ],
+     "expect": {
+      "a": {
+       "x": 1,
+       "y": "hello"
+      },
+      "b": {
+       "z": false
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "x = 1\n[s]\ny = 2\n"
+     ],
+     "expect": {
+      "": {
+       "x": 1
+      },
+      "s": {
+       "y": 2
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      ""
+     ],
+     "expect": {}
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[a]\n[b]\nx=1\n"
+     ],
+     "expect": {
+      "a": {},
+      "b": {
+       "x": 1
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "url = a=b=c\n"
+     ],
+     "expect": {
+      "": {
+       "url": "a=b=c"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "k =\n"
+     ],
+     "expect": {
+      "": {
+       "k": ""
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[a]\nx=1\n[b]\ny=2\n[a]\nz=3\n"
+     ],
+     "expect": {
+      "a": {
+       "x": 1,
+       "z": 3
+      },
+      "b": {
+       "y": 2
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      5
+     ],
+     "raises": "TypeError"
+    }
+   ]
+  },
+  {
+   "title": "Comments: full-line and inline comments",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "# c1\n; c2\n\n[a]\nx=1\n"
+     ],
+     "expect": {
+      "a": {
+       "x": 1
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = b # note\n"
+     ],
+     "expect": {
+      "": {
+       "a": "b"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = b#c\n"
+     ],
+     "expect": {
+      "": {
+       "a": "b#c"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = # only a comment\n"
+     ],
+     "expect": {
+      "": {
+       "a": ""
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[a] # why\nx=1\n"
+     ],
+     "expect": {
+      "a": {
+       "x": 1
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = b ; note\n"
+     ],
+     "expect": {
+      "": {
+       "a": "b"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Typed unquoted scalars: bool, null, int, float, otherwise str",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = Yes\nb = off\nc = NULL\nd = 007\ne = -5\nf = 1.5\ng = 2.5E-3\nh = 1e3\n"
+     ],
+     "expect": {
+      "": {
+       "a": true,
+       "b": false,
+       "c": null,
+       "d": 7,
+       "e": -5,
+       "f": 1.5,
+       "g": 0.0025,
+       "h": 1000.0
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = 1.\nb = .5\nc = 0x10\nd = 1_000\ne = 1,5\n"
+     ],
+     "expect": {
+      "": {
+       "a": "1.",
+       "b": ".5",
+       "c": "0x10",
+       "d": "1_000",
+       "e": "1,5"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = +3\n"
+     ],
+     "expect": {
+      "": {
+       "a": 3
+      }
+     }
+    }
+   ]
+  },
+  {
+   "title": "Quoted strings and escapes",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"42\"\nb = 'true'\n"
+     ],
+     "expect": {
+      "": {
+       "a": "42",
+       "b": "true"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"x # y ; z\"\n"
+     ],
+     "expect": {
+      "": {
+       "a": "x # y ; z"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"a\\nb\\tc\\\\d\\\"e\"\n"
+     ],
+     "expect": {
+      "": {
+       "a": "a\nb\tc\\d\"e"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = 'a\\nb'\n"
+     ],
+     "expect": {
+      "": {
+       "a": "a\\nb"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"\\q\"\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"x\" y\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"abc\n"
+     ],
+     "raises": "ParseError"
+    }
+   ]
+  },
+  {
+   "title": "Lists in square brackets",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "tags = [a, \"b, c\", 3, true]\n"
+     ],
+     "expect": {
+      "": {
+       "tags": [
+        "a",
+        "b, c",
+        3,
+        true
+       ]
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = []\n"
+     ],
+     "expect": {
+      "": {
+       "a": []
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1, 2,]\n"
+     ],
+     "expect": {
+      "": {
+       "a": [
+        1,
+        2
+       ]
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1, 2] # c\n"
+     ],
+     "expect": {
+      "": {
+       "a": [
+        1,
+        2
+       ]
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1, [2]]\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1, 2\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1,,2]\n"
+     ],
+     "raises": "ParseError"
+    }
+   ]
+  },
+  {
+   "title": "Line continuation with a trailing backslash",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = hello \\\n    world\n"
+     ],
+     "expect": {
+      "": {
+       "a": "hello world"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = 1\\\n2\\\n3\n"
+     ],
+     "expect": {
+      "": {
+       "a": 123
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = \"x \\\n   y\"\n"
+     ],
+     "expect": {
+      "": {
+       "a": "x y"
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = [1, \\\n 2]\n"
+     ],
+     "expect": {
+      "": {
+       "a": [
+        1,
+        2
+       ]
+      }
+     }
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = b\\"
+     ],
+     "raises": "ParseError"
+    }
+   ]
+  },
+  {
+   "title": "ParseError with line number and message phrases",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "a = 1\nnonsense\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "1a = 2\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[a b]\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[abc\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "[s]\nport = 1\nport = 2\n"
+     ],
+     "raises": "ParseError"
+    },
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse",
+     "args": [
+      "x\n"
+     ],
+     "raises": "ParseError"
+    }
+   ]
+  },
+  {
+   "title": "parse_file(path) with UTF-8, BOM and missing-file behaviour",
+   "files": [
+    "confparse.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "confparse",
+     "func": "parse_file",
+     "args": [
+      "/no/such/file.conf"
+     ],
+     "raises": "FileNotFoundError"
+    },
+    {
+     "type": "file_contains",
+     "path": "confparse.py",
+     "text": "def parse_file"
+    }
+   ]
+  }
+ ]
+}

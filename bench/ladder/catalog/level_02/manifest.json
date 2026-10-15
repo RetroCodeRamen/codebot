@@ -1,0 +1,18 @@
+{
+  "id": "level_02", "level": 2, "title": "Configuration file parser", "version": "1.0.0",
+  "difficulty": "easy: one module, several interacting parsing rules",
+  "primary_challenge": "Interacting parsing rules and edge cases",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 6000},
+  "requirements": [
+    {"id": "R1", "title": "sections and key/value lines", "keywords": ["section", "parse"]},
+    {"id": "R2", "title": "comments", "keywords": ["comment"]},
+    {"id": "R3", "title": "typed unquoted scalars", "keywords": ["bool", "int", "float", "typed"]},
+    {"id": "R4", "title": "quoted strings and escapes", "keywords": ["quote", "escape"]},
+    {"id": "R5", "title": "lists", "keywords": ["list"]},
+    {"id": "R6", "title": "line continuation", "keywords": ["continu"]},
+    {"id": "R7", "title": "ParseError and messages", "keywords": ["ParseError", "error"]},
+    {"id": "R8", "title": "parse_file", "keywords": ["parse_file"]}
+  ]
+}

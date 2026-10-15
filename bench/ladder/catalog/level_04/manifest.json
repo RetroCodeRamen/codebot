@@ -1,0 +1,18 @@
+{
+  "id": "level_04", "level": 4, "title": "Persistent CLI task manager", "version": "1.0.0",
+  "difficulty": "medium: multi-command application with persistent state",
+  "primary_challenge": "Multi-command application behavior and state persistence",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 7000},
+  "requirements": [
+    {"id": "R1", "title": "add", "keywords": ["add"]},
+    {"id": "R2", "title": "list and filters", "keywords": ["list"]},
+    {"id": "R3", "title": "list --sort", "keywords": ["sort"]},
+    {"id": "R4", "title": "done / reopen", "keywords": ["done", "reopen"]},
+    {"id": "R5", "title": "delete / clear-done", "keywords": ["delete", "clear"]},
+    {"id": "R6", "title": "edit", "keywords": ["edit"]},
+    {"id": "R7", "title": "stats", "keywords": ["stats"]},
+    {"id": "R8", "title": "persistence, atomic writes, corrupt data, usage", "keywords": ["persist", "corrupt", "atomic", "usage"]}
+  ]
+}

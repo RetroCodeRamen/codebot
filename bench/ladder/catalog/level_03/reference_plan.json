@@ -1,0 +1,725 @@
+{
+ "goal": "Build depgraph.py as described in SPEC.md.",
+ "context": "Python 3 standard library only; one module depgraph.py in the repo root.",
+ "done": "Every function in SPEC.md behaves as specified.",
+ "tasks": [
+  {
+   "title": "Input validation shared by every public function",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      null
+     ],
+     "raises": "TypeError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": "b",
+       "b": []
+      }
+     ],
+     "raises": "TypeError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        1
+       ]
+      }
+     ],
+     "raises": "TypeError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "b",
+        "b"
+       ],
+       "b": []
+      }
+     ],
+     "expect": [
+      "b",
+      "a"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "resolve: deterministic dependency order",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "app": [
+        "lib",
+        "log"
+       ],
+       "lib": [
+        "log"
+       ],
+       "log": []
+      }
+     ],
+     "expect": [
+      "log",
+      "lib",
+      "app"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "b": [],
+       "a": []
+      }
+     ],
+     "expect": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {}
+     ],
+     "expect": []
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "z"
+       ],
+       "z": [],
+       "m": []
+      }
+     ],
+     "expect": [
+      "m",
+      "z",
+      "a"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [],
+       "x": [
+        "y"
+       ],
+       "y": [],
+       "solo": []
+      }
+     ],
+     "expect": [
+      "b",
+      "a",
+      "solo",
+      "y",
+      "x"
+     ]
+    }
+   ]
+  },
+  {
+   "title": "MissingDependencyError listing every missing dependency",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "x",
+        "b"
+       ],
+       "b": [
+        "y"
+       ]
+      }
+     ],
+     "raises": "MissingDependencyError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "b",
+        "ghost"
+       ],
+       "b": [
+        "a"
+       ]
+      }
+     ],
+     "raises": "MissingDependencyError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "groups",
+     "args": [
+      {
+       "a": [
+        "ghost"
+       ]
+      }
+     ],
+     "raises": "MissingDependencyError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "a": [
+        "ghost"
+       ]
+      },
+      [
+       "a"
+      ]
+     ],
+     "raises": "MissingDependencyError"
+    }
+   ]
+  },
+  {
+   "title": "find_cycle and CycleError",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "find_cycle",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [
+        "c"
+       ],
+       "c": [
+        "a"
+       ],
+       "d": [
+        "a"
+       ]
+      }
+     ],
+     "expect": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "find_cycle",
+     "args": [
+      {
+       "x": [
+        "y"
+       ],
+       "y": [
+        "z"
+       ],
+       "z": [
+        "y"
+       ]
+      }
+     ],
+     "expect": [
+      "y",
+      "z"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "find_cycle",
+     "args": [
+      {
+       "a": [
+        "a"
+       ]
+      }
+     ],
+     "expect": [
+      "a"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "find_cycle",
+     "args": [
+      {
+       "app": [
+        "lib",
+        "log"
+       ],
+       "lib": [
+        "log"
+       ],
+       "log": []
+      }
+     ],
+     "expect": []
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [
+        "a"
+       ]
+      }
+     ],
+     "raises": "CycleError"
+    }
+   ]
+  },
+  {
+   "title": "groups: parallel build levels",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    4
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "groups",
+     "args": [
+      {
+       "app": [
+        "lib",
+        "log"
+       ],
+       "lib": [
+        "log"
+       ],
+       "log": [],
+       "docs": []
+      }
+     ],
+     "expect": [
+      [
+       "docs",
+       "log"
+      ],
+      [
+       "lib"
+      ],
+      [
+       "app"
+      ]
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "groups",
+     "args": [
+      {}
+     ],
+     "expect": []
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "groups",
+     "args": [
+      {
+       "a": [],
+       "b": [
+        "a"
+       ],
+       "c": [
+        "a",
+        "b"
+       ]
+      }
+     ],
+     "expect": [
+      [
+       "a"
+      ],
+      [
+       "b"
+      ],
+      [
+       "c"
+      ]
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "groups",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [
+        "a"
+       ]
+      }
+     ],
+     "raises": "CycleError"
+    }
+   ]
+  },
+  {
+   "title": "transitive_deps",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import depgraph; print(sorted(depgraph.transitive_deps({\"app\":[\"lib\",\"log\"],\"lib\":[\"log\",\"util\"],\"log\":[],\"util\":[],\"tool\":[\"util\"]}, 'app')))"
+     ],
+     "stdout": "['lib', 'log', 'util']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import depgraph; print(sorted(depgraph.transitive_deps({\"app\":[\"lib\",\"log\"],\"lib\":[\"log\",\"util\"],\"log\":[],\"util\":[],\"tool\":[\"util\"]}, 'log')))"
+     ],
+     "stdout": "[]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import depgraph; print(sorted(depgraph.transitive_deps({'a':['b'],'b':['c'],'c':['a']}, 'a')))"
+     ],
+     "stdout": "['b', 'c']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import depgraph; print(sorted(depgraph.transitive_deps({'a':['ghost']}, 'ghost')))"
+     ],
+     "stdout": "[]"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "transitive_deps",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": []
+      },
+      "zzz"
+     ],
+     "raises": "KeyError"
+    }
+   ]
+  },
+  {
+   "title": "dependents",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "dependents",
+     "args": [
+      {
+       "app": [
+        "lib",
+        "log"
+       ],
+       "lib": [
+        "log",
+        "util"
+       ],
+       "log": [],
+       "util": [],
+       "tool": [
+        "util"
+       ]
+      },
+      "util"
+     ],
+     "expect": [
+      "app",
+      "lib",
+      "tool"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "dependents",
+     "args": [
+      {
+       "a": [
+        "ghost"
+       ],
+       "b": [
+        "a"
+       ]
+      },
+      "ghost"
+     ],
+     "expect": [
+      "a",
+      "b"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "dependents",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [
+        "c"
+       ],
+       "c": [
+        "a"
+       ]
+      },
+      "a"
+     ],
+     "expect": [
+      "b",
+      "c"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "dependents",
+     "args": [
+      {
+       "a": []
+      },
+      "nope"
+     ],
+     "raises": "KeyError"
+    }
+   ]
+  },
+  {
+   "title": "resolve_subset",
+   "files": [
+    "depgraph.py"
+   ],
+   "size": "S",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "app": [
+        "lib",
+        "log"
+       ],
+       "lib": [
+        "log"
+       ],
+       "log": [],
+       "tool": [
+        "util"
+       ],
+       "util": []
+      },
+      [
+       "lib"
+      ]
+     ],
+     "expect": [
+      "log",
+      "lib"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": []
+      },
+      []
+     ],
+     "expect": []
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": []
+      },
+      [
+       "nope"
+      ]
+     ],
+     "raises": "KeyError"
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "ok": [
+        "base"
+       ],
+       "base": [],
+       "broken": [
+        "ghost"
+       ]
+      },
+      [
+       "ok"
+      ]
+     ],
+     "expect": [
+      "base",
+      "ok"
+     ]
+    },
+    {
+     "type": "call",
+     "module": "depgraph",
+     "func": "resolve_subset",
+     "args": [
+      {
+       "a": [
+        "b"
+       ],
+       "b": [
+        "c"
+       ],
+       "c": [
+        "b"
+       ]
+      },
+      [
+       "a"
+      ]
+     ],
+     "raises": "CycleError"
+    }
+   ]
+  }
+ ]
+}

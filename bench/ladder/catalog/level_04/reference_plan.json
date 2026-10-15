@@ -1,0 +1,389 @@
+{
+ "goal": "Build todo.py as described in SPEC.md.",
+ "context": "Python 3 standard library only. todo.py in the repo root; data file from TODO_FILE (default tasks.json), TODO_TODAY overrides today.",
+ "done": "Every command in SPEC.md behaves as specified.",
+ "tasks": [
+  {
+   "title": "add command with priority, due date and tags",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add 'Buy milk'"
+     ],
+     "stdout": "Added task 1: Buy milk"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add 'a'; t add 'b'"
+     ],
+     "stdout": "Added task 1: a\nAdded task 2: b"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add x --priority urgent"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add x --due 2024-02-30"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add '  '"
+     ],
+     "exit": 2
+    }
+   ]
+  },
+  {
+   "title": "list command with filters and line format",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add 'Pay rent' --priority high --due 2024-06-01 --tag Money >/dev/null; t add 'Buy milk' --tag home >/dev/null; t done 2 >/dev/null; t list --all"
+     ],
+     "stdout": "  1 [ ] high   Pay rent (due 2024-06-01) #money\n  2 [x] medium Buy milk #home"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t list"
+     ],
+     "stdout": "No tasks."
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a --tag x >/dev/null; t add b >/dev/null; t list --tag X"
+     ],
+     "stdout": "  1 [ ] medium a #x"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t list --all --done"
+     ],
+     "exit": 2
+    }
+   ]
+  },
+  {
+   "title": "list --sort id|priority|due",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a --priority low --due 2024-07-01 >/dev/null; t add b --priority high >/dev/null; t add c --priority medium --due 2024-05-01 >/dev/null; t list --sort priority"
+     ],
+     "stdout": "  2 [ ] high   b\n  3 [ ] medium c (due 2024-05-01)\n  1 [ ] low    a (due 2024-07-01)"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a --due 2024-07-01 >/dev/null; t add b >/dev/null; t add c --due 2024-05-01 >/dev/null; t list --sort due"
+     ],
+     "stdout": "  3 [ ] medium c (due 2024-05-01)\n  1 [ ] medium a (due 2024-07-01)\n  2 [ ] medium b"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t list --sort name"
+     ],
+     "exit": 2
+    }
+   ]
+  },
+  {
+   "title": "done and reopen with all-or-nothing id handling",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t done 1"
+     ],
+     "stdout": "Completed task 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t done 1 >/dev/null; t done 1"
+     ],
+     "stdout": "Task 1 is already done"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t done 1 >/dev/null; t reopen 1"
+     ],
+     "stdout": "Reopened task 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t done 1 9"
+     ],
+     "exit": 1
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t done x"
+     ],
+     "exit": 2
+    }
+   ]
+  },
+  {
+   "title": "delete and clear-done; ids are never reused",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t delete 1"
+     ],
+     "stdout": "Deleted task 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t add b >/dev/null; t delete 2 >/dev/null; t add c"
+     ],
+     "stdout": "Added task 3: c"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t add b >/dev/null; t done 1 >/dev/null; t clear-done"
+     ],
+     "stdout": "Removed 1 completed task(s)"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t delete 4"
+     ],
+     "exit": 1
+    }
+   ]
+  },
+  {
+   "title": "edit command",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t edit 1 --title New --priority high; t list"
+     ],
+     "stdout": "Updated task 1\n  1 [ ] high   New"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a --due 2024-07-01 >/dev/null; t edit 1 --due none >/dev/null; t list"
+     ],
+     "stdout": "  1 [ ] medium a"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; t edit 1"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t edit 5 --title x"
+     ],
+     "exit": 1
+    }
+   ]
+  },
+  {
+   "title": "stats command",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t stats"
+     ],
+     "stdout": "Total: 0\nDone: 0\nPending: 0\nOverdue: 0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a --due 2024-06-01 >/dev/null; t add b --due 2024-06-15 >/dev/null; t add c >/dev/null; t done 3 >/dev/null; t stats"
+     ],
+     "stdout": "Total: 3\nDone: 1\nPending: 2\nOverdue: 1"
+    }
+   ]
+  },
+  {
+   "title": "persistence, atomic writes, corrupt data and usage handling",
+   "files": [
+    "todo.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; echo '{bad' > \"$TODO_FILE\"; t list"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; echo '{bad' > \"$TODO_FILE\"; t list 2>&1 | grep -c 'data file is corrupt'"
+     ],
+     "stdout": "1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t add a >/dev/null; python3 -c \"import json,os;d=json.load(open(os.environ['TODO_FILE']));print(sorted(d), d['next_id'])\""
+     ],
+     "stdout": "['next_id', 'tasks'] 2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export TODO_FILE=\"$D/t.json\" TODO_TODAY=2024-06-15; t() { python3 \"$W/todo.py\" \"$@\"; }; t frobnicate"
+     ],
+     "exit": 2
+    }
+   ]
+  }
+ ]
+}

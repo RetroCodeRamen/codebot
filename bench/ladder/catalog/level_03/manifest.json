@@ -1,0 +1,18 @@
+{
+  "id": "level_03", "level": 3, "title": "Dependency resolution engine", "version": "1.0.0",
+  "difficulty": "easy-medium: graph algorithms with deterministic tie-breaking",
+  "primary_challenge": "Algorithmic reasoning",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 6000},
+  "requirements": [
+    {"id": "R1", "title": "input validation", "keywords": ["TypeError", "validat"]},
+    {"id": "R2", "title": "resolve", "keywords": ["resolve"]},
+    {"id": "R3", "title": "missing dependencies", "keywords": ["MissingDependencyError", "missing"]},
+    {"id": "R4", "title": "cycles", "keywords": ["find_cycle", "CycleError", "cycle"]},
+    {"id": "R5", "title": "groups", "keywords": ["groups"]},
+    {"id": "R6", "title": "transitive_deps", "keywords": ["transitive_deps"]},
+    {"id": "R7", "title": "dependents", "keywords": ["dependents"]},
+    {"id": "R8", "title": "resolve_subset", "keywords": ["resolve_subset"]}
+  ]
+}
