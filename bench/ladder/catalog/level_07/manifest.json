@@ -1,0 +1,18 @@
+{
+  "id": "level_07", "level": 7, "title": "SQLite inventory system", "version": "1.0.0",
+  "difficulty": "hard: transactions, migrations and consistency in one module",
+  "primary_challenge": "Database design, transactions, consistency, and persistence",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 8000},
+  "requirements": [
+    {"id": "R1", "title": "schema versions and migrations", "keywords": ["migrat", "schema", "user_version"]},
+    {"id": "R2", "title": "products and exceptions", "keywords": ["add_product", "get_product"]},
+    {"id": "R3", "title": "stock movements", "keywords": ["receive", "adjust", "history"]},
+    {"id": "R4", "title": "reservations", "keywords": ["reserve", "release", "fulfill"]},
+    {"id": "R5", "title": "atomic operations and batch", "keywords": ["batch", "transaction", "atomic"]},
+    {"id": "R6", "title": "verify and repair", "keywords": ["verify", "repair"]},
+    {"id": "R7", "title": "reports", "keywords": ["low_stock", "stock_value"]},
+    {"id": "R8", "title": "persistence and concurrency", "keywords": ["concurren", "thread", "persist"]}
+  ]
+}
