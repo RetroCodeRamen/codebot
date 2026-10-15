@@ -1,0 +1,18 @@
+{
+  "id": "level_08", "level": 8, "title": "Local inventory REST API", "version": "1.0.0",
+  "difficulty": "hard: HTTP protocol, auth, validation, persistence and concurrency integrated",
+  "primary_challenge": "Multi-layer application integration",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 8000},
+  "requirements": [
+    {"id": "R1", "title": "server lifecycle and health", "keywords": ["make_server", "health"]},
+    {"id": "R2", "title": "authentication, roles and check order", "keywords": ["auth", "token", "role"]},
+    {"id": "R3", "title": "create and read products with validation", "keywords": ["POST /products", "validation", "422"]},
+    {"id": "R4", "title": "patch and delete", "keywords": ["PATCH", "DELETE"]},
+    {"id": "R5", "title": "listing, filtering, pagination", "keywords": ["pagination", "limit", "offset"]},
+    {"id": "R6", "title": "stock and movements", "keywords": ["stock", "movements"]},
+    {"id": "R7", "title": "protocol details", "keywords": ["JSON", "413", "405"]},
+    {"id": "R8", "title": "persistence and concurrency", "keywords": ["persist", "concurren"]}
+  ]
+}
