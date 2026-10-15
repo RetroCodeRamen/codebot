@@ -13,7 +13,7 @@ def rd(p, n=200):
 def alive(pidfile):
     try: os.kill(int(rd(pidfile)), 0); return True
     except Exception: return False
-def projects(): return sorted(os.path.basename(p) for p in glob.glob(f"{HOME}/projects/*") if os.path.exists(f"{p}/project.env"))
+def projects(): return sorted(os.path.basename(p) for p in glob.glob(f"{HOME}/projects/*") if os.path.exists(f"{p}/project.env") and not os.path.basename(p).startswith("cap-"))   # cap-*: benchmark trial projects, managed from the benchmark menu
 def info(n):
     s = f"{HOME}/projects/{n}"
     plan = rd(f"{s}/PLAN.md", 100000)
@@ -112,14 +112,40 @@ def new_project():
             sh("start", n); attach(n); input("enter to continue")
     project_menu(n) if os.path.exists(f"{HOME}/projects/{n}") else None
 
+def bench_menu():
+    """Capability Ladder Benchmark: every action is one `codebot bench ...` command, so the menu and the command line can never disagree."""
+    bench = lambda *a: sh("bench", *a)
+    while True:
+        banner(); print(f"{B}Capability Ladder Benchmark{R}  {D}each planned task gets its own time budget; there is no limit on a whole run{R}"); line()
+        bench("status"); line()
+        print(f" {B}l{R} list levels   {B}1{R} run one level   {B}f{R} full ladder (levels 1-12, repeated)   {B}g{R} growing project (8 stages)\n"
+              f" {B}s{R} status of a run   {B}r{R} report   {B}h{R} history   {B}c{R} continue (resume) a run   {B}x{R} cancel a run   {B}v{R} validate the benchmark (no model)   {B}b{R} back")
+        k = ask("›").lower()
+        if k == "b": return
+        elif k == "l": bench("list"); input("enter to continue")
+        elif k in ("1", "f", "g"):
+            mins = ask("minutes per task (the strict limit of EACH planned task):", "90")
+            extra = ["--task-minutes", mins]
+            if k == "1": extra = ["--level", ask("level (1-12):", "1"), *extra, "--repeats", ask("repeats:", "1")]
+            elif k == "f": extra = ["--suite", "ladder", *extra, "--repeats", ask("repeats:", "3")]
+            else: extra = ["--suite", "growing", *extra, "--repeats", ask("repeats:", "1")]
+            if ask("start it in the background now? (y/n)", "y").lower().startswith("y"): bench("run", *extra); input("enter to continue")
+        elif k in ("s", "r", "c", "x"):
+            run = ask("run id (empty = the latest):")
+            bench({"s": "status", "r": "report", "c": "resume", "x": "cancel"}[k], *([run] if run else [])); input("enter to continue")
+        elif k == "h": bench("report", "--history"); input("enter to continue")
+        elif k == "v":
+            lv = ask("levels to validate (empty = all, e.g. 1-3, or 'growing'):"); bench("validate", *(["--levels", lv] if lv else [])); input("enter to continue")
+
 def main():
     while True:
         banner(); ps = projects()
         if not ps: print("No projects yet.\n")
         for k, n in enumerate(ps, 1): print(f" {B}{k}{R}  {pretty(n)}")
-        print(f"\n {B}n{R} new project   {B}t{R} test ntfy   {B}m{R} edit memory   {B}q{R} quit"); k = ask("›").lower()
+        print(f"\n {B}n{R} new project   {B}b{R} benchmarks   {B}t{R} test ntfy   {B}m{R} edit memory   {B}q{R} quit"); k = ask("›").lower()
         if k == "q": return
         elif k == "n": new_project()
+        elif k == "b": bench_menu()
         elif k == "t": sh("notify-test"); time.sleep(1.5)
         elif k == "m": os.system(f"${{EDITOR:-nano}} '{HOME}/memory/expertise.md'")
         elif k.isdigit() and 1 <= int(k) <= len(ps): project_menu(ps[int(k) - 1])

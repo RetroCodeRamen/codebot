@@ -92,10 +92,16 @@ def cmd_cancel(home, a):
 def cmd_validate(home, a):
     """Self-test of the benchmark itself: every reference test passes on the reference solution and not on the bare seed. No model needed."""
     bad = 0
-    for m in ([M.load(home, n) for n in M.parse_levels(home, a.levels or "1-12")] + ([M.load(home, "growing")] if a.levels in (None, "growing") and os.path.isdir(os.path.join(M.catalog_dir(home), "growing")) else [])):
+    has_growing = os.path.isdir(os.path.join(M.catalog_dir(home), "growing"))
+    only_growing = a.levels == "growing"
+    items = ([] if only_growing else [M.load(home, n) for n in M.parse_levels(home, a.levels or "1-12")]) + ([M.load(home, "growing")] if has_growing and (a.levels in (None, "growing")) else [])
+    for m in items:
         r = R.validate_level(m, home); s = r.get("solution") or {}
         tag = "OK " if not r["problems"] else "BAD"; bad += 1 if r["problems"] else 0
         print(f"{tag} {m['_id']:<10} solution {s.get('passed', '-')}/{s.get('total', '-')}  seed {(r.get('seed') or {}).get('passed', '-')}/{(r.get('seed') or {}).get('total', '-')}")
+        for sid, sv in (r.get("stages") or {}).items():
+            so, pv = sv["solution"], sv.get("previous_stage_workspace") or {}
+            print(f"      {sid}: solution {so['passed']}/{so['total']}  without this stage's solution {pv.get('passed', '-')}/{pv.get('total', '-')}")
         for p in r["problems"]: print("      " + p)
         if M.plan_path(m):
             pp = R.validate_plan(m, home); bad += 1 if pp else 0; print(f"    reference plan: {'validated' if not pp else 'PROBLEMS'}")

@@ -71,7 +71,12 @@ class TestErrors(Base):
         self.assertEqual(self.call("GET", "/notes?limit=0&offset=-1")[1], {"error": "invalid limit"}); self.assertEqual(self.call("GET", "/search?limit=0")[0], 400); self.assertEqual(self.call("GET", "/notes?limit=100")[0], 200)
     def test_r03_body_errors(self):
         self.assertEqual(self.call("POST", "/notes", raw=b"{nope")[:2], (400, {"error": "invalid JSON"})); self.assertEqual(self.call("POST", "/notes", raw=b"\xff")[1], {"error": "invalid JSON"}); self.assertEqual(self.call("POST", "/notes", raw=b"[1]")[:2], (400, {"error": "body must be a JSON object"})); self.assertEqual(self.call("POST", "/notes")[:2], (400, {"error": "body must be a JSON object"})); self.assertEqual(self.call("PUT", "/notes/1", raw=b"5")[0], 400)
-    def test_r03_oversized_body(self): s, b, h = self.call("POST", "/notes", raw=b"x" * 1_200_000); self.assertEqual((s, b), (413, {"error": "request too large"})); self.assertEqual(self.call("GET", "/health")[0], 200)
+    def test_r03_oversized_body(self):
+        # only the announced size matters: the server must answer 413 without reading a megabyte (a client that really sends it could be reset mid-send)
+        c = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=60)
+        try: c.putrequest("POST", "/notes"); c.putheader("Content-Length", "1200000"); c.endheaders(); r = c.getresponse(); self.assertEqual((r.status, json.loads(r.read().decode())), (413, {"error": "request too large"}))
+        finally: c.close()
+        self.assertEqual(self.call("GET", "/health")[0], 200)
     def test_r03_check_order(self):
         self.assertEqual(self.call("DELETE", "/notes", raw=b"{bad")[0], 405); self.assertEqual(self.call("POST", "/nothing", raw=b"{bad")[0], 404); self.assertEqual(self.call("GET", "/notes?limit=0")[0], 400)
     def test_r03_errors_are_json(self):

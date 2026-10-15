@@ -95,6 +95,17 @@ def build_solution(m, dest):
         p = os.path.join(dest, rel)
         if os.path.isfile(p): os.remove(p)
 
+def overlay_stages(dest, m, upto):
+    """The reference workspace of a growing project after its first `upto` stages: the seed, then each stage's solution files on top (a stage may delete files of
+    the earlier code through `solution_deletes`, e.g. the refactoring stage replaces a module by a package)."""
+    overlay(dest, M.seed_dir(m))
+    for st in m["stages"][:upto]:
+        for rel in st.get("solution_deletes", []):
+            q = os.path.join(dest, rel)
+            if os.path.isdir(q): shutil.rmtree(q)
+            elif os.path.exists(q): os.remove(q)
+        overlay(dest, M.solution_dir(m, st))
+
 def validate_level(m, home=None):
     """Self-test of the oracle: reference tests must pass 100% (no skips) on seed+solution, and must NOT pass entirely on the bare seed (otherwise the
     benchmark would score a do-nothing agent as perfect). Requirements flagged `regression: true` are expected to pass on the seed already.
@@ -105,7 +116,7 @@ def validate_level(m, home=None):
         for i, st in enumerate(m["stages"]):
             tmp = tempfile.mkdtemp(prefix="cb-val-")
             try:
-                overlay(tmp, M.seed_dir(m)); overlay(tmp, *[M.solution_dir(m, s) for s in m["stages"][:i + 1]])
+                overlay_stages(tmp, m, i + 1)
                 sol = verify(m, tmp, cumulative_upto=i); out.setdefault("stages", {})[st["id"]] = {"solution": {k: v for k, v in sol.items() if k != "tests"}}
                 if sol["passed"] != sol["total"] or sol["skipped"] or sol["total"] == 0: problems.append(f"{st['id']}: reference tests do not all pass on the reference solution: {sol['failing'][:5]}")
                 unm = sol["by_requirement"].get("unmapped")
@@ -114,7 +125,7 @@ def validate_level(m, home=None):
                     if f"{st['id']}:{r['id']}" not in sol["by_requirement"]: problems.append(f"{st['id']}: requirement {r['id']} has no reference test")
                 base = tempfile.mkdtemp(prefix="cb-val-seed-")
                 try:
-                    overlay(base, M.seed_dir(m), *[M.solution_dir(m, s) for s in m["stages"][:i]])
+                    overlay_stages(base, m, i)
                     sd = verify(m, base, cumulative_upto=i); out["stages"][st["id"]]["previous_stage_workspace"] = {k: v for k, v in sd.items() if k != "tests"}
                     new_pass = [t for t, v in sd["tests"].items() if v["status"] == "pass" and v.get("stage") == st["id"]]
                     if len(new_pass) == len([1 for v in sd["tests"].values() if v.get("stage") == st["id"]]) and new_pass: problems.append(f"{st['id']}: a workspace that only has the previous stages already passes this stage's tests")

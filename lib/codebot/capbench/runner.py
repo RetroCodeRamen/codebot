@@ -313,7 +313,7 @@ def _trees_for_audit(ctx, tr, m, st, proj):
     """(starting workspace, trusted solution) trees for the plan audit."""
     seed, sol = tempfile.mkdtemp(prefix="cb-aud-seed-"), tempfile.mkdtemp(prefix="cb-aud-sol-")
     R.overlay(seed, *_seed_dirs(ctx, tr, m, st))
-    if st: R.overlay(sol, M.seed_dir(m), *[M.solution_dir(m, s) for s in m["stages"][:tr["stage"]]])
+    if st: R.overlay_stages(sol, m, tr["stage"])
     else: R.build_solution(m, sol)
     return seed, sol
 

@@ -365,9 +365,15 @@ cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local
 cmd_resume_all() { # at login and every 5 min (watchdog): restart loops that should be running but are not
   for d in "$CODEBOT_HOME"/projects/*/; do
     [[ -f "$d/.active" ]] || continue; local n; n=$(basename "$d")
+    [[ "$n" == cap-* ]] && continue   # a benchmark trial: its runner (below) decides about the loop
     alive "$d/loop.pid" && continue
     echo "restarting $n (loop was not running)"
     NAME="$n"; cmd_start "$n" --keep >/dev/null && notify "codebot: $n restarted" "The loop had died (crash, out-of-memory kill or reboot). Restarted it; it resumes from the plan files." high recycle 1
+  done
+  for d in "$CODEBOT_HOME"/bench/results/ladder/*/; do   # benchmark runs whose runner died (reboot, crash): resume keeps finished trials and every task's consumed time
+    [[ -f "$d/.active" ]] || continue; local r; r=$(basename "$d")
+    local out; out=$("$CODEBOT_HOME/bin/codebot-bench" --home "$CODEBOT_HOME" resume "$r" 2>&1) || continue   # the runner checks for itself whether it is alive (pid reuse after a reboot)
+    [[ "$out" == resuming* ]] && { echo "$out" | head -1; notify "codebot: benchmark $r resumed" "The benchmark runner had died. Resumed it; finished trials and consumed task time are kept." high recycle 1; }
   done
 }
 cmd_install_service() {
@@ -450,6 +456,8 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   tidy                    prune lessons that correlate with failure and regenerate memory/lessons.md
   bench --preflight       prove the context setup against the live model server (num_ctx, keep_alive, schema, KV cache)
   bench [--suite pyutils|pyhard] [--plan fixed|auto] [--name N] [--max-minutes M] [--record]   run a suite through the real pipeline and record metrics
+  bench list | run --level N | run --suite ladder [--repeats 3] | run --suite growing | status [run] | report [run] | resume [run] | cancel [run]
+                          Capability Ladder Benchmark: 12 levels + a growing project, each planned task gets its own 90 min (no limit on the whole run); see docs/BENCHMARK.md
   bench --thermal [--minutes M] [--only substr] [--record]   sweep threads / power profile / GPU configs for sustained speed vs heat
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)

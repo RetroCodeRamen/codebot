@@ -1,0 +1,456 @@
+{
+  "id": "growing",
+  "title": "Growing notes application",
+  "version": "1.0.0",
+  "difficulty": "hard: eight stages, each modifies the previous stage's project and must keep all earlier requirements working",
+  "primary_challenge": "Evolving an existing project without regressions",
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Basic note storage",
+      "spec": "stages/s1/SPEC.md",
+      "solution": "stages/s1/solution",
+      "reference_tests": "stages/s1/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "NoteStore with add/get/list/update/delete",
+          "keywords": [
+            "NoteStore",
+            "add",
+            "update"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "ids never reused",
+          "keywords": [
+            "id",
+            "next_id"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "validation",
+          "keywords": [
+            "ValidationError",
+            "title"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "persistence, atomic writes",
+          "keywords": [
+            "atomic",
+            "os.replace"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "command line",
+          "keywords": [
+            "argparse",
+            "main"
+          ]
+        },
+        {
+          "id": "R6",
+          "title": "exit statuses and errors",
+          "keywords": [
+            "exit",
+            "NotFound"
+          ]
+        }
+      ],
+      "expected_tasks": 6,
+      "planner": {
+        "max_tasks": 8,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s2",
+      "title": "Tags and search",
+      "spec": "stages/s2/SPEC.md",
+      "solution": "stages/s2/solution",
+      "reference_tests": "stages/s2/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "tags on notes",
+          "keywords": [
+            "tags"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "search",
+          "keywords": [
+            "search"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "tag overview",
+          "keywords": [
+            "tags()"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "command line: tags and search",
+          "keywords": [
+            "--tag",
+            "search"
+          ]
+        }
+      ],
+      "expected_tasks": 4,
+      "planner": {
+        "max_tasks": 6,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s3",
+      "title": "SQLite storage and migration",
+      "spec": "stages/s3/SPEC.md",
+      "solution": "stages/s3/solution",
+      "reference_tests": "stages/s3/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "SQLite storage",
+          "keywords": [
+            "sqlite3"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "migration from JSON",
+          "keywords": [
+            "json.bak",
+            "migrat"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "export_json",
+          "keywords": [
+            "export_json"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "stats command",
+          "keywords": [
+            "stats"
+          ]
+        }
+      ],
+      "expected_tasks": 4,
+      "planner": {
+        "max_tasks": 6,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s4",
+      "title": "Local HTTP API",
+      "spec": "stages/s4/SPEC.md",
+      "solution": "stages/s4/solution",
+      "reference_tests": "stages/s4/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "server object",
+          "keywords": [
+            "make_server"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "routes",
+          "keywords": [
+            "/notes",
+            "/search",
+            "/health"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "errors and status codes",
+          "keywords": [
+            "404",
+            "405",
+            "422"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "consistency with CLI",
+          "keywords": [
+            "NoteStore"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "serve command",
+          "keywords": [
+            "serve"
+          ]
+        }
+      ],
+      "expected_tasks": 5,
+      "planner": {
+        "max_tasks": 7,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s5",
+      "title": "Users, ownership and sharing",
+      "spec": "stages/s5/SPEC.md",
+      "solution": "stages/s5/solution",
+      "reference_tests": "stages/s5/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "users and tokens",
+          "keywords": [
+            "create_user",
+            "login",
+            "token"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "ownership",
+          "keywords": [
+            "owner",
+            "actor"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "sharing",
+          "keywords": [
+            "share",
+            "unshare"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "access rules",
+          "keywords": [
+            "PermissionDenied",
+            "NotFound"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "HTTP authentication",
+          "keywords": [
+            "Bearer",
+            "401",
+            "403"
+          ]
+        },
+        {
+          "id": "R6",
+          "title": "existing data and CLI",
+          "keywords": [
+            "adduser",
+            "upgrade"
+          ]
+        }
+      ],
+      "expected_tasks": 6,
+      "planner": {
+        "max_tasks": 9,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s6",
+      "title": "Reminders and background worker",
+      "spec": "stages/s6/SPEC.md",
+      "solution": "stages/s6/solution",
+      "reference_tests": "stages/s6/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "reminders",
+          "keywords": [
+            "set_reminder",
+            "reminder"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "firing, exactly once",
+          "keywords": [
+            "fire_due",
+            "idempotent"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "notifications",
+          "keywords": [
+            "notifications",
+            "mark_read"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "worker",
+          "keywords": [
+            "Worker",
+            "run_once"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "HTTP routes",
+          "keywords": [
+            "/notifications",
+            "reminder"
+          ]
+        },
+        {
+          "id": "R6",
+          "title": "command line",
+          "keywords": [
+            "remind",
+            "worker"
+          ]
+        }
+      ],
+      "expected_tasks": 6,
+      "planner": {
+        "max_tasks": 9,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s7",
+      "title": "Multi-device synchronisation",
+      "spec": "stages/s7/SPEC.md",
+      "solution": "stages/s7/solution",
+      "reference_tests": "stages/s7/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "device identity, uid",
+          "keywords": [
+            "device_id",
+            "uid"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "tombstones",
+          "keywords": [
+            "tombstone"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "snapshots and merge rules",
+          "keywords": [
+            "snapshot",
+            "apply_snapshot"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "two-way sync",
+          "keywords": [
+            "sync_with"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "HTTP sync",
+          "keywords": [
+            "sync_remote",
+            "/sync"
+          ]
+        },
+        {
+          "id": "R6",
+          "title": "command line",
+          "keywords": [
+            "sync",
+            "device"
+          ]
+        }
+      ],
+      "expected_tasks": 6,
+      "planner": {
+        "max_tasks": 9,
+        "num_predict": 8000
+      }
+    },
+    {
+      "id": "s8",
+      "title": "Architectural refactor into a package",
+      "spec": "stages/s8/SPEC.md",
+      "solution": "stages/s8/solution",
+      "reference_tests": "stages/s8/reference_tests",
+      "requirements": [
+        {
+          "id": "R1",
+          "title": "package instead of module",
+          "keywords": [
+            "__init__",
+            "__main__"
+          ]
+        },
+        {
+          "id": "R2",
+          "title": "required modules",
+          "keywords": [
+            "errors",
+            "store",
+            "http_api",
+            "cli",
+            "worker",
+            "sync"
+          ]
+        },
+        {
+          "id": "R3",
+          "title": "size and structure",
+          "keywords": [
+            "250"
+          ]
+        },
+        {
+          "id": "R4",
+          "title": "layering",
+          "keywords": [
+            "import"
+          ]
+        },
+        {
+          "id": "R5",
+          "title": "behaviour unchanged",
+          "keywords": [
+            "python3 -m notes"
+          ]
+        }
+      ],
+      "expected_tasks": 5,
+      "planner": {
+        "max_tasks": 8,
+        "num_predict": 8000
+      },
+      "solution_deletes": [
+        "notes.py"
+      ]
+    }
+  ],
+  "seed": "seed"
+}
