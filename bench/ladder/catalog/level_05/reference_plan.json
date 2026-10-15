@@ -1,0 +1,245 @@
+{
+ "goal": "Fix the six reported bugs in the lending library without changing anything else.",
+ "context": "Python 3 stdlib only. Modules: models.py, fines.py, money.py, search.py, library.py, reports.py in the repo root; existing tests in tests/.",
+ "done": "Each reported behaviour is fixed and python3 -m unittest discover -s tests still passes.",
+ "tasks": [
+  {
+   "title": "Bug 1: late fines - returned on the due day is free, each later day costs one fine unit",
+   "files": [
+    "fines.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "fines",
+     "func": "days_late",
+     "args": [
+      15,
+      15
+     ],
+     "expect": 0
+    },
+    {
+     "type": "call",
+     "module": "fines",
+     "func": "days_late",
+     "args": [
+      15,
+      18
+     ],
+     "expect": 3
+    },
+    {
+     "type": "call",
+     "module": "fines",
+     "func": "days_late",
+     "args": [
+      15,
+      14
+     ],
+     "expect": 0
+    },
+    {
+     "type": "call",
+     "module": "fines",
+     "func": "fine_cents",
+     "args": [
+      "standard",
+      15,
+      18
+     ],
+     "expect": 75
+    },
+    {
+     "type": "call",
+     "module": "fines",
+     "func": "fine_cents",
+     "args": [
+      "premium",
+      15,
+      18
+     ],
+     "expect": 30
+    }
+   ]
+  },
+  {
+   "title": "Bug 2: a standard member may hold 3 books at once, a premium member 5",
+   "files": [
+    "library.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nfor i in (1,2,3): L.checkout('m1','b%d'%i,1)\ntry: L.checkout('m1','b4',1); print('allowed')\nexcept LoanError: print('refused')"
+     ],
+     "stdout": "refused"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nfor i in (1,2,3,4,5): L.checkout('m2','b%d'%i,1)\ntry: L.add_book('b6','Title F',1); L.checkout('m2','b6',1); print('allowed')\nexcept LoanError: print('refused')"
+     ],
+     "stdout": "refused"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nfor i in (1,2,3): L.checkout('m1','b%d'%i,1)\nL.return_book('m1','b2',2); L.checkout('m1','b4',3); print(len(L.active_loans('m1')))"
+     ],
+     "stdout": "3"
+    }
+   ]
+  },
+  {
+   "title": "Bug 3: catalogue search ignores letter case and keeps title order",
+   "files": [
+    "search.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nL=Library(); L.add_book('1','Python Basics'); L.add_book('2','advanced PYTHON'); L.add_book('3','Rust Guide')\nprint([b.isbn for b in L.search('python')])"
+     ],
+     "stdout": "['1', '2']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nL=Library(); L.add_book('1','Python Basics'); L.add_book('3','Rust Guide')\nprint([b.isbn for b in L.search('rUsT')], len(L.search('')))"
+     ],
+     "stdout": "['3'] 2"
+    }
+   ]
+  },
+  {
+   "title": "Bug 4: a loan can only be returned once",
+   "files": [
+    "library.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nL.checkout('m1','b1',1); L.return_book('m1','b1',5)\ntry: L.return_book('m1','b1',6); print('accepted')\nexcept LoanError as e: print(e)\nprint(L.books['b1'].available)"
+     ],
+     "stdout": "m1 does not have b1\n2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nL.checkout('m1','b1',1); L.return_book('m1','b1',5); L.checkout('m1','b1',10); print(L.return_book('m1','b1',12), L.books['b1'].available)"
+     ],
+     "stdout": "0 2"
+    }
+   ]
+  },
+  {
+   "title": "Bug 5: format_money always prints two digits for the cents",
+   "files": [
+    "money.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "call",
+     "module": "money",
+     "func": "format_money",
+     "args": [
+      1005
+     ],
+     "expect": "$10.05"
+    },
+    {
+     "type": "call",
+     "module": "money",
+     "func": "format_money",
+     "args": [
+      5
+     ],
+     "expect": "$0.05"
+    },
+    {
+     "type": "call",
+     "module": "money",
+     "func": "format_money",
+     "args": [
+      -5
+     ],
+     "expect": "-$0.05"
+    },
+    {
+     "type": "call",
+     "module": "money",
+     "func": "format_money",
+     "args": [
+      100
+     ],
+     "expect": "$1.00"
+    },
+    {
+     "type": "call",
+     "module": "money",
+     "func": "format_money",
+     "args": [
+      1050
+     ],
+     "expect": "$10.50"
+    }
+   ]
+  },
+  {
+   "title": "Bug 6: the overdue report lists only active loans",
+   "files": [
+    "library.py"
+   ],
+   "size": "S",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nL.checkout('m1','b1',1); L.checkout('m1','b2',1); L.return_book('m1','b1',30)\nprint([(l.member_id,l.isbn) for l in L.overdue(31)])"
+     ],
+     "stdout": "[('m1', 'b2')]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom library import Library\nfrom models import LoanError\nL=Library()\nfor i in range(1,6): L.add_book('b%d'%i,'Title %s'%chr(64+i),2)\nL.add_member('m1','Ann'); L.add_member('m2','Bob','premium')\nL.checkout('m1','b1',1); L.return_book('m1','b1',5)\nprint(L.overdue(100))"
+     ],
+     "stdout": "[]"
+    }
+   ]
+  }
+ ]
+}

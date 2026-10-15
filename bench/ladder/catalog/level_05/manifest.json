@@ -1,0 +1,17 @@
+{
+  "id": "level_05", "level": 5, "title": "Debug an existing application (six bugs)", "version": "1.0.0",
+  "difficulty": "medium: unfamiliar working code with six planted defects",
+  "primary_challenge": "Code comprehension, diagnosis, and regression prevention",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 6,
+  "planner": {"max_tasks": 8, "num_predict": 6000},
+  "requirements": [
+    {"id": "R1", "title": "late fines (days_late / return_book)", "keywords": ["days_late", "fine"]},
+    {"id": "R2", "title": "checkout limit", "keywords": ["limit", "checkout"]},
+    {"id": "R3", "title": "case-insensitive search", "keywords": ["search"]},
+    {"id": "R4", "title": "double return", "keywords": ["return_book", "twice", "return"]},
+    {"id": "R5", "title": "money formatting", "keywords": ["format_money", "money"]},
+    {"id": "R6", "title": "overdue report", "keywords": ["overdue"]},
+    {"id": "R7", "title": "everything else keeps working (regression)", "regression": true, "unnumbered": true, "keywords": []}
+  ]
+}

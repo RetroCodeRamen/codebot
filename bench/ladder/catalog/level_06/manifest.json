@@ -1,0 +1,18 @@
+{
+  "id": "level_06", "level": 6, "title": "Modular notes application", "version": "1.0.0",
+  "difficulty": "medium-hard: a package of cooperating modules with an exact cross-file contract",
+  "primary_challenge": "Architecture and coordination across files",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 8000},
+  "requirements": [
+    {"id": "R1", "title": "Note model", "keywords": ["Note", "models"]},
+    {"id": "R2", "title": "validation", "keywords": ["valid"]},
+    {"id": "R3", "title": "NoteStore", "keywords": ["NoteStore", "storage"]},
+    {"id": "R4", "title": "search", "keywords": ["search"]},
+    {"id": "R5", "title": "export", "keywords": ["export"]},
+    {"id": "R6", "title": "import", "keywords": ["import"]},
+    {"id": "R7", "title": "CLI core commands", "keywords": ["cli", "command"]},
+    {"id": "R8", "title": "CLI export/import and errors", "keywords": ["exit", "error"]}
+  ]
+}

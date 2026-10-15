@@ -1,0 +1,343 @@
+{
+ "goal": "Build the notes package described in SPEC.md.",
+ "context": "Python 3 stdlib only. Package notes/ (models, validation, storage, search, transfer, cli, __main__, __init__) in the repo root.",
+ "done": "Every requirement of SPEC.md holds, including the command line.",
+ "tasks": [
+  {
+   "title": "notes/models.py: the Note dataclass with to_dict and from_dict",
+   "files": [
+    "notes/models.py",
+    "notes/__init__.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nn=Note(1,'T')\nprint(list(n.to_dict()))"
+     ],
+     "stdout": "['id', 'title', 'body', 'tags', 'created', 'updated', 'pinned']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nn=Note(3,'T','b',['x'],'c','u',True)\nprint(Note.from_dict(n.to_dict())==n)"
+     ],
+     "stdout": "True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nprint(Note.from_dict({'id':4,'title':'T'}).tags)"
+     ],
+     "stdout": "[]"
+    }
+   ]
+  },
+  {
+   "title": "notes/validation.py: ValidationError, clean_title, clean_body, clean_tags",
+   "files": [
+    "notes/validation.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.validation import clean_title\nprint(clean_title('  Hello  '))"
+     ],
+     "stdout": "Hello"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.validation import clean_title,ValidationError\ntry: clean_title('   ')\nexcept ValidationError as e: print(e)"
+     ],
+     "stdout": "title must not be empty"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.validation import clean_tags\nprint(clean_tags([' Work ','work','HOME']))"
+     ],
+     "stdout": "['work', 'home']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.validation import clean_tags,ValidationError\ntry: clean_tags(['bad tag'])\nexcept ValidationError as e: print(e)"
+     ],
+     "stdout": "invalid tag 'bad tag'"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.validation import clean_tags,ValidationError\ntry: clean_tags(['t%d'%i for i in range(11)])\nexcept ValidationError as e: print(e)"
+     ],
+     "stdout": "at most 10 tags are allowed"
+    }
+   ]
+  },
+  {
+   "title": "notes/storage.py: NoteStore with add, get, update, delete, all, restore and atomic saves",
+   "files": [
+    "notes/storage.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\na=s.add('A','b',['X']); b=s.add('B'); s.delete(2); print(a.id, a.tags, a.created, s.add('C').id, len(s))"
+     ],
+     "stdout": "1 ['x'] T0 3 2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nfrom notes.storage import NoteNotFound\ntry: s.get(9)\nexcept NoteNotFound as e: print('missing', e.args[0])"
+     ],
+     "stdout": "missing 9"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\ns.add('A'); s.update(1,title=' New '); print(s.get(1).title)"
+     ],
+     "stdout": "New"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore,StorageError\np=os.path.join(tempfile.mkdtemp(),'n.json'); open(p,'w').write('{bad')\ntry: NoteStore(p)\nexcept StorageError: print('corrupt')"
+     ],
+     "stdout": "corrupt"
+    }
+   ]
+  },
+  {
+   "title": "notes/search.py: search(notes, query, tags) with scoring",
+   "files": [
+    "notes/search.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nfrom notes.search import search\nns=[Note(1,'none','alpha'),Note(2,'none','x',['alpha']),Note(3,'alpha','x')]\nprint([n.id for n in search(ns,'alpha')])"
+     ],
+     "stdout": "[3, 2, 1]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nfrom notes.search import search\nns=[Note(1,'same',''),Note(2,'same','',pinned=True)]\nprint([n.id for n in search(ns,'same')], [n.id for n in search(ns,'')])"
+     ],
+     "stdout": "[2, 1] [2, 1]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nfrom notes.models import Note\nfrom notes.search import search\nns=[Note(1,'a',tags=['home']),Note(2,'a')]\nprint([n.id for n in search(ns,'a',['HOME'])])"
+     ],
+     "stdout": "[1]"
+    }
+   ]
+  },
+  {
+   "title": "notes/transfer.py: export_json and export_markdown",
+   "files": [
+    "notes/transfer.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nfrom notes.transfer import export_markdown\ns.add('T','B',['x'])\np=os.path.join(tempfile.mkdtemp(),'o.md'); export_markdown(s,p); print(repr(open(p).read()))"
+     ],
+     "stdout": "'# T\\n\\nTags: x\\n\\nB\\n\\n---\\n'"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nimport json\nfrom notes.transfer import export_json\ns.add('T')\np=os.path.join(tempfile.mkdtemp(),'o.json'); print(export_json(s,p), json.load(open(p))['version'])"
+     ],
+     "stdout": "1 1"
+    }
+   ]
+  },
+  {
+   "title": "notes/transfer.py: import_json with skip, overwrite and duplicate conflict handling",
+   "files": [
+    "notes/transfer.py"
+   ],
+   "size": "M",
+   "deps": [
+    3,
+    5
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nimport json\nfrom notes.transfer import import_json\np=os.path.join(tempfile.mkdtemp(),'i.json'); json.dump({'version':1,'notes':[{'id':7,'title':'Seven','created':'c7','updated':'u7'}]},open(p,'w'))\nprint(import_json(s,p), s.get(7).created, s.add('n').id)"
+     ],
+     "stdout": "{'added': 1, 'skipped': 0, 'overwritten': 0} c7 8"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nimport json\nfrom notes.transfer import import_json\ns.add('Old')\np=os.path.join(tempfile.mkdtemp(),'i.json'); json.dump({'version':1,'notes':[{'id':1,'title':'New'}]},open(p,'w'))\nprint(import_json(s,p), import_json(s,p,'overwrite'), s.get(1).title, import_json(s,p,'duplicate'), len(s))"
+     ],
+     "stdout": "{'added': 0, 'skipped': 1, 'overwritten': 0} {'added': 0, 'skipped': 0, 'overwritten': 1} New {'added': 1, 'skipped': 0, 'overwritten': 0} 2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys; sys.path.insert(0,'.')\nimport tempfile,os\nfrom notes.storage import NoteStore\ns=NoteStore(os.path.join(tempfile.mkdtemp(),'n.json'),clock=lambda:'T0')\nimport json\nfrom notes.transfer import import_json,TransferError\np=os.path.join(tempfile.mkdtemp(),'i.json'); json.dump({'version':1,'notes':[{'id':1,'title':'ok'},{'id':2,'title':' '}]},open(p,'w'))\ntry: import_json(s,p)\nexcept TransferError as e: print(e, len(s))"
+     ],
+     "stdout": "note 2: title must not be empty 0"
+    }
+   ]
+  },
+  {
+   "title": "python3 -m notes core commands: add, list, show, edit, delete, search",
+   "files": [
+    "notes/cli.py",
+    "notes/__main__.py"
+   ],
+   "size": "M",
+   "deps": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n add First --body hello --tag A --pin; n add Second; n list"
+     ],
+     "stdout": "Added note 1\nAdded note 2\n  1 * First #a\n  2   Second"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n add T --body line1 --tag t >/dev/null; n show 1"
+     ],
+     "stdout": "Note 1: T\nCreated: 2024-01-01T10:00:00\nUpdated: 2024-01-01T10:00:00\nTags: t\n\nline1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n"
+     ],
+     "exit": 2
+    }
+   ]
+  },
+  {
+   "title": "CLI export/import commands and the exit statuses for errors (1 unknown id, 2 invalid input)",
+   "files": [
+    "notes/cli.py"
+   ],
+   "size": "M",
+   "deps": [
+    5,
+    6,
+    7
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n show 9"
+     ],
+     "exit": 1
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n add '  '"
+     ],
+     "exit": 2
+    },
+    {
+     "type": "run",
+     "argv": [
+      "bash",
+      "-c",
+      "W=\"$PWD\"; D=$(mktemp -d); cd \"$D\"; export NOTES_FILE=\"$D/n.json\" NOTES_NOW=2024-01-01T10:00:00 PYTHONPATH=\"$W\"; n() { python3 -m notes \"$@\"; }; n add A >/dev/null; n export \"$D/e.json\" >/dev/null; n import \"$D/e.json\""
+     ],
+     "stdout": "Imported: added 0, skipped 1, overwritten 0"
+    }
+   ]
+  }
+ ]
+}
