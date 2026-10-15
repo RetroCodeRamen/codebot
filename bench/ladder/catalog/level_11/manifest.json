@@ -1,0 +1,18 @@
+{
+  "id": "level_11", "level": 11, "title": "Offline synchronisation engine", "version": "1.0.0",
+  "difficulty": "very hard: distributed state, idempotency, conflict resolution and crash recovery",
+  "primary_challenge": "Distributed state, protocols, and idempotency",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 9000},
+  "requirements": [
+    {"id": "R1", "title": "operations and key kinds", "keywords": ["operation", "op_id", "ConnectionLost"]},
+    {"id": "R2", "title": "server log, push, pull", "keywords": ["SyncServer", "push", "pull"]},
+    {"id": "R3", "title": "resolution rules and fold", "keywords": ["fold", "snapshot", "register", "counter"]},
+    {"id": "R4", "title": "device local API", "keywords": ["Device", "increment", "pending"]},
+    {"id": "R5", "title": "sync protocol and report", "keywords": ["SyncReport", "sync", "incremental"]},
+    {"id": "R6", "title": "interrupted transfers and Link", "keywords": ["Link", "fail_next", "duplicate"]},
+    {"id": "R7", "title": "conflict records", "keywords": ["conflict"]},
+    {"id": "R8", "title": "persistence, restart and convergence", "keywords": ["state_path", "restart", "converge"]}
+  ]
+}

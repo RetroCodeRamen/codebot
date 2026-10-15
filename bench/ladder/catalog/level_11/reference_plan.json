@@ -1,0 +1,345 @@
+{
+ "goal": "Build syncer.py as described in SPEC.md.",
+ "context": "Python 3 stdlib only. One module syncer.py in the repo root.",
+ "done": "Every requirement of SPEC.md holds.",
+ "tasks": [
+  {
+   "title": "Operations: validation of operation dicts and the register/counter key kinds; ConnectionLost",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nprint(issubclass(ConnectionLost, ConnectionError)); a = srv.push('d', [op('d-1'), op('d-2', t='incr', key='c', v=2)]); print(a['accepted'], a['rejected'])"
+     ],
+     "stdout": "True\n['d-1', 'd-2'] []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nfor o in (op('d-1', ts=0), op('d-1', t='incr', v=0), op('d-1', key=''), op('d-1', dev='other'), op('d-1', t='delete', v=3), {}):\n    a = srv.push('d', [o]); print(a['accepted'], a['rejected'][0]['reason'])"
+     ],
+     "stdout": "[] invalid operation\n[] invalid operation\n[] invalid operation\n[] invalid operation\n[] invalid operation\n[] invalid operation"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('d', [op('d-1', key='a'), op('d-2', t='incr', key='b', v=1)]); a = srv.push('d', [op('d-3', t='incr', key='a', v=1), op('d-4', key='b')]); print([(r['op_id'], r['reason']) for r in a['rejected']])"
+     ],
+     "stdout": "[('d-3', 'type mismatch'), ('d-4', 'type mismatch')]"
+    }
+   ]
+  },
+  {
+   "title": "SyncServer: append-only log, push with duplicates and rejections, pull pages, latest_seq",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('d', [op('d-1'), op('d-2', key='b')]); srv.push('e', [op('e-1', 'e', key='c')]); print([(o['op_id'], o['seq']) for o in srv.pull(0)['ops']], srv.latest_seq())"
+     ],
+     "stdout": "[('d-1', 1), ('d-2', 2), ('e-1', 3)] 3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('d', [op('d-1', v=1)]); a = srv.push('d', [op('d-1', v=99), op('d-1', v=5), op('d-2', key='b')]); print(a)"
+     ],
+     "stdout": "{'accepted': ['d-2'], 'duplicates': ['d-1', 'd-1'], 'rejected': [], 'latest_seq': 2}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('d', [op('d-%d' % i, key='k%d' % i, ts=i) for i in range(1, 8)]); p = srv.pull(0, 3); q = srv.pull(6, 3); print([o['seq'] for o in p['ops']], p['more'], p['latest_seq'], [o['seq'] for o in q['ops']], q['more'], srv.pull(7))"
+     ],
+     "stdout": "[1, 2, 3] True 7 [7] False {'ops': [], 'latest_seq': 7, 'more': False}"
+    }
+   ]
+  },
+  {
+   "title": "Resolution rules: fold() and SyncServer.snapshot(): last writer wins by (ts, device), tombstones, counter sums",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('a', [op('a-1', 'a', 5, v='new'), op('a-2', 'a', 3, v='old')]); srv.push('b', [op('b-1', 'b', 5, v='from b')]); print(srv.snapshot())"
+     ],
+     "stdout": "{'k': 'from b'}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('a', [op('a-1', 'a', 1, v=1), op('a-2', 'a', 2, t='delete', v=None)]); srv.push('b', [op('b-1', 'b', 1, key='z', v=1)]); print(srv.snapshot())"
+     ],
+     "stdout": "{'z': 1}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nsrv.push('a', [op('a-1', 'a', 1, t='incr', key='c', v=5), op('a-2', 'a', 2, t='incr', key='c', v=-5), op('a-3', 'a', 3, t='incr', key='d', v=2)]); print(srv.snapshot())"
+     ],
+     "stdout": "{'c': 0, 'd': 2}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nops = [op('a-1', 'a', 1, v=1), op('a-2', 'a', 2, v=2), op('c-1', 'a', 1, t='incr', key='n', v=4)]; print(fold(ops), fold(ops + ops[::-1]), fold([]))"
+     ],
+     "stdout": "{'k': 2, 'n': 4} {'k': 2, 'n': 4} {}"
+    }
+   ]
+  },
+  {
+   "title": "Device local API: set, delete, increment with op ids and Lamport clock, read-your-writes, pending, validation",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nl = Link(srv); d = Device('phone', l); print(d.set('a', 1), d.delete('a'), d.increment('c'), [(o['ts'], o['base'], o['type']) for o in d.pending()])"
+     ],
+     "stdout": "phone-1 phone-2 phone-3 [(1, 0, 'set'), (2, 0, 'delete'), (3, 0, 'incr')]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = Device('a', Link(srv)); d.set('x', 1); d.set('y', 2); d.delete('y'); d.increment('c', 3); d.increment('c', 4); print(d.get('x'), d.get('y', 'dflt'), d.items(), srv.snapshot())"
+     ],
+     "stdout": "1 dflt {'c': 7, 'x': 1} {}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = Device('a', Link(srv)); d.set('ok', 1); d.increment('cnt')\nfor f in (lambda: d.set('', 1), lambda: d.increment('n', 0), lambda: d.set('cnt', 1), lambda: d.increment('ok'), lambda: d.set('x', {1, 2})):\n    try: f(); print('accepted')\n    except ValueError: print('ValueError')\nprint(len(d.pending()))"
+     ],
+     "stdout": "ValueError\nValueError\nValueError\nValueError\nValueError\n2"
+    }
+   ]
+  },
+  {
+   "title": "Device.sync: push in batches, incremental paged pull, SyncReport",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    4
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\na = Device('a', Link(srv)); b = Device('b', Link(srv)); a.set('x', 1); a.increment('n', 5); r = a.sync(); print(r); print(b.sync().pulled, b.items(), a.sync().pulled)"
+     ],
+     "stdout": "SyncReport(completed=True, pushed=2, pulled=2, duplicates=0, rejected=[], conflicts=0, error=None)\n2 {'n': 5, 'x': 1} 0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nl = Link(srv); a = Device('a', l)\nfor i in range(25): a.set('k%02d' % i, i)\nr = a.sync(batch=10, page=8); print(l.log.count('push'), l.log.count('pull'), r.pushed, r.pulled)"
+     ],
+     "stdout": "3 4 25 25"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\na = Device('a', Link(srv)); b = Device('b', Link(srv)); a.set('x', 1); a.sync(); b.sync(); b.set('y', 2); print(b.pending()[0]['base'], b.lamport); b.sync(); a.set('z', 1); print(a.pending()[0]['ts'])"
+     ],
+     "stdout": "1 2\n2"
+    }
+   ]
+  },
+  {
+   "title": "Link with failure injection and sync recovery: lost requests and lost responses, duplicates, no double counting",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    5
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nl = Link(srv); l.fail_next(1, 'response')\ntry: l.push('d', [op('d-1')])\nexcept ConnectionLost: print('lost', srv.latest_seq())\nl.fail_next(1, 'request')\ntry: l.push('d', [op('d-2')])\nexcept ConnectionLost: print('lost', srv.latest_seq())"
+     ],
+     "stdout": "lost 1\nlost 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nl = Link(srv); a = Device('a', l); a.increment('n', 5); l.fail_next(1, 'response'); r = a.sync(); print(r.completed, len(a.pending()), srv.snapshot()); r = a.sync(); print(r.completed, r.pushed, r.duplicates, a.pending(), a.get('n'), srv.latest_seq())"
+     ],
+     "stdout": "False 1 {'n': 5}\nTrue 0 1 [] 5 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nl = Link(srv); a = Device('a', l); b = Device('b', Link(srv))\nfor i in range(10): a.set('k%d' % i, i)\na.sync(); orig = b.link.pull; n = [0]\ndef flaky(since, limit=100):\n    n[0] += 1\n    if n[0] == 3: raise ConnectionLost('cut')\n    return orig(since, limit)\nb.link.pull = flaky; r = b.sync(page=3); print(r.completed, r.pulled, b.last_seq); b.link.pull = orig; r = b.sync(page=3); print(r.completed, r.pulled, b.last_seq, b.items() == a.items())"
+     ],
+     "stdout": "False 6 6\nTrue 4 10 True"
+    }
+   ]
+  },
+  {
+   "title": "Conflict records on the device: concurrent writes to a register, winner, value, no conflicts for counters or causally ordered writes",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    5
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\na = Device('a', Link(srv)); b = Device('b', Link(srv)); a.set('x', 'from a'); b.set('x', 'from b'); a.sync(); b.sync(); a.sync(); print(a.conflicts); print(b.conflicts)"
+     ],
+     "stdout": "[{'key': 'x', 'local_op': 'a-1', 'remote_op': 'b-1', 'winner_op': 'b-1', 'value': 'from b'}]\n[{'key': 'x', 'local_op': 'b-1', 'remote_op': 'a-1', 'winner_op': 'b-1', 'value': 'from b'}]"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\na = Device('a', Link(srv)); b = Device('b', Link(srv)); a.set('x', 1); a.sync(); b.sync(); b.set('x', 2); b.sync(); a.sync(); a.increment('n'); b.increment('n'); a.sync(); b.sync(); print(a.conflicts, b.conflicts)"
+     ],
+     "stdout": "[] []"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\na = Device('a', Link(srv)); b = Device('b', Link(srv)); a.set('x', 1); b.set('x', 2); a.sync(); r = b.sync(); print(r.conflicts, b.sync().conflicts, b.clear_conflicts(), b.conflicts)"
+     ],
+     "stdout": "1 0 1 []"
+    }
+   ]
+  },
+  {
+   "title": "Persistence and restart: device state files, server log file, crash recovery and convergence",
+   "files": [
+    "syncer.py"
+   ],
+   "size": "M",
+   "deps": [
+    6,
+    7
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = tempfile.mkdtemp(); p = os.path.join(d, 'a.json'); a = Device('a', Link(srv), p); a.set('x', 1); a.increment('n', 2); a.sync(); a.set('y', 3); a2 = Device('a', Link(srv), p); print(a2.items() == a.items(), a2.last_seq, a2.counter, a2.lamport, a2.set('z', 1))"
+     ],
+     "stdout": "True 2 3 3 a-4"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = tempfile.mkdtemp(); p = os.path.join(d, 'a.json'); l = Link(srv); a = Device('a', l, p); a.increment('n', 5); l.fail_next(1, 'response'); a.sync(); a2 = Device('a', Link(srv), p); r = a2.sync(); print(len(a2.pending()), r.completed, r.duplicates, srv.snapshot(), a2.get('n'))"
+     ],
+     "stdout": "0 True 1 {'n': 5} 5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = tempfile.mkdtemp(); p = os.path.join(d, 'server.log'); s = SyncServer(p); s.push('a', [op('a-1', 'a', 1, v=1), op('a-2', 'a', 2, t='incr', key='n', v=3)]); s2 = SyncServer(p); print(s2.latest_seq(), s2.snapshot()); a = s2.push('a', [op('a-1', 'a', 1, v=99), op('a-3', 'a', 3, t='set', key='n')]); print(a['duplicates'], [r['reason'] for r in a['rejected']])"
+     ],
+     "stdout": "2 {'k': 1, 'n': 3}\n['a-1'] ['type mismatch']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\nd = tempfile.mkdtemp(); p = os.path.join(d, 'server.log'); s = SyncServer(p); s.push('a', [op('a-1', 'a')]); open(p, 'a').write('{\"op_id\": \"a-2\", \"dev'); s2 = SyncServer(p); print(s2.latest_seq(), s2.push('a', [op('a-2', 'a', 2, key='b')])['accepted'])"
+     ],
+     "stdout": "1 ['a-2']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, os, tempfile, json\nsys.path.insert(0, '.')\nfrom syncer import *\ndef op(i, dev='d', ts=1, base=0, t='set', key='k', v=1): return {'op_id': i, 'device': dev, 'ts': ts, 'base': base, 'type': t, 'key': key, 'value': v}\nsrv = SyncServer()\ndevs = [Device(n, Link(srv)) for n in 'abcd']\nfor i, d in enumerate(devs): d.set('shared', 'v%d' % i); d.increment('total', i + 1)\nfor d in reversed(devs): d.sync()\nfor d in devs: d.sync()\nprint([d.items() for d in devs] == [srv.snapshot()] * 4, srv.snapshot())"
+     ],
+     "stdout": "True {'shared': 'v3', 'total': 10}"
+    }
+   ]
+  }
+ ]
+}
