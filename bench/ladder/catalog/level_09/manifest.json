@@ -1,0 +1,18 @@
+{
+  "id": "level_09", "level": 9, "title": "Concurrent background job system", "version": "1.0.0",
+  "difficulty": "hard: concurrency, races, leases and fault recovery",
+  "primary_challenge": "Concurrency, race conditions, fault recovery, and consistency",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 8000},
+  "requirements": [
+    {"id": "R1", "title": "queue, enqueue, get, counts", "keywords": ["enqueue", "JobQueue", "Job"]},
+    {"id": "R2", "title": "claiming and ordering", "keywords": ["claim", "priority"]},
+    {"id": "R3", "title": "workers and handlers", "keywords": ["Worker", "handler"]},
+    {"id": "R4", "title": "retries and backoff", "keywords": ["retry", "backoff", "attempts"]},
+    {"id": "R5", "title": "timeouts", "keywords": ["timeout"]},
+    {"id": "R6", "title": "cancellation", "keywords": ["cancel"]},
+    {"id": "R7", "title": "leases and crash recovery", "keywords": ["lease", "recover", "heartbeat"]},
+    {"id": "R8", "title": "concurrency and persistence", "keywords": ["concurren", "thread", "persist"]}
+  ]
+}

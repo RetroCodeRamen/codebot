@@ -1,0 +1,337 @@
+{
+ "goal": "Build jobq.py as described in SPEC.md.",
+ "context": "Python 3 stdlib only (sqlite3, threading, json). One module jobq.py in the repo root.",
+ "done": "Every requirement of SPEC.md holds.",
+ "tasks": [
+  {
+   "title": "JobQueue, enqueue with validation and idempotency keys, get, counts, Job dataclass",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); a=q.enqueue('x',{'k':[1]}); b=q.enqueue('y'); j=q.get(a); print(a,b,j.state,j.payload,j.run_at,j.attempts,j.cancel_requested)"
+     ],
+     "stdout": "1 2 queued {'k': [1]} 1000.0 0 False"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); print(q.enqueue('x',key='k'), q.enqueue('x',key='k'), q.counts())"
+     ],
+     "stdout": "1 1 {'queued': 1, 'running': 0, 'succeeded': 0, 'failed': 0, 'cancelled': 0}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c)\nfor kw in ({'name':''},{'name':'x','max_attempts':0},{'name':'x','timeout':0},{'name':'x','payload':object()}):\n    try: q.enqueue(**kw); print('accepted')\n    except ValueError: print('ValueError')"
+     ],
+     "stdout": "ValueError\nValueError\nValueError\nValueError"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c)\ntry: q.get(9)\nexcept JobNotFound: print('JobNotFound', issubclass(JobNotFound, KeyError))"
+     ],
+     "stdout": "JobNotFound True"
+    }
+   ]
+  },
+  {
+   "title": "claim(worker_id): ordering by priority, run_at and id; delays; leases",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    1
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=30); a=q.enqueue('x',priority=1); c.t+=5; b=q.enqueue('x',priority=5); d=q.enqueue('x',priority=1); c.t+=5\nprint([q.claim('w').id for _ in range(3)], q.claim('w'))"
+     ],
+     "stdout": "[2, 1, 3] None"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=30); q.enqueue('x',delay=10); print(q.claim('w')); c.t+=10; j=q.claim('w'); print(j.state,j.attempts,j.worker_id,j.lease_expires)"
+     ],
+     "stdout": "None\nrunning 1 w 1040.0"
+    }
+   ]
+  },
+  {
+   "title": "Worker.run_once / run_until_empty with handlers, results and missing handlers",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    2
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); i=q.enqueue('double',21); w=Worker(q,{'double':lambda p,x:p*2}); print(w.run_once(), w.run_once(), q.get(i).result, q.get(i).state)"
+     ],
+     "stdout": "True False 42 succeeded"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); [q.enqueue('n') for _ in range(5)]; q.enqueue('n',delay=60); print(Worker(q,{'n':lambda p,x:1}).run_until_empty(), q.counts()['queued'])"
+     ],
+     "stdout": "5 1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); i=q.enqueue('nope',max_attempts=5); Worker(q,{}).run_once(); j=q.get(i); print(j.state,j.attempts,j.last_error)"
+     ],
+     "stdout": "failed 1 LookupError: no handler for nope"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); q.enqueue('n'); j=q.claim('w1'); print(q.complete(j,'ok'), q.complete(j,'again'), q.fail(j,'late'))"
+     ],
+     "stdout": "True False None"
+    }
+   ]
+  },
+  {
+   "title": "Retries with exponential backoff, cap and final failure",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,retry_base=1.0); i=q.enqueue('n',max_attempts=4); w=Worker(q,{'n':lambda p,x:1/0}); w.run_once(); j=q.get(i); print(j.state,j.attempts,j.run_at,j.last_error); c.t+=1; w.run_once(); print(q.get(i).run_at)"
+     ],
+     "stdout": "queued 1 1001.0 ZeroDivisionError: division by zero\n1003.0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,retry_base=0.0); i=q.enqueue('n',max_attempts=3); w=Worker(q,{'n':lambda p,x:1/0}); print(w.run_until_empty()); j=q.get(i); print(j.state,j.attempts)"
+     ],
+     "stdout": "3\nfailed 3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,retry_base=10.0,retry_cap=25.0); i=q.enqueue('n',max_attempts=6); w=Worker(q,{'n':lambda p,x:1/0}); r=[]\nfor _ in range(4):\n    w.run_once(); r.append(q.get(i).run_at-c()); c.t+=60\nprint(r)"
+     ],
+     "stdout": "[10.0, 20.0, 25.0, 25.0]"
+    }
+   ]
+  },
+  {
+   "title": "Per-job timeouts: the attempt fails after the limit and late results are ignored",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    4
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,retry_base=0.0); i=q.enqueue('slow',timeout=0.3,max_attempts=1); t0=time.time(); Worker(q,{'slow':lambda p,x:time.sleep(2)}).run_once(); j=q.get(i); print(time.time()-t0<1.5, j.state, j.last_error)"
+     ],
+     "stdout": "True failed TimeoutError: job exceeded 0.3 seconds"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,retry_base=0.0); i=q.enqueue('slow',timeout=0.2,max_attempts=1); Worker(q,{'slow':lambda p,x:(time.sleep(0.7),'late')[1]}).run_once(); time.sleep(1.0); j=q.get(i); print(j.state,j.result)"
+     ],
+     "stdout": "failed None"
+    }
+   ]
+  },
+  {
+   "title": "Cancellation of queued and running jobs",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); i=q.enqueue('n'); print(q.cancel(i), q.get(i).state, q.cancel(i))"
+     ],
+     "stdout": "cancelled cancelled False"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); i=q.enqueue('n'); j=q.claim('w'); print(q.cancel(i), q.get(i).state, q.get(i).cancel_requested); print(q.complete(j,'r'), q.get(i).state, q.get(i).result)"
+     ],
+     "stdout": "requested running True\nTrue cancelled None"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c); i=q.enqueue('n',max_attempts=5); j=q.claim('w'); q.cancel(i); print(q.fail(j,'boom'))"
+     ],
+     "stdout": "cancelled"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c)\ntry: q.cancel(5)\nexcept JobNotFound: print('JobNotFound')"
+     ],
+     "stdout": "JobNotFound"
+    }
+   ]
+  },
+  {
+   "title": "Lease expiry, recover(), heartbeat and lost-worker handling",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    3
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=30); i=q.enqueue('n'); q.claim('dead'); print(q.recover()); c.t+=31; print(q.recover()); j=q.get(i); print(j.state,j.attempts,j.worker_id,j.last_error)"
+     ],
+     "stdout": "0\n1\nqueued 1 None worker lost (lease expired)"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=10); i=q.enqueue('n',max_attempts=2); q.claim('a'); c.t+=11; q.claim('b'); c.t+=11; print(q.recover(), q.get(i).state, q.get(i).attempts)"
+     ],
+     "stdout": "1 failed 2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=10); q.enqueue('n'); old=q.claim('a'); c.t+=11; new=q.claim('b'); print(q.complete(old,'stale'), q.fail(old,'stale'), q.complete(new,'fresh'))"
+     ],
+     "stdout": "False None True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nq=JobQueue(clock=c,lease_seconds=10); q.enqueue('n'); j=q.claim('w'); c.t+=8; print(q.heartbeat(j), q.get(j.id).lease_expires-c()); c.t+=8; print(q.recover())"
+     ],
+     "stdout": "True 10.0\n0"
+    }
+   ]
+  },
+  {
+   "title": "Concurrency and persistence: threads, Worker.start/stop, reopen on a file",
+   "files": [
+    "jobq.py"
+   ],
+   "size": "M",
+   "deps": [
+    5,
+    6,
+    7
+   ],
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nimport tempfile,os\np=os.path.join(tempfile.mkdtemp(),'q.db'); q=JobQueue(p); cnt={}; lk=threading.Lock()\ndef h(pl,x):\n    with lk: cnt[pl]=cnt.get(pl,0)+1\n    time.sleep(0.003)\n[q.enqueue('n',i) for i in range(50)]\nw=Worker(q,{'n':h},poll_interval=0.01).start(4); end=time.time()+60\nwhile q.counts()['succeeded']<50 and time.time()<end: time.sleep(0.05)\nw.stop(); print(q.counts()['succeeded'], sorted(cnt)==list(range(50)), set(cnt.values()))"
+     ],
+     "stdout": "50 True {1}"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nimport tempfile,os\np=os.path.join(tempfile.mkdtemp(),'q.db'); q=JobQueue(p,clock=c); a=q.enqueue('n',{'x':1},key='k'); Worker(q,{'n':lambda pl,x:'r'}).run_once(); q.close(); q2=JobQueue(p,clock=c); print(q2.get(a).state, q2.get(a).result, q2.enqueue('n',key='k'), q2.enqueue('n'))"
+     ],
+     "stdout": "succeeded r 1 2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import sys, time, threading\nsys.path.insert(0, '.')\nfrom jobq import *\nclass Clk:\n    def __init__(s): s.t=1000.0\n    def __call__(s): return s.t\nc=Clk()\nimport tempfile,os\np=os.path.join(tempfile.mkdtemp(),'q.db'); q=JobQueue(p,clock=c,lease_seconds=20); i=q.enqueue('n'); q.claim('dead'); q.close(); q2=JobQueue(p,clock=c,lease_seconds=20); print(q2.recover()); c.t+=21; j=q2.claim('alive'); print(j.id,j.attempts)"
+     ],
+     "stdout": "0\n1 2"
+    }
+   ]
+  }
+ ]
+}
