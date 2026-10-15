@@ -158,7 +158,9 @@ def validate_plan(m, home, plan=None, runner=None):
     from .. import assertions as A, checkspec as K
     path = M.plan_path(m)
     if plan is None and not path: return ["no reference plan"]
-    plan = plan or json.load(open(path)); runner = runner or os.path.join(home, "modes", "code", "verifiers", "assert_runner.py"); problems = []
+    if plan is None:
+        with open(path) as f: plan = json.load(f)
+    runner = runner or os.path.join(home, "modes", "code", "verifiers", "assert_runner.py"); problems = []
     seed, sol = tempfile.mkdtemp(prefix="cb-vp-seed-"), tempfile.mkdtemp(prefix="cb-vp-sol-"); spec = os.path.join(tempfile.mkdtemp(prefix="cb-vp-"), "spec.json")
     try:
         overlay(seed, M.seed_dir(m)); build_solution(m, sol)

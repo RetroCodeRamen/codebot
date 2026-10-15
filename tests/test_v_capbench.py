@@ -6,6 +6,9 @@ from codebot import taskclock as TC, tasks as T
 from codebot.config import Project
 from codebot.capbench import classify as CL, cli, manifests as M, notify as NT, reference as R, reports, results as RS, runner as RN, workspace as W
 
+def _write(path, text):
+    with open(path, "w") as f: f.write(text)
+
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 SOL = os.path.join(REPO, "bench", "ladder", "catalog", "level_01", "reference_solution")
 MAP = {"T1": ["textutil.py"], "T2": ["textutil.py"], "T3": ["numutil.py"], "T4": ["numutil.py"], "T5": ["fileutil.py"], "T6": ["fileutil.py"], "T7": ["netutil.py"], "T8": ["netutil.py"]}
@@ -61,12 +64,12 @@ class TestCatalog(unittest.TestCase):
         r = R.verify(m, tmp); self.assertEqual(r["total"], 64); self.assertEqual(r["by_requirement"]["R1"], {"passed": 8, "total": 8}); self.assertEqual(r["by_requirement"]["R3"]["passed"], 0); self.assertAlmostEqual(r["pass_rate"], 16 / 64)
     def test_a_hanging_reference_test_is_a_failure_not_silence(self):
         d = self.tmp_ws(); td = os.path.join(d, "tests"); os.makedirs(td)
-        open(os.path.join(td, "test_h.py"), "w").write("import time, unittest\nclass T(unittest.TestCase):\n    def test_r01_a(self): time.sleep(30)\n    def test_r01_b(self): pass\n")
+        _write(os.path.join(td, "test_h.py"), "import time, unittest\nclass T(unittest.TestCase):\n    def test_r01_a(self): time.sleep(30)\n    def test_r01_b(self): pass\n")
         t0 = time.time(); res = R.run_tests(td, d, per_test_s=1)
         self.assertLess(time.time() - t0, 10); self.assertEqual(res["tests"]["test_h.T.test_r01_a"]["status"], "timeout"); self.assertEqual(res["tests"]["test_h.T.test_r01_b"]["status"], "pass")
     def test_reference_tests_run_against_a_copy_so_they_cannot_alter_the_result_workspace(self):
         d = self.tmp_ws(); td = os.path.join(d, "tests"); os.makedirs(td); ws = os.path.join(d, "ws"); os.makedirs(ws)
-        open(os.path.join(td, "test_w.py"), "w").write("import unittest\nclass T(unittest.TestCase):\n    def test_r01_a(self): open('junk.txt', 'w').write('x')\n")
+        _write(os.path.join(td, "test_w.py"), "import unittest\nclass T(unittest.TestCase):\n    def test_r01_a(self): open('junk.txt', 'w').write('x')\n")
         R.run_tests(td, ws); self.assertFalse(os.path.exists(os.path.join(ws, "junk.txt")))
     def tmp_ws(self):
         import tempfile; d = tempfile.mkdtemp(prefix="cbtest-ws-"); self.addCleanup(shutil.rmtree, d, True); return d
@@ -136,8 +139,8 @@ class TestRunEndToEnd(CapCase):
         self.hang("T5"); store, ctx = self.make(task_minutes=0.05); RN.execute(ctx); rep = reports.build(store)
         self.assertFalse(rep["running"]); self.assertEqual(rep["trials"][0]["outcome"], "PARTIAL"); self.assertEqual(rep["trials"][0]["verified"], 6)
         md = reports.markdown(rep); self.assertIn("FINISHED", md); self.assertIn("PARTIAL", md); self.assertNotIn("FAILED", md.split("## Per level")[0])
-        rows = list(csv.DictReader(io.StringIO(open(os.path.join(store.dir, "trials.csv")).read()))); self.assertEqual(rows[0]["timeouts"], "1"); self.assertEqual(rows[0]["tasks_total"], "8")
-        tasks = list(csv.DictReader(io.StringIO(open(os.path.join(store.dir, "tasks.csv")).read()))); self.assertEqual(len(tasks), 8)
+        rows = list(csv.DictReader(io.StringIO(RS.read_text(os.path.join(store.dir, "trials.csv"))))); self.assertEqual(rows[0]["timeouts"], "1"); self.assertEqual(rows[0]["tasks_total"], "8")
+        tasks = list(csv.DictReader(io.StringIO(RS.read_text(os.path.join(store.dir, "tasks.csv"))))); self.assertEqual(len(tasks), 8)
         self.assertEqual(rep["ceiling"]["highest_level_held"], 0)         # one level, independent score below 80%
     def test_cancel_then_resume_never_repeats_finished_trials_or_resets_time(self):
         store, ctx = self.make(repeats=2)
@@ -174,9 +177,9 @@ class TestRunEndToEnd(CapCase):
     def test_minimal_mode_is_one_task_without_an_internal_check_and_full_mode_is_untouched(self):
         store, ctx = self.make(mode="minimal"); os.environ["CB_MAP"] = json.dumps({"T1": ["textutil.py", "numutil.py", "fileutil.py", "netutil.py"]}); RN.execute(ctx); td = store.all_trials()[0]
         self.assertEqual((td["outcome"], td["totals"]["tasks_total"], td["reference"]["passed"]), ("COMPLETE", 1, 64)); self.assertEqual(td["plan"]["mode"], "minimal")
-        env = open(os.path.join(self.home, "projects", td["project"], "project.env")).read(); self.assertIn('LADDER_TRIES="1,0,0,0,0"', env); self.assertIn('CHECK_BASELINE_GUARD="0"', env)
+        env = RS.read_text(os.path.join(self.home, "projects", td["project"], "project.env")); self.assertIn('LADDER_TRIES="1,0,0,0,0"', env); self.assertIn('CHECK_BASELINE_GUARD="0"', env)
         store2, ctx2 = self.make(name="b"); RN.execute(ctx2)
-        env2 = open(os.path.join(self.home, "projects", store2.all_trials()[0]["project"], "project.env")).read(); self.assertNotIn("LADDER_TRIES", env2); self.assertIn('CHECK_BASELINE_GUARD="1"', env2)
+        env2 = RS.read_text(os.path.join(self.home, "projects", store2.all_trials()[0]["project"], "project.env")); self.assertNotIn("LADDER_TRIES", env2); self.assertIn('CHECK_BASELINE_GUARD="1"', env2)
     def test_a_plan_the_guard_rejects_ends_the_trial_as_planning_failed_and_is_still_scored(self):
         store, ctx = self.make()
         orig = RN.PL.install_plan; RN.PL.install_plan = lambda proj, plan: [{"id": "T1", "title": "x", "check": "", "verdict": "passes", "rc": 0, "out": ""}]
@@ -268,9 +271,9 @@ class TestGrowing(CapCase):
 
 class TestWatchdogAndMenu(unittest.TestCase):
     def test_the_watchdog_resumes_benchmark_runs_and_leaves_trial_projects_to_their_runner(self):
-        src = open(os.path.join(REPO, "bin", "codebot")).read(); body = src[src.index("cmd_resume_all()"):src.index("cmd_install_service()")]
+        src = RS.read_text(os.path.join(REPO, "bin", "codebot")); body = src[src.index("cmd_resume_all()"):src.index("cmd_install_service()")]
         self.assertIn("bench/results/ladder", body); self.assertIn("codebot-bench", body); self.assertIn("cap-*", body)
     def test_the_menu_has_a_benchmark_submenu_that_calls_the_cli(self):
-        src = open(os.path.join(REPO, "bin", "codebot-ui")).read(); compile(src, "codebot-ui", "exec"); self.assertIn("def bench_menu", src); self.assertIn('sh("bench"', src); self.assertIn('startswith("cap-")', src)
+        src = RS.read_text(os.path.join(REPO, "bin", "codebot-ui")); compile(src, "codebot-ui", "exec"); self.assertIn("def bench_menu", src); self.assertIn('sh("bench"', src); self.assertIn('startswith("cap-")', src)
 
 if __name__ == "__main__": unittest.main()

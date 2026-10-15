@@ -5,6 +5,9 @@ import fcntl, json, os, platform, shutil, subprocess, tempfile, time
 from contextlib import contextmanager
 from . import VERSION
 
+def read_text(path):
+    with open(path) as f: return f.read()
+
 def root(home): return os.path.join(home, "bench", "results", "ladder")
 def now_iso(): return time.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -65,8 +68,8 @@ class Store:
     def active_path(self): return os.path.join(self.dir, ".active")
     def runner_alive(self):
         try:
-            pid = int(open(self.pid_path()).read().strip()); os.kill(pid, 0)
-            return "capbench" in open(f"/proc/{pid}/cmdline").read().replace("\0", " ") or "codebot-bench" in open(f"/proc/{pid}/cmdline").read().replace("\0", " ")
+            pid = int(read_text(self.pid_path()).strip()); os.kill(pid, 0)
+            cmd = read_text(f"/proc/{pid}/cmdline").replace("\0", " "); return "capbench" in cmd or "codebot-bench" in cmd
         except (OSError, ValueError): return False
 
 def list_runs(home):

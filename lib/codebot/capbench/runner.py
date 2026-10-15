@@ -64,7 +64,7 @@ def unload_model(home, model=None, port=None):
     cfg = read_env(os.path.join(home, "config", "codebot.env")); port = port or cfg.get("OLLAMA_PORT", "11500"); model = model or cfg.get("CODEBOT_MODEL", "codebot-model")
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/api/generate", data=json.dumps({"model": model, "keep_alive": 0}).encode(), headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=30).read()
+        with urllib.request.urlopen(req, timeout=30) as r: r.read()
     except OSError: pass
 
 def preflight(home, levels_or_ids, need_model=True, mode="full", driver="loop", env_overrides_ok=False):
@@ -224,8 +224,8 @@ def _task_states(proj):
 
 def _loop_alive(proj):
     try:
-        pid = int(open(proj.p("loop.pid")).read().strip()); os.kill(pid, 0)
-        return "__loop" in open(f"/proc/{pid}/cmdline").read().replace("\0", " ")
+        pid = int(RS.read_text(proj.p("loop.pid")).strip()); os.kill(pid, 0)
+        return "__loop" in RS.read_text(f"/proc/{pid}/cmdline").replace("\0", " ")
     except (OSError, ValueError): return False
 
 def _track(ctx, tr, td, proj, seen):
@@ -332,7 +332,7 @@ def verify_trial(ctx, tr, td, proj):
         finally: shutil.rmtree(seed, ignore_errors=True); shutil.rmtree(sol, ignore_errors=True)
     specs = []
     for fn in sorted(os.listdir(proj.p("checks"))) if os.path.isdir(proj.p("checks")) else []:
-        if fn.endswith(".spec.json") and not fn.startswith("S"): specs.append(open(proj.p("checks", fn)).read()[:4000])
+        if fn.endswith(".spec.json") and not fn.startswith("S"): specs.append(RS.read_text(proj.p("checks", fn))[:4000])
     td["plan_specs"] = specs
     if ctx.cfg.get("checkpoints") and mt["frozen"]: td["checkpoints"] = checkpoint_curve(ctx, tr, m, st, proj, mt["tasks"])
     td["infra_tasks"] = []
@@ -428,7 +428,7 @@ def execute(ctx):
 def start_detached(home, run_id):
     """Run `execute` in its own session (survives the shell closing); progress in runner.log. Returns the pid."""
     store = RS.Store(home, run_id); os.makedirs(store.dir, exist_ok=True)
-    log = open(os.path.join(store.dir, "runner.log"), "a")
-    p = subprocess.Popen([sys.executable, os.path.join(home, "bin", "codebot-bench"), "--home", home, "resume", run_id, "--foreground"], stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    with open(os.path.join(store.dir, "runner.log"), "a") as log:                                         # the child keeps its own copy of the handle
+        p = subprocess.Popen([sys.executable, os.path.join(home, "bin", "codebot-bench"), "--home", home, "resume", run_id, "--foreground"], stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
     with open(store.pid_path(), "w") as f: f.write(str(p.pid))
     return p.pid

@@ -41,7 +41,7 @@ def _go(home, run_id):
 
 def cmd_resume(home, a):
     store = _store(home, a.run); st = store.load()
-    if store.runner_alive() and not a.foreground: print(f"{store.run_id} is already running (pid {open(store.pid_path()).read().strip()})"); return 0
+    if store.runner_alive() and not a.foreground: print(f"{store.run_id} is already running (pid {RS.read_text(store.pid_path()).strip()})"); return 0
     if st["status"] == "finished": print(f"{store.run_id} already finished"); return 0
     unfinished = sum(1 for t in st["trials"] if t["phase"] != "finished"); print(f"resuming {store.run_id}: {unfinished} unfinished trial(s); finished trials and consumed task time are kept")
     if a.foreground: return _go(home, store.run_id)
