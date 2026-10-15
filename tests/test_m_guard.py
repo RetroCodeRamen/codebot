@@ -86,7 +86,6 @@ class TestProbeIsReadOnly(Base):
         self.assertFalse(os.path.exists(os.path.join(self.code, "created_by_probe.txt"))); self.assertNotEqual(r["verdict"], "passes")
         sandbox._MODE.clear()
 
-if __name__ == "__main__": unittest.main()
 
 class TestMalformedCheckLine(Base):
     def test_prose_after_the_closing_backtick_is_its_own_verdict(self):
@@ -102,3 +101,27 @@ class TestMalformedCheckLine(Base):
         self.write_plan("# Tasks\n- [ ] 1. x\n  - check: `true` and more words\n")
         r = subprocess.run([sys.executable, ENG, "check-plan", self.name, "--home", self.home], capture_output=True, text=True)
         self.assertIn("MALFORMED", r.stdout); self.assertEqual(r.returncode, 1)
+
+class TestStaticFlaws(Base):
+    """Mistakes a real planner made that the shell does not report (the check just fails forever, which looks like a good failing check)."""
+    def script(self, name, body):
+        os.makedirs(C.checks_dir(self.proj()), exist_ok=True); open(os.path.join(C.checks_dir(self.proj()), name), "w").write(body)
+    def verdict(self, check): return guard.probe(self.proj(), check, 30)
+    def test_backtick_inside_the_command_is_broken(self):
+        r = self.verdict("`python3 $CODEBOT_CHECKS/t1_test.py`"); self.assertEqual(r["verdict"], "broken"); self.assertIn("backtick", r["out"])
+    def test_angle_bracket_placeholder_is_broken(self):
+        for bad in ("python3 <home/aj/x/checks/t1_test.py>", "python3 <path/to/t1_test.py>", "bash <script>"):
+            r = self.verdict(bad); self.assertEqual(r["verdict"], "broken", bad); self.assertIn("angle-bracket", r["out"])
+    def test_missing_checks_script_is_broken(self):
+        r = self.verdict("python3 $CODEBOT_CHECKS/nope_test.py"); self.assertEqual(r["verdict"], "broken"); self.assertIn("does not exist", r["out"])
+    def test_script_hardcoding_the_state_directory_is_broken(self):
+        self.script("t1_test.py", f'import sys\nsys.path.insert(0, "{self.state}/code")\nsys.exit(1)\n')
+        r = self.verdict("python3 $CODEBOT_CHECKS/t1_test.py"); self.assertEqual(r["verdict"], "broken"); self.assertIn("relative paths", r["out"])
+    def test_a_good_relative_script_that_fails_now_is_ok(self):
+        self.script("t1_test.py", 'import sys\nsys.path.insert(0, ".")\nprint("missing")\nsys.exit(1)\n')
+        r = self.verdict("python3 $CODEBOT_CHECKS/t1_test.py"); self.assertEqual(r["verdict"], "ok", r)
+    def test_ordinary_redirect_and_comparison_checks_are_not_flagged(self):
+        for good in ("test -f a.txt", "grep -q hi a.txt", "python3 -c 'import sys; sys.exit(1 if 1 < 2 else 0)'", "cat a.txt | grep -q hi"):
+            self.assertIsNone(guard.static_flaw(self.proj(), good), good)
+
+if __name__ == "__main__": unittest.main()
