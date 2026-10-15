@@ -78,7 +78,8 @@ def validate_manifest(m, home=None):
         if len(ids) != len(set(ids)): p.append(f"{tag}duplicate requirement ids")
         for r in it.get("requirements", []):
             if not re.fullmatch(r"R\d+", r.get("id", "")) or not r.get("title"): p.append(f"{tag}requirement {r} needs an id like R3 and a title")
-        if n != len(it.get("requirements", [])): p.append(f"{tag}the spec has {n} numbered items but the manifest lists {len(it.get('requirements', []))} requirements")
+        numbered = [r for r in it.get("requirements", []) if not r.get("unnumbered")]       # an unnumbered requirement (e.g. "nothing else may break") is scored but is not a plannable spec item
+        if n != len(numbered): p.append(f"{tag}the spec has {n} numbered items but the manifest lists {len(numbered)} numbered requirements")
         pl = it.get("planner", {})
         if not (1 <= pl.get("max_tasks", 0) <= 40): p.append(f"{tag}planner.max_tasks must be 1..40")
         if pl.get("max_tasks", 0) < n: p.append(f"{tag}planner.max_tasks ({pl.get('max_tasks')}) is below the number of spec items ({n}): the completeness check could never be satisfied")

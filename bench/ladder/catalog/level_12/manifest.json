@@ -1,0 +1,136 @@
+{
+  "id": "level_12",
+  "level": 12,
+  "title": "Autonomous issue tracker",
+  "version": "1.0.0",
+  "difficulty": "extreme: a complete multi-module application planned and built as many tasks",
+  "primary_challenge": "Long-horizon autonomous software engineering",
+  "spec": "SPEC.md",
+  "seed": "seed",
+  "reference_solution": "reference_solution",
+  "reference_tests": "reference_tests",
+  "expected_tasks": 14,
+  "planner": {
+    "max_tasks": 16,
+    "num_predict": 12000
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "title": "package, persistence, atomicity",
+      "keywords": [
+        "Tracker",
+        "sqlite",
+        "persist"
+      ]
+    },
+    {
+      "id": "R2",
+      "title": "users",
+      "keywords": [
+        "create_user",
+        "user"
+      ]
+    },
+    {
+      "id": "R3",
+      "title": "authentication and tokens",
+      "keywords": [
+        "login",
+        "token",
+        "authenticate"
+      ]
+    },
+    {
+      "id": "R4",
+      "title": "projects, visibility, members, archive",
+      "keywords": [
+        "project",
+        "member",
+        "archive"
+      ]
+    },
+    {
+      "id": "R5",
+      "title": "permission matrix",
+      "keywords": [
+        "permission",
+        "PermissionDenied",
+        "role"
+      ]
+    },
+    {
+      "id": "R6",
+      "title": "issues and workflow",
+      "keywords": [
+        "create_issue",
+        "transition",
+        "update_issue"
+      ]
+    },
+    {
+      "id": "R7",
+      "title": "comments",
+      "keywords": [
+        "comment"
+      ]
+    },
+    {
+      "id": "R8",
+      "title": "labels",
+      "keywords": [
+        "label"
+      ]
+    },
+    {
+      "id": "R9",
+      "title": "search and statistics",
+      "keywords": [
+        "search",
+        "stats"
+      ]
+    },
+    {
+      "id": "R10",
+      "title": "audit log",
+      "keywords": [
+        "audit"
+      ]
+    },
+    {
+      "id": "R11",
+      "title": "import and export",
+      "keywords": [
+        "export",
+        "import"
+      ]
+    },
+    {
+      "id": "R12",
+      "title": "HTTP API",
+      "keywords": [
+        "make_server",
+        "HTTP",
+        "api"
+      ]
+    },
+    {
+      "id": "R13",
+      "title": "background maintenance",
+      "keywords": [
+        "Maintenance",
+        "run_once",
+        "maintenance"
+      ]
+    },
+    {
+      "id": "R14",
+      "title": "consistency and concurrency",
+      "keywords": [
+        "concurren",
+        "thread",
+        "consisten"
+      ]
+    }
+  ]
+}
