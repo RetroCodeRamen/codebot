@@ -486,3 +486,8 @@ Harness-side, generic: (1) a plan with fewer tasks than the spec has numbered it
 | drop + better repair hint (cmp8) | 2/3 | 0/3 | unsound T5 copied the prompt's `shapes` example (`double(3,4)==12`, `raises ValueError`); unsound T3 once |
 
 Conclusion: completeness removed the single-task collapses; grounding removes invented source text; but the 9B model still cannot reliably write rename/removal assertions, and the baseline guard cannot tell (it accepted plans the reference audit calls unsound). Prompt tweaking has reached diminishing returns on this suite. Next levers: a human-reviewed plan for important projects (`codebot plan`), or a harness-side audit that does not need a reference solution.
+
+
+## Capability Ladder Benchmark (built, not yet run at scale)
+
+Implemented: per-root-task persisted time budget (`taskclock`), enforced kill/cleanup, `timeout`/`skipped` task states, a 12-level catalog and an 8-stage growing project with hidden reference tests, run/resume/report/menu/watchdog/ntfy. Proven so far: oracle self-tests (`codebot bench validate`), framework tests with a fake worker, a short real-model smoke run (see HANDOFF for numbers once recorded). Not done: any full ladder or growing run; reference plans for the growing stages; live interactive-mode run. Details and limits in `docs/BENCHMARK.md`.

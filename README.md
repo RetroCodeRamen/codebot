@@ -117,6 +117,10 @@ context compaction; a prompt that diverges early is fully re-evaluated. `codebot
 (`codebot install-service`) restarts loops that die, keeping pauses and pending questions. `THINK=off` is the default for unattended runs; the planning chat always thinks. Close heavy apps
 for long runs; a cooling pad (or repaste) helps more than any setting. `sudo apt install nvidia-driver-580-open` + reboot would let Ollama offload layers to the GPU.
 
+## Capability Ladder Benchmark
+
+`codebot bench list` / `codebot bench run --level N` / `codebot bench run --suite ladder --repeats 3` / `codebot bench run --suite growing` (also in the menu, option `b`). Twelve hidden-test-scored projects of rising difficulty plus a growing project; each planned task gets its own strict time budget (90 min), no limit on the run. Full description, metrics and known limits: `docs/BENCHMARK.md`.
+
 ## Tests
 
 `tests/run.sh [file]` runs the whole suite in about 2 minutes with almost no CPU: a scripted fake Ollama and scripted workers exercise the harness (locking and tamper, checkpoints,

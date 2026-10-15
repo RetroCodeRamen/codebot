@@ -235,4 +235,30 @@ class TestCli(CapCase):
         self.assertEqual(bench.main(["--home", self.home, "--compare", "nonexistent"]) if False else 0, 0)       # the flag interface is exercised by test_o_bench; dispatch must not swallow it
         words = ["--suite", "pyutils", "list"]; self.assertFalse(words[0] in cli.SUBCOMMANDS)
 
+class TestGrowing(CapCase):
+    """The growing notes project: stages chain, deletes between stages work, scoring is cumulative, trials are one per stage."""
+    def ws(self, upto):
+        d = os.path.join(self.home, f"ws{upto}"); shutil.rmtree(d, ignore_errors=True); os.makedirs(d); R.overlay_stages(d, M.load(REPO, "growing"), upto); return d
+    def test_the_manifest_is_valid_and_has_eight_stages(self):
+        m = M.load(REPO, "growing"); self.assertEqual(M.validate_manifest(m, REPO), []); self.assertEqual([s["id"] for s in m["stages"]], [f"s{i}" for i in range(1, 9)])
+    def test_the_refactoring_stage_replaces_the_module_by_a_package(self):
+        before, after = self.ws(7), self.ws(8)
+        self.assertTrue(os.path.isfile(os.path.join(before, "notes.py"))); self.assertFalse(os.path.exists(os.path.join(after, "notes.py"))); self.assertTrue(os.path.isfile(os.path.join(after, "notes", "__init__.py")))
+    def test_scoring_is_cumulative_and_a_missing_stage_costs_only_its_own_requirements(self):
+        m = M.load(REPO, "growing"); one = R.verify(m, self.ws(1), cumulative_upto=1)       # stage 1 code scored against stages 1 and 2
+        self.assertTrue(all(v["status"] == "pass" for k, v in one["tests"].items() if k.startswith("s1:")), "earlier requirements still hold")
+        self.assertTrue(any(v["status"] != "pass" for k, v in one["tests"].items() if k.startswith("s2:")), "the new stage is not met yet")
+        self.assertTrue(all(k.split(":")[0] in ("s1", "s2") for k in one["tests"])); two = R.verify(m, self.ws(2), cumulative_upto=1); self.assertEqual(two["passed"], two["total"])
+    def test_a_growing_run_has_one_trial_per_stage_and_refuses_diagnostic_modes(self):
+        rc, out = TestCli.run_cli(self, "run", "--suite", "growing", "--repeats", "1", "--dry-run", "--name", "g", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(rc, 0, out)
+        st = RS.Store(self.home, RS.resolve(self.home, "g")).load(); self.assertEqual([t["stage"] for t in st["trials"]], list(range(1, 9))); self.assertEqual(len({t["trial_id"] for t in st["trials"]}), 8)
+        with self.assertRaises(RN.RunError): RN.create_run(self.home, "growing", None, 1, "minimal", 90.0, 45.0, 3, None, None, False, "g2", 20.0, False, "repeat-major", "engine", False)
+
+class TestWatchdogAndMenu(unittest.TestCase):
+    def test_the_watchdog_resumes_benchmark_runs_and_leaves_trial_projects_to_their_runner(self):
+        src = open(os.path.join(REPO, "bin", "codebot")).read(); body = src[src.index("cmd_resume_all()"):src.index("cmd_install_service()")]
+        self.assertIn("bench/results/ladder", body); self.assertIn("codebot-bench", body); self.assertIn("cap-*", body)
+    def test_the_menu_has_a_benchmark_submenu_that_calls_the_cli(self):
+        src = open(os.path.join(REPO, "bin", "codebot-ui")).read(); compile(src, "codebot-ui", "exec"); self.assertIn("def bench_menu", src); self.assertIn('sh("bench"', src); self.assertIn('startswith("cap-")', src)
+
 if __name__ == "__main__": unittest.main()
