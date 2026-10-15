@@ -18,20 +18,28 @@ def is_runner_check(check): return RUNNER in (check or "")
 def spec_name(tid): return f"{tid}.spec.json"
 
 def assert_schema():
-    """JSON schema for the list of assertions (one flat object with a type enum: the same shape the flat worker schema uses, which every server compiles)."""
+    """JSON schema for the list of assertions. One strict variant per way an assertion can be valid, so constrained decoding cannot produce a field the
+    type does not take, a call with nothing to compare, or a run with no expectation (the mistakes a flat all-optional schema allowed)."""
     s, j = {"type": "string"}, {}                       # j: any JSON value
-    props = {"type": {"enum": list(A.TYPES)}, "module": s, "func": s, "args": {"type": "array", "items": j}, "kwargs": {"type": "object"}, "expect": j, "raises": s,
-             "argv": {"type": "array", "items": s}, "stdin": s, "exit": {"type": "integer"}, "stdout": s, "stdout_contains": {"type": "array", "items": s}, "stdout_json": j,
-             "path": s, "text": s}
-    return {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": props, "required": ["type"], "additionalProperties": False}}
+    P = {"module": s, "func": s, "args": {"type": "array", "items": j}, "kwargs": {"type": "object"}, "expect": j, "raises": s, "argv": {"type": "array", "items": s, "minItems": 1},
+         "stdin": s, "exit": {"type": "integer"}, "stdout": s, "stdout_contains": {"type": "array", "items": s, "minItems": 1}, "stdout_json": j, "path": s, "text": s}
+    def variant(t, required, optional=()):
+        keys = ["type", *required, *optional]
+        return {"type": "object", "properties": {"type": {"enum": [t]}, **{k: P[k] for k in keys if k != "type"}}, "required": ["type", *required], "additionalProperties": False}
+    call_opt = ("args", "kwargs")
+    variants = [variant("call", ("module", "func", "expect"), call_opt), variant("call", ("module", "func", "raises"), call_opt)]
+    run_exp = ("exit", "stdout", "stdout_contains", "stdout_json")
+    variants += [variant("run", ("argv", e), ("stdin", *[x for x in run_exp if x != e])) for e in run_exp]
+    variants += [variant("file_exists", ("path",)), variant("file_contains", ("path", "text")), variant("file_not_contains", ("path", "text"))]
+    return {"type": "array", "minItems": 1, "maxItems": 12, "items": {"anyOf": variants}}
 
 def clean(a):
-    """Drop the empty/placeholder fields a constrained model fills in for types that do not use them (flat schema), keeping only what the type allows."""
+    """Keep only the fields the type takes. With the strict per-type schema the model cannot emit filler any more, so values are kept AS GIVEN: an empty
+    string is a real expectation ("prints nothing", "returns an empty string"). Only a `raises` assertion drops a stray `expect`."""
     if not isinstance(a, dict) or a.get("type") not in A.TYPES: return a
     req, opt = A.TYPES[a["type"]]
-    out = {k: v for k, v in a.items() if k == "type" or (k in req | opt and v not in (None, "") or (k in ("expect", "stdout_json") and k in a and k in req | opt))}
-    if out.get("raises"): out.pop("expect", None)       # a call expects a value OR an exception; the flat schema makes the model fill both
-    if out.get("stdout_json") in ("", None): out.pop("stdout_json", None)
+    out = {k: v for k, v in a.items() if k == "type" or k in req | opt}
+    if out.get("raises"): out.pop("expect", None)
     return out
 
 def prepare(asserts): return [clean(a) for a in asserts or []]

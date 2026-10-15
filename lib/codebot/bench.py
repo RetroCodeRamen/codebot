@@ -191,7 +191,7 @@ def compare(names, home):
         if "error" in r or not r: raise SystemExit(f"{n}: the run did not produce results ({r.get('error', 'empty')})")
         t, g, lad, pr = r["turns"], r["guard"], r["ladder"], r["pass_rate"]
         rows.append((n, [("model", run.get("model") or "?"), ("planner", (f"{len(pl['rounds'])} round(s), {pl['secs']} s, ok={pl['ok']}" if pl else ("fixed plan" if not d.get("plan") else d["plan"][:40]))),
-            ("tasks verified", f"{pr['done']}/{pr['total']}"), ("attempts per task", r["attempts_per_task"]), ("wall min", run.get("minutes")), ("turns", t.get("turns")),
+            ("planner checks unsound / vacuous", (f"{len(pl['audit']['unsound'])} / {len(pl['audit']['vacuous'])}" if pl and pl.get("audit") else "n/a")), ("tasks verified", f"{pr['done']}/{pr['total']}"), ("attempts per task", r["attempts_per_task"]), ("wall min", run.get("minutes")), ("turns", t.get("turns")),
             ("generation tok/s", t.get("gen_tok_per_s")), ("cold prompt tok/s", t.get("cold_prompt_tok_per_s")), ("KV reuse, later turns", t.get("cache_reuse_later_turns")),
             ("malformed replies", f"{t.get('malformed')} ({int(100 * (t.get('schema_failure_rate') or 0))}%)"), ("cut by token limit", t.get("truncated")), ("guard rejections", g["rejected_total"]),
             ("ladder steps", len(lad["escalations"])), ("splits", len(lad["splits"])), ("blocked", sum(1 for p in r["tasks"] if p["status"] == "blocked")),
@@ -267,6 +267,9 @@ def main(argv):
         print("planner running (unattended, harness-driven repair rounds)...", flush=True); pi = (plan_auto if a.planner == "opencode" else PL.plan_auto)(home, name, a.plan_minutes * 60)
         plan_info = (f"{len(pi['rounds'])} round(s), {pi['secs']} s, final check-plan {'OK' if pi['ok'] else 'REJECTED'}. " + "; ".join(
             f"round {r['n']}: rejected {r['rejected'] or 'none'}, violations {r['violations'] or 'none'}" for r in pi["rounds"])); print(plan_info, flush=True)
+        if a.planner == "native":
+            pi["audit"] = PL.audit_against_reference(home, name, a.suite)
+            if pi["audit"]: plan_info += f"; audit against the reference solution: unsound (a correct solution fails them) {pi['audit']['unsound'] or 'none'}, vacuous (hold on the seed) {pi['audit']['vacuous'] or 'none'}"; print(plan_info, flush=True)
         if not os.path.exists(os.path.join(home, "projects", name, "PLAN.md")):
             print("the planner wrote no PLAN.md; nothing to run"); return 2
     run = run_project(home, name, a.max_minutes); proj = Project(name, home); run["model"] = proj.get("CODEBOT_MODEL", "codebot-model")

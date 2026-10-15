@@ -104,3 +104,28 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print):
         if ok: info["ok"] = True; break
         last = rejected
     info["secs"] = round(time.time() - t0); return info
+
+def audit_against_reference(home, name, suite):
+    """Planner quality, measured: run every generated spec against the seed code (a real test FAILS there: rc 1) and against the suite's reference solution
+    (a sound test HOLDS there: rc 0). Returns {"tasks": {id: {"seed": rc, "reference": rc, "why": [...]}}, "unsound": [ids], "vacuous": [ids]} or None without a reference."""
+    import shutil, tempfile
+    src = os.path.join(home, "bench", "suite", suite); ref = os.path.join(src, "reference"); seed = os.path.join(src, "seed")
+    if not (os.path.isdir(ref) and os.path.isdir(seed)): return None
+    proj = Project(name, home); out = {"tasks": {}, "unsound": [], "vacuous": []}; runner = os.path.join(proj.p("checks"), K.RUNNER)
+    tmp = tempfile.mkdtemp(prefix="cb-audit-")
+    try:
+        for label in ("seed", "reference"):
+            d = os.path.join(tmp, label); shutil.copytree(seed, d)
+            if label == "reference": shutil.copytree(ref, d, dirs_exist_ok=True)
+        for fn in sorted(os.listdir(proj.p("checks"))):
+            if not fn.endswith(".spec.json"): continue
+            tid = fn[:-len(".spec.json")]; row = {}
+            for label in ("seed", "reference"):
+                r = subprocess.run([sys.executable, runner, os.path.join(proj.p("checks"), fn)], cwd=os.path.join(tmp, label), capture_output=True, text=True, timeout=300)
+                row[label] = r.returncode
+                if label == "reference" and r.returncode: row["why"] = [l[6:150] for l in r.stdout.splitlines() if l.startswith("FAIL: ")][:3]
+            out["tasks"][tid] = row
+            if row["reference"] != 0: out["unsound"].append(tid)            # a correct solution fails it: the model's own check could never be satisfied
+            if row["seed"] == 0: out["vacuous"].append(tid)                  # already holds on the seed: tests nothing
+    finally: shutil.rmtree(tmp, ignore_errors=True)
+    return out

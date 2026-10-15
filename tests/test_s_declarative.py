@@ -46,10 +46,20 @@ class TestRunner(RunnerCase):
         rc, out = self.run_spec([{"type": "call", "module": "e", "func": "s", "args": ["  "], "expect": ""}]); self.assertEqual(rc, 0, out)
 
 class TestCheckspec(Sandboxed):
-    def test_clean_drops_the_fields_a_flat_schema_makes_the_model_fill(self):
-        a = K.clean({"type": "call", "module": "m", "func": "f", "args": [1], "expect": "", "raises": "ValueError", "argv": [], "path": "", "text": "", "stdin": ""})
-        self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "raises": "ValueError"}); self.assertIsNone(A.validate([a]))
-        keep = K.clean({"type": "call", "module": "m", "func": "f", "expect": "", "raises": ""}); self.assertEqual(keep["expect"], "")
+    def test_schema_variants_match_the_runner_contract(self):
+        vs = K.assert_schema()["items"]["anyOf"]; self.assertGreaterEqual(len(vs), 9)
+        sample = {"module": "m", "func": "f", "expect": 1, "raises": "ValueError", "argv": ["python3", "x.py"], "exit": 0, "stdout": "o", "stdout_contains": ["o"], "stdout_json": {}, "path": "a.py", "text": "t"}
+        for v in vs:
+            t = v["properties"]["type"]["enum"][0]; req, opt = A.TYPES[t]; keys = set(v["properties"]) - {"type"}
+            self.assertLessEqual(keys, req | opt, v); self.assertFalse(v["additionalProperties"])
+            self.assertIsNone(A.validate([{"type": t, **{k: sample[k] for k in v["required"] if k != "type"}}]), v["required"])      # the minimal instance of every variant is a valid assertion
+        runs = [v for v in vs if v["properties"]["type"]["enum"] == ["run"]]
+        self.assertTrue(all(set(v["required"]) & {"exit", "stdout", "stdout_contains", "stdout_json"} for v in runs))               # a run can never be generated without an expectation
+    def test_clean_keeps_only_the_fields_the_type_takes_and_keeps_empty_values(self):
+        a = K.clean({"type": "call", "module": "m", "func": "f", "args": [1], "expect": "", "bogus": 1})
+        self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "expect": ""}); self.assertIsNone(A.validate([a]))      # "" is a real expectation
+        r = K.clean({"type": "run", "argv": ["python3", "cli.py", "slug", ""], "stdout": ""}); self.assertEqual(r["stdout"], ""); self.assertIsNone(A.validate([r]))
+        self.assertNotIn("expect", K.clean({"type": "call", "module": "m", "func": "f", "expect": 1, "raises": "ValueError"}))
     def test_command_has_no_path_or_shell_syntax(self):
         c = K.command_for("T3"); self.assertEqual(c, "python3 $CODEBOT_CHECKS/assert_runner.py $CODEBOT_CHECKS/T3.spec.json"); self.assertNotIn("`", c)
     def test_rendered_plan_parses_back_with_its_checks(self):
@@ -72,7 +82,7 @@ class TestGuardStrict(Sandboxed):
 
 PLAN_REPLY = {"goal": "Utilities.", "context": "stdlib only", "done": "all assertions hold", "tasks": [
     {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [
-        {"type": "call", "module": "textutil", "func": "slugify", "args": ["Hello World"], "expect": "hello-world", "raises": ""}, {"type": "file_exists", "path": "textutil.py"}]},
+        {"type": "call", "module": "textutil", "func": "slugify", "args": ["Hello World"], "expect": "hello-world"}, {"type": "file_exists", "path": "textutil.py"}]},
     {"title": "Keep README", "files": ["README.md"], "size": "S", "deps": [1], "asserts": [{"type": "file_exists", "path": "README.md"}]},     # already holds: the guard rejects it
     {"title": "Bad types", "files": [], "size": "S", "deps": [5], "asserts": [{"type": "shell", "cmd": "ls"}]}]}
 
@@ -89,9 +99,6 @@ class TestPlanner(Sandboxed):
         data = engine.freeze_project(self.proj()); self.assertEqual(C.verify(self.proj(), data), [])       # the spec files and the runner are frozen and locked
         self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "T1.spec.json"))); self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "assert_runner.py")))
         self.assertNotIn(self.state, json.dumps(json.load(open(os.path.join(self.state, "checks", "T1.spec.json")))))            # no absolute path anywhere the model can influence
-    def test_flat_schema_filler_never_reaches_the_spec(self):
-        self.start([PLAN_REPLY, {"tasks": []}]); planner.plan_auto(self.home, self.name, 600, rounds=1, log=lambda *_: None)
-        spec = json.load(open(os.path.join(self.state, "checks", "T1.spec.json")))["asserts"][0]; self.assertNotIn("raises", spec); self.assertEqual(spec["expect"], "hello-world")
     def test_invalid_json_reply_is_retried_not_fatal(self):
         good = {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}; self.start(["not json at all", good])
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info); self.assertEqual(info["rounds"][0]["ok"], False)
@@ -124,5 +131,21 @@ class TestSplitter(Sandboxed):
         kids, fx = splitter.build(self.proj(), "T1", holds)
         r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness")
         self.assertFalse(r["ok"]); self.assertIn("subtask 1", r["error"]); self.assertFalse(os.path.exists(os.path.join(self.state, "checks", "T1.1.spec.json")))
+
+class TestAudit(Sandboxed):
+    def setUp(self):
+        super().setUp(); suite = os.path.join(self.home, "bench", "suite", "s"); os.makedirs(os.path.join(suite, "seed")); os.makedirs(os.path.join(suite, "reference"))
+        open(os.path.join(suite, "seed", "a.py"), "w").write("def f(): return 0\n"); open(os.path.join(suite, "reference", "a.py"), "w").write("def f(): return 1\n")
+        K.ensure_runner(self.proj())
+    def spec(self, tid, asserts): K.write_spec(self.proj(), tid, asserts)
+    def test_sound_unsound_and_vacuous_specs_are_told_apart(self):
+        self.spec("T1", [{"type": "call", "module": "a", "func": "f", "expect": 1}])      # fails on the seed, holds on the reference: a good check
+        self.spec("T2", [{"type": "call", "module": "a", "func": "f", "expect": 2}])      # fails on the reference too: unsound
+        self.spec("T3", [{"type": "call", "module": "a", "func": "f", "expect": 0}, {"type": "file_exists", "path": "a.py"}])   # holds on the seed: vacuous (and unsound on the reference)
+        r = planner.audit_against_reference(self.home, self.name, "s")
+        self.assertEqual((r["tasks"]["T1"]["seed"], r["tasks"]["T1"]["reference"]), (1, 0)); self.assertEqual(r["unsound"], ["T2", "T3"]); self.assertEqual(r["vacuous"], ["T3"])
+        self.assertIn("returned 1, expected 2", r["tasks"]["T2"]["why"][0])
+    def test_no_reference_means_no_audit(self):
+        self.assertIsNone(planner.audit_against_reference(self.home, self.name, "nosuite"))
 
 if __name__ == "__main__": unittest.main()
