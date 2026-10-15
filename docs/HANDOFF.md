@@ -74,7 +74,7 @@ Real-model (ornith:9b) evidence so far (details in ROADMAP "Real-model results")
 
 ## 5. In flight / not done (the honest list)
 
-**Capability Ladder Benchmark (`docs/BENCHMARK.md`): built, validated, smoke-tested once.** Catalog of 12 levels + 8-stage growing project, all oracles validated (`codebot bench validate`). One real-model trial (level 1, 4 min per task instead of 90): 6/8 tasks verified internally, 2 TIMEOUT, hidden tests 41/64 (64%), 3 VERIFICATION_GAP tasks (internal assertions accepted code the hidden tests reject). No capability numbers exist yet. Since the review on 2026-10-15 each trial has a private memory (`MEMORY_DIR`); the smoke run and every earlier bench run wrote into the shared `memory/` (the uncommitted `memory/sizing.json` and `memory/lessons.status.json` changes come from those runs; the user has not yet decided whether to keep or revert them).
+**Capability Ladder Benchmark (`docs/BENCHMARK.md`): built, validated, smoke-tested once.** Catalog of 12 levels + 8-stage growing project, all oracles validated (`codebot bench validate`). One real-model trial (level 1, 4 min per task instead of 90): 6/8 tasks verified internally, 2 TIMEOUT, hidden tests 41/64 (64%), 3 VERIFICATION_GAP tasks (internal assertions accepted code the hidden tests reject). No capability numbers exist yet. Since the review on 2026-10-15 each trial has a private memory (`MEMORY_DIR`); the smoke run and every earlier bench run wrote into the shared `memory/` (the user chose to keep that data: it is 48 real tasks, committed in `memory/sizing.json` and `memory/lessons.status.json`).
 
 Project review (2026-10-15), weakest points in order: (a) the planner's assertions are often unsound or too weak (0/3 fully sound plans on pyutils after the grounding fixes; 3 verification gaps in the smoke run), and no audit exists that works without a reference solution; (b) no capability numbers; (c) no user-facing native planner command (item 4 below); (d) interactive planner still on raw shell checks; (e) splitter with assertions only fake-tested; (f) heat limits how much real evidence can be gathered.
 
@@ -129,4 +129,4 @@ Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Moni
 
 ## 9. Questions still open for the user
 
-Keep or revert the bench-polluted `memory/sizing.json` / `lessons.status.json`? Run level 1 at 90 min x3 overnight? Delete the old `bench-*`, `cmp*` and `cap-*` projects? Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Add `codebot plan-auto`? Cooling pad or repaste? Should the interactive planner also move to declarative checks?
+Run level 1 at 90 min x3 overnight? Delete the old `bench-*`, `cmp*` and `cap-*` projects? Delete or re-plan `re1`? Switch `SANDBOX=auto` to `docker`? Add `codebot plan-auto`? Cooling pad or repaste? Should the interactive planner also move to declarative checks?
