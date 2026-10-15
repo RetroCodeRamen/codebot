@@ -19,7 +19,7 @@ def _jsonl(path):
 
 def _git(d, *a): return subprocess.run(["git", "-C", d, "-c", "user.name=bench", "-c", "user.email=bench@localhost", *a], capture_output=True, text=True)
 
-def setup(home, suite, plan="fixed", name=None):
+def setup(home, suite, plan="fixed", name=None, model=None):
     src = suite_dir(home, suite)
     if not os.path.isdir(src): raise SystemExit(f"unknown suite '{suite}' (bench/suite/)")
     name = name or f"bench-{suite}-{plan}-{time.strftime('%m%d-%H%M%S')}"
@@ -29,6 +29,7 @@ def setup(home, suite, plan="fixed", name=None):
     os.makedirs(state)
     with open(os.path.join(state, "project.env"), "w") as f:
         f.write(f'WORKDIR="{code}"\nMODE="code"\nBENCH="1"\nNTFY_ENABLED="0"\nPHONE_CONTROL="0"\n')       # a bench never pushes to your phone
+        if model: f.write(f'CODEBOT_MODEL="{model}"\n')                                                      # every model call of this project (planner, worker, splitter) uses it
     for fn in ("PROGRESS.md", "ANSWERS.md"): open(os.path.join(state, fn), "w").close()
     if plan == "fixed":
         shutil.copy(os.path.join(src, "plan.md"), os.path.join(state, "PLAN.md")); shutil.copytree(os.path.join(src, "checks"), os.path.join(state, "checks"))
@@ -179,6 +180,26 @@ def collect(proj):
             "tamper": sum(1 for e in ev if e.get("event") == "tamper"), "interrupted": sum(1 for e in ev if e.get("event") == "interrupted"),
             "thermal_pauses": sum(1 for e in therm if e.get("event") == "pause"), "thermal_wait_s": sum(e.get("waited", 0) for e in therm if e.get("event") == "resume")}
 
+def compare(names, home):
+    """Side-by-side table of stored bench results (bench/results/<name>.json), so two models (or two runs) can be read at a glance."""
+    rows = []
+    for n in names:
+        try:
+            with open(os.path.join(home, "bench", "results", f"{n}.json")) as f: d = json.load(f)
+        except (OSError, ValueError): raise SystemExit(f"no stored result for {n} (bench/results/{n}.json)")
+        r, run, pl = d.get("result") or {}, d.get("run") or {}, d.get("plan_data")
+        if "error" in r or not r: raise SystemExit(f"{n}: the run did not produce results ({r.get('error', 'empty')})")
+        t, g, lad, pr = r["turns"], r["guard"], r["ladder"], r["pass_rate"]
+        rows.append((n, [("model", run.get("model") or "?"), ("planner", (f"{len(pl['rounds'])} round(s), {pl['secs']} s, ok={pl['ok']}" if pl else ("fixed plan" if not d.get("plan") else d["plan"][:40]))),
+            ("tasks verified", f"{pr['done']}/{pr['total']}"), ("attempts per task", r["attempts_per_task"]), ("wall min", run.get("minutes")), ("turns", t.get("turns")),
+            ("generation tok/s", t.get("gen_tok_per_s")), ("cold prompt tok/s", t.get("cold_prompt_tok_per_s")), ("KV reuse, later turns", t.get("cache_reuse_later_turns")),
+            ("malformed replies", f"{t.get('malformed')} ({int(100 * (t.get('schema_failure_rate') or 0))}%)"), ("cut by token limit", t.get("truncated")), ("guard rejections", g["rejected_total"]),
+            ("ladder steps", len(lad["escalations"])), ("splits", len(lad["splits"])), ("blocked", sum(1 for p in r["tasks"] if p["status"] == "blocked")),
+            ("CPU max / mean C", f"{max(run['temps']) if run.get('temps') else '?'} / {round(statistics.mean(run['temps']), 1) if run.get('temps') else '?'}"), ("thermal pauses", r["thermal_pauses"])]))
+    L = ["| | " + " | ".join(f"`{n}`" for n, _ in rows) + " |", "|---|" + "---|" * len(rows)]
+    for i, (label, _) in enumerate(rows[0][1]): L.append(f"| {label} | " + " | ".join(str(v[i][1]) for _, v in rows) + " |")
+    return "\n".join(L)
+
 def render_md(res, run, plan_info=None):
     r = res; t = r["turns"]; L = [f"### Bench run `{r['project']}` ({run['status']}, {run['minutes']} min wall)", ""]
     if plan_info: L += [f"Planner (unattended, from the spec): {plan_info}", ""]
@@ -203,8 +224,11 @@ def main(argv):
     ap.add_argument("--preflight", action="store_true"); ap.add_argument("--max-minutes", type=int, default=150); ap.add_argument("--plan-minutes", type=int, default=45)
     ap.add_argument("--thermal", action="store_true", help="sweep thread/power/GPU configs for sustained speed vs heat"); ap.add_argument("--minutes", type=float, default=4.0)
     ap.add_argument("--only", help="comma separated substrings of config names to run (thermal sweep)")
+    ap.add_argument("--model", help="model for this run (default CODEBOT_MODEL from config); stored in the project so planner, worker and splitter all use it"); ap.add_argument("--compare", nargs="+", metavar="RUN", help="print a side-by-side table of stored bench results and exit")
     ap.add_argument("--name"); ap.add_argument("--record", action="store_true", help="append the result to docs/ROADMAP.md"); ap.add_argument("--collect-only")
     a = ap.parse_args(argv); from .config import home_dir; home = a.home or home_dir()
+    if a.compare: print(compare(a.compare, home)); return 0
+    if a.model: os.environ["CODEBOT_MODEL"] = a.model       # preflight and every child process of this run
     if a.preflight:
         probe = Project(next(iter(sorted(os.listdir(os.path.join(home, "projects")))), "x"), home) if os.path.isdir(os.path.join(home, "projects")) and os.listdir(os.path.join(home, "projects")) else None
         class P:   # preflight only needs config values: read them like a project would, without needing a project
@@ -238,17 +262,17 @@ def main(argv):
         return 0
     if a.collect_only:
         proj = Project(a.collect_only, home); res = collect(proj); print(json.dumps(res, indent=1)); return 0
-    name = setup(home, a.suite, a.plan, a.name); plan_info = None; print(f"project {name}")
+    name = setup(home, a.suite, a.plan, a.name, a.model); plan_info = None; pi = None; print(f"project {name}")
     if a.plan == "auto":
         print("planner running (unattended, harness-driven repair rounds)...", flush=True); pi = (plan_auto if a.planner == "opencode" else PL.plan_auto)(home, name, a.plan_minutes * 60)
         plan_info = (f"{len(pi['rounds'])} round(s), {pi['secs']} s, final check-plan {'OK' if pi['ok'] else 'REJECTED'}. " + "; ".join(
             f"round {r['n']}: rejected {r['rejected'] or 'none'}, violations {r['violations'] or 'none'}" for r in pi["rounds"])); print(plan_info, flush=True)
         if not os.path.exists(os.path.join(home, "projects", name, "PLAN.md")):
             print("the planner wrote no PLAN.md; nothing to run"); return 2
-    run = run_project(home, name, a.max_minutes); proj = Project(name, home)
+    run = run_project(home, name, a.max_minutes); proj = Project(name, home); run["model"] = proj.get("CODEBOT_MODEL", "codebot-model")
     res = collect(proj) if run["status"] != "freeze_failed" else {"error": run["detail"]}
     out = os.path.join(home, "bench", "results"); os.makedirs(out, exist_ok=True)
-    with open(os.path.join(out, f"{name}.json"), "w") as f: json.dump({"run": run, "result": res, "plan": plan_info}, f, indent=1)
+    with open(os.path.join(out, f"{name}.json"), "w") as f: json.dump({"run": run, "result": res, "plan": plan_info, "plan_data": pi}, f, indent=1)
     if "error" in res:
         md = f"### Bench run `{name}`: {run['status']}\n\n{run.get('detail', res['error'])}\n"
         rej = [l for l in _jsonl(proj.p("plan.log")) if l.get("op") == "check_rejected"]; md += f"\nBaseline guard rejections logged: {len(rej)}\n"

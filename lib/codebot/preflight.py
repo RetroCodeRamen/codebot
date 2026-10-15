@@ -71,7 +71,8 @@ def run(proj, home=None):
             f"(note: prompt_tokens is the total prompt size, prompt_ms shows what was really processed)")
         cpt = round(len(text) / max(1, a1["prompt_tokens"] - 25), 2)       # -25: chat-template overhead tokens
         os.makedirs(os.path.join(home, "logs"), exist_ok=True)
-        with open(os.path.join(home, "logs", "tokenizer_ratio.json"), "w") as f: json.dump({"chars_per_token": cpt, "cold_prompt_tps": round(cold_tps, 2), "sample_chars": len(text), "cold_tokens": a1["prompt_tokens"], "measured_at": now()}, f)
+        for path in tokens.ratio_files(proj):               # one file per model (the default model also keeps the original file name)
+            with open(path, "w") as f: json.dump({"chars_per_token": cpt, "cold_prompt_tps": round(cold_tps, 2), "sample_chars": len(text), "cold_tokens": a1["prompt_tokens"], "measured_at": now(), "model": tokens.model_of(proj)}, f)
         add("tokenizer ratio calibrated (chars per token; saved for the context guard)", "PASS" if 1.5 <= cpt <= 6 else "WARN", f"{cpt} (the guard uses {tokens.ratio(proj):.2f}, default {tokens.DEFAULT_RATIO})")
         m3 = [sysm, {"role": "user", "content": text + "\n\nA DIFFERENT ending: reply with ONE JSON action: finish."}]
         a3 = ollama.chat(proj, m3, schema=schema, num_predict=60, temperature=0.1, timeout=1200)
