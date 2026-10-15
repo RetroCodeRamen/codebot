@@ -26,8 +26,7 @@ def assert_schema():
     def variant(t, required, optional=()):
         keys = ["type", *required, *optional]
         return {"type": "object", "properties": {"type": {"enum": [t]}, **{k: P[k] for k in keys if k != "type"}}, "required": ["type", *required], "additionalProperties": False}
-    call_opt = ("args", "kwargs")
-    variants = [variant("call", ("module", "func", "expect"), call_opt), variant("call", ("module", "func", "raises"), call_opt)]
+    variants = [variant("call", ("module", "func", "args", "expect"), ("kwargs",)), variant("call", ("module", "func", "args", "raises"), ("kwargs",))]     # args is REQUIRED (use [] for none): a call without its inputs tests nothing real
     run_exp = ("exit", "stdout", "stdout_contains", "stdout_json")
     variants += [variant("run", ("argv", e), ("stdin", *[x for x in run_exp if x != e])) for e in run_exp]
     variants += [variant("file_exists", ("path",)), variant("file_contains", ("path", "text")), variant("file_not_contains", ("path", "text"))]

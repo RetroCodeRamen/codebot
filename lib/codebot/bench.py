@@ -225,6 +225,7 @@ def main(argv):
     ap.add_argument("--thermal", action="store_true", help="sweep thread/power/GPU configs for sustained speed vs heat"); ap.add_argument("--minutes", type=float, default=4.0)
     ap.add_argument("--only", help="comma separated substrings of config names to run (thermal sweep)")
     ap.add_argument("--model", help="model for this run (default CODEBOT_MODEL from config); stored in the project so planner, worker and splitter all use it"); ap.add_argument("--compare", nargs="+", metavar="RUN", help="print a side-by-side table of stored bench results and exit")
+    ap.add_argument("--plan-only", action="store_true", help="with --plan auto: stop after planning and the reference audit (about 3 minutes; for sampling a model's planner repeatedly)")
     ap.add_argument("--name"); ap.add_argument("--record", action="store_true", help="append the result to docs/ROADMAP.md"); ap.add_argument("--collect-only")
     a = ap.parse_args(argv); from .config import home_dir; home = a.home or home_dir()
     if a.compare: print(compare(a.compare, home)); return 0
@@ -270,6 +271,10 @@ def main(argv):
         if a.planner == "native":
             pi["audit"] = PL.audit_against_reference(home, name, a.suite)
             if pi["audit"]: plan_info += f"; audit against the reference solution: unsound (a correct solution fails them) {pi['audit']['unsound'] or 'none'}, vacuous (hold on the seed) {pi['audit']['vacuous'] or 'none'}"; print(plan_info, flush=True)
+        if a.plan_only:
+            os.makedirs(os.path.join(home, "bench", "results"), exist_ok=True)
+            with open(os.path.join(home, "bench", "results", f"{name}.json"), "w") as f: json.dump({"run": {"status": "plan_only", "model": a.model or "codebot-model"}, "result": None, "plan": plan_info, "plan_data": pi}, f, indent=1)
+            return 0 if pi["ok"] else 1
         if not os.path.exists(os.path.join(home, "projects", name, "PLAN.md")):
             print("the planner wrote no PLAN.md; nothing to run"); return 2
     run = run_project(home, name, a.max_minutes); proj = Project(name, home); run["model"] = proj.get("CODEBOT_MODEL", "codebot-model")

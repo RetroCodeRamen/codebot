@@ -48,11 +48,12 @@ class TestRunner(RunnerCase):
 class TestCheckspec(Sandboxed):
     def test_schema_variants_match_the_runner_contract(self):
         vs = K.assert_schema()["items"]["anyOf"]; self.assertGreaterEqual(len(vs), 9)
-        sample = {"module": "m", "func": "f", "expect": 1, "raises": "ValueError", "argv": ["python3", "x.py"], "exit": 0, "stdout": "o", "stdout_contains": ["o"], "stdout_json": {}, "path": "a.py", "text": "t"}
+        sample = {"module": "m", "func": "f", "args": [], "expect": 1, "raises": "ValueError", "argv": ["python3", "x.py"], "exit": 0, "stdout": "o", "stdout_contains": ["o"], "stdout_json": {}, "path": "a.py", "text": "t"}
         for v in vs:
             t = v["properties"]["type"]["enum"][0]; req, opt = A.TYPES[t]; keys = set(v["properties"]) - {"type"}
             self.assertLessEqual(keys, req | opt, v); self.assertFalse(v["additionalProperties"])
             self.assertIsNone(A.validate([{"type": t, **{k: sample[k] for k in v["required"] if k != "type"}}]), v["required"])      # the minimal instance of every variant is a valid assertion
+        calls = [v for v in vs if v["properties"]["type"]["enum"] == ["call"]]; self.assertTrue(calls and all("args" in v["required"] for v in calls))       # a call can never be generated without its inputs
         runs = [v for v in vs if v["properties"]["type"]["enum"] == ["run"]]
         self.assertTrue(all(set(v["required"]) & {"exit", "stdout", "stdout_contains", "stdout_json"} for v in runs))               # a run can never be generated without an expectation
     def test_clean_keeps_only_the_fields_the_type_takes_and_keeps_empty_values(self):
