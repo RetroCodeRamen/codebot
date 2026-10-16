@@ -55,6 +55,21 @@ class TestPlanScore(Sandboxed):
         tasks, bad = PS.model_view([{"asserts": [{"type": "call", "module": "m", "func": "f", "args": [], "expect": 1}, {"type": "shell", "cmd": "ls"}]}, None])
         self.assertEqual((len(tasks[0]), tasks[1], bad), (1, [], 1))
 
+class TestProbeLoop(unittest.TestCase):
+    def test_every_configuration_gets_its_own_workspace_and_a_failure_does_not_stop_the_probe(self):
+        seen = []; orig = PE.one
+        def fake(home, run_id, lv, i, mo, th, minutes, log, c):
+            seen.append((lv, i, mo, th, c))
+            if c == 1 and i == 1: raise SystemExit("workspace exists")
+            return {"run": run_id, "level": lv, "plan": i, "model": mo, "think": th, "ok": True, "secs": 1, "cost": {}, "frozen": None, "model_view": None, "malformed_model_asserts": 0}
+        PE.one = fake
+        try:
+            import tempfile
+            with tempfile.TemporaryDirectory() as h: _, _, rows = PE.run(h, ["m"], ["off", "on"], ["level_01"], 2, log=lambda *_: None)
+        finally: PE.one = orig
+        self.assertEqual([(x[2], x[3], x[4]) for x in seen], [("m", "off", 1), ("m", "on", 2)] * 2)
+        self.assertEqual(len(rows), 4); self.assertIn("workspace exists", rows[0]["error"])
+
 class TestSummary(unittest.TestCase):
     def test_summary_groups_configurations(self):
         row = lambda th, e: {"level": "level_01", "model": "m", "think": th, "ok": True, "secs": 600, "cost": {"gen_tokens": 100}, "malformed_model_asserts": 0,

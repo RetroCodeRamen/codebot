@@ -32,9 +32,9 @@ def _planner_cost(proj):
     except (OSError, ValueError): pass
     return {"calls": calls, "gen_tokens": gen, "thinking_chars": think, "model_secs": round(secs)}
 
-def one(home, run_id, level, i, model, think, plan_minutes=45, log=print):
+def one(home, run_id, level, i, model, think, plan_minutes=45, log=print, cfg_no=1):
     m = M.load(home, level); spec = M.spec_text(m)
-    name = f"cap-eval-{run_id}-{m['_id'][-2:]}-{i}"
+    name = f"cap-eval-{run_id}-{m['_id'][-2:]}-c{cfg_no}-{i}"                   # c<n>: one workspace per configuration (they collided before)
     cfg = W.project_settings(home, 90, extra={"PLANNER_MODEL": model, "PLANNER_THINK": think})
     W.create(home, name, [M.seed_dir(m)], spec, cfg); proj = Project(name, home); t0 = time.time()
     with model_lock(home):
@@ -80,10 +80,10 @@ def run(home, models, thinks, levels, plans, name=None, plan_minutes=45, log=pri
     configs = [(mo, th) for mo in models for th in thinks]
     for i in range(1, plans + 1):
         for lv in levels:
-            for mo, th in configs:
+            for c, (mo, th) in enumerate(configs, 1):
                 log(f"plan {i}/{plans} {lv} {mo} think={th}")
-                try: r = one(home, run_id, lv, i, mo, th, plan_minutes, log)
-                except Exception as e: r = {"run": run_id, "level": lv, "plan": i, "model": mo, "think": th, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "secs": 0, "cost": {}, "frozen": None, "model_view": None, "malformed_model_asserts": 0}
+                try: r = one(home, run_id, lv, i, mo, th, plan_minutes, log, c)
+                except (Exception, SystemExit) as e:                       # one broken plan must not end the probe r = {"run": run_id, "level": lv, "plan": i, "model": mo, "think": th, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "secs": 0, "cost": {}, "frozen": None, "model_view": None, "malformed_model_asserts": 0}
                 rows.append(r)
                 with open(os.path.join(out_dir, "plans.jsonl"), "a") as f: f.write(json.dumps(r) + "\n")
                 fz = r.get("frozen") or {}
