@@ -408,6 +408,7 @@ def execute(ctx):
     try:
         for tr in ctx.store.load()["trials"]:
             if tr["phase"] == "finished": continue
+            if ctx.store.cancel_requested(): cancelled = True; ctx.log(f"cancel requested: stopping before {tr['trial_id']} (resumable)"); break      # a trial that ends at planning never reaches the loop's own check
             ctx.state = ctx.store.load(); cur = next(t for t in ctx.state["trials"] if t["trial_id"] == tr["trial_id"])
             if run_trial(ctx, cur) == "cancelled": cancelled = True; break
             from . import reports; reports.write_all(ctx.store)

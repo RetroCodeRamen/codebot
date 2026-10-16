@@ -157,6 +157,15 @@ class TestRunEndToEnd(CapCase):
         first = store.load_trial("L01-r1")["finished"]; ctx2 = RN.Ctx(self.home, store, store.load(), NT.Notifier(self.home, False), driver="engine", sleep=lambda s: None, log=lambda m: None, poll_s=0, model_check=False)
         self.assertEqual(RN.execute(ctx2), "finished"); self.assertEqual(store.load_trial("L01-r1")["finished"], first); self.assertEqual(len(RS.history(self.home)), 2)
         self.assertEqual([t["outcome"] for t in store.load()["trials"]], ["COMPLETE", "COMPLETE"])
+    def test_a_cancel_during_a_trial_that_fails_at_planning_stops_before_the_next_trial(self):
+        # 2026-10-16: a cancel sent while trial 2 was planning was ignored, because a trial that ends at planning never reaches the loop's check
+        store, ctx = self.make(repeats=3)
+        orig = RN.PL.install_plan
+        def failing(proj, plan): store.request_cancel(); return [{"id": "T1", "title": "x", "check": "", "verdict": "passes", "rc": 0, "out": ""}]
+        RN.PL.install_plan = failing
+        try: self.assertEqual(RN.execute(ctx), "cancelled")
+        finally: RN.PL.install_plan = orig
+        st = store.load(); self.assertEqual([t["phase"] for t in st["trials"]], ["finished", "created", "created"]); self.assertEqual(st["status"], "cancelled")
     def test_a_runner_crash_mid_trial_resumes_with_the_time_already_spent(self):
         os.environ["CB_SLOW"] = "T1"; store, ctx = self.make(task_minutes=0.08)      # 4.8 s per task; every attempt of T1 burns 1.4 s and fails
         from codebot import engine; real = engine.step; n = {"c": 0}

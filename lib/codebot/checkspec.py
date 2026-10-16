@@ -39,6 +39,10 @@ def clean(a):
     req, opt = A.TYPES[a["type"]]
     out = {k: v for k, v in a.items() if k == "type" or k in req | opt}
     if out.get("raises"): out.pop("expect", None)
+    # ornith writes a schema field name into the inputs when the expected value is empty ("args": ["", "expect"], "expect": ""): every real run so far,
+    # and repair rounds repeat it. The intended check is plain (slugify("") == ""), so the stray word is removed instead of failing the plan.
+    if isinstance(out.get("args"), list): out["args"] = [x for x in out["args"] if not (isinstance(x, str) and x in A.LEAKED)]
+    if isinstance(out.get("argv"), list) and len(out["argv"]) > 1: out["argv"] = out["argv"][:1] + [x for x in out["argv"][1:] if not (isinstance(x, str) and x in A.LEAKED)]
     return out
 
 def prepare(asserts): return [clean(a) for a in asserts or []]

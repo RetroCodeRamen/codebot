@@ -5,7 +5,7 @@ interpreter or a file, so the mistakes the free-form opencode planner made (wron
 interpreter, implementation written instead of tests) cannot occur. The interactive `codebot plan` (a human in the loop) is unchanged."""
 import json, os, re, subprocess, sys, time
 from . import assertions as A, checkspec as K, guard, ollama, packer, planparse
-from .config import Project
+from .config import Project, now, append_jsonl
 
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
                       "deps": {"type": "array", "items": {"type": "integer"}}, "asserts": K.assert_schema()}
@@ -41,8 +41,9 @@ done (how the whole thing is verified)."""
 
 def _chat(proj, system, user, schema, left, num_predict=5000):
     r = ollama.chat(proj, [{"role": "system", "content": system}, {"role": "user", "content": user}], schema=schema, temperature=0.2, num_predict=num_predict, timeout=max(60, int(left)), retries=2)
-    try: return json.loads(r["content"]), None
-    except ValueError: return None, "the reply was not valid JSON (cut off by the token limit?)" if r.get("done_reason") == "length" else "the reply was not valid JSON"
+    raw = r.get("content") or ""
+    try: return json.loads(raw), None, raw
+    except ValueError: return None, ("the reply was not valid JSON (cut off by the token limit?)" if r.get("done_reason") == "length" else "the reply was not valid JSON"), raw
 
 def spec_items(spec):
     """Number of numbered items ('1. ...' or '2) ...') at the start of a line in the specification."""
@@ -100,30 +101,35 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print, max_tasks=10, num_p
     for k in range(1, rounds + 1):
         left = timeout - (time.time() - t0)
         if left < 60: break
-        r0 = time.time(); rejected = []; rc = 0
+        r0 = time.time(); rejected = []; rc = 0; why_failed = ""; raw = None
         try:
             if plan is None:
                 user = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n{repo or '(empty)'}\n\n{('SIZING HISTORY: ' + sizing) if sizing else ''}\n{note}\nReply with the JSON plan."
-                plan, err = _chat(proj, GUIDE, user, plan_schema(max_tasks), left, num_predict)
+                plan, err, raw = _chat(proj, GUIDE, user, plan_schema(max_tasks), left, num_predict)
                 want = spec_items(spec)
                 if plan is not None and plan.get("tasks") and len(plan["tasks"]) < want:
                     err, plan = f"it had {len(plan['tasks'])} task(s) but the specification has {want} numbered items; plan one task per item", None
-                if plan is None or not plan.get("tasks"): plan, note, rc = None, f"Your previous reply was rejected: {err or 'it had no tasks'}. Reply with the complete JSON plan.", 1
+                if plan is None or not plan.get("tasks"): why_failed = err or "it had no tasks"; plan, note, rc = None, f"Your previous reply was rejected: {err or 'it had no tasks'}. Reply with the complete JSON plan.", 1
             else:
                 lines = [f"T{r['id'][1:]} \"{r['title'][:70]}\": {_why(r)}\n  current assertions: {json.dumps((K.read_spec(proj, r['id']) or plan['tasks'][int(r['id'][1:]) - 1].get('asserts')))[:700]}" for r in last]
                 user = "The harness ran your assertions against the code exactly as it is today and REJECTED these tasks:\n" + "\n".join(lines) + "\nReturn corrected assertions for ONLY these tasks (use their numbers). They must FAIL now and hold once the task is done."
-                fix, err = _chat(proj, GUIDE, user, repair_schema(), left, 3000)
-                if fix is None: rc = 1
+                fix, err, raw = _chat(proj, GUIDE, user, repair_schema(), left, 3000)
+                if fix is None: rc = 1; why_failed = "repair reply: " + (err or "unusable")
                 else:
                     for t in fix["tasks"]:
                         if isinstance(t.get("id"), int) and 1 <= t["id"] <= len(plan["tasks"]): plan["tasks"][t["id"] - 1]["asserts"] = t.get("asserts")
-        except ollama.ModelError as e: log(f"planner round {k}: model error: {e}"); rc = 1; note = ""
+        except ollama.ModelError as e: log(f"planner round {k}: model error: {e}"); rc = 1; note = ""; why_failed = f"model error: {e}"
         if plan is not None and rc == 0:
             bad = _write(proj, plan, spec); rejected = _evaluate(proj, bad)
             for r in rejected: guard.log_rejection(proj, r["id"], r["title"], r["check"], r["verdict"], r["out"], "planner")
         ok = plan is not None and rc == 0 and not rejected
-        info["rounds"].append({"n": k, "secs": round(time.time() - r0), "rc": rc, "rejected": [f"{r['id']}:{r['verdict']}" for r in rejected], "violations": [], "ok": ok})
-        log(f"planner round {k}: {len(rejected)} rejected, 0 violations, ok={ok}")
+        if raw is not None:                                       # the model's own words, so a failed round can be read afterwards
+            with open(proj.p(f"plan.reply.{k}.json"), "w") as f: f.write(raw)
+        if rejected and not why_failed: why_failed = "; ".join(f"{r['id']} {r['verdict']}: {(r['out'] or '').strip()[:160]}" for r in rejected)
+        info["rounds"].append({"n": k, "secs": round(time.time() - r0), "rc": rc, "rejected": [f"{r['id']}:{r['verdict']}" for r in rejected], "violations": [], "ok": ok,
+                               "tasks": len(plan["tasks"]) if plan else None, **({"error": why_failed} if why_failed else {})})
+        if why_failed: append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "planner", "op": "plan_round_failed", "ok": False, "round": k, "reason": why_failed[:600]})
+        log(f"planner round {k}: {len(rejected)} rejected, 0 violations, ok={ok}" + (f": {why_failed[:300]}" if why_failed else ""))
         if ok: info["ok"] = True; break
         last = rejected
     info["secs"] = round(time.time() - t0); return info

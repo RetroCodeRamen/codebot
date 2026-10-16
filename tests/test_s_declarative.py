@@ -71,6 +71,11 @@ class TestCheckspec(Sandboxed):
         self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "expect": ""}); self.assertIsNone(A.validate([a]))      # "" is a real expectation
         r = K.clean({"type": "run", "argv": ["python3", "cli.py", "slug", ""], "stdout": ""}); self.assertEqual(r["stdout"], ""); self.assertIsNone(A.validate([r]))
         self.assertNotIn("expect", K.clean({"type": "call", "module": "m", "func": "f", "expect": 1, "raises": "ValueError"}))
+    def test_a_field_name_leaked_into_the_inputs_is_removed(self):
+        # every real ornith plan so far: "args": ["", "expect"] whenever the expected value is empty, and repair rounds repeat it
+        self.assertEqual(K.clean({"type": "call", "module": "textutil", "func": "slugify", "args": ["", "expect"], "expect": ""})["args"], [""])
+        r = K.clean({"type": "run", "argv": ["python3", "-c", "import m; print(m.f())", "stdout_contains"], "exit": 0}); self.assertEqual(r["argv"], ["python3", "-c", "import m; print(m.f())"])
+        self.assertIsNone(A.validate([r])); self.assertEqual(K.clean({"type": "call", "module": "m", "func": "f", "args": ["expected"], "expect": 1})["args"], ["expected"])
     def test_a_self_contradicting_assertion_list_is_unusable(self):
         both = [{"type": "file_contains", "path": "a.py", "text": "def f"}, {"type": "file_not_contains", "path": "a.py", "text": "def f"}]
         self.assertIn("contradiction", A.validate(both))
@@ -133,6 +138,9 @@ class TestPlanner(Sandboxed):
         self.start([good, two]); open(os.path.join(self.state, "SPEC.md"), "w").write("1. Add slugify.\n2. Add title.\n")
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
         self.assertEqual(info["rounds"][0]["rc"], 1); self.assertIn("numbered items", self.fake.requests[1]["messages"][1]["content"])
+        self.assertIn("numbered items", info["rounds"][0]["error"]); self.assertEqual(info["rounds"][0]["tasks"], None)           # why the round failed is recorded, not only that it did
+        log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "plan_round_failed" in l]; self.assertIn("numbered items", log[0]["reason"])
+        self.assertEqual(json.load(open(os.path.join(self.state, "plan.reply.1.json")))["tasks"][0]["title"], "Add slugify")                # and the model's own reply is kept
     def test_no_spec_means_no_plan(self):
         self.fake = FakeOllama([]); self.addCleanup(self.fake.stop); self.set_env(OLLAMA_PORT=self.fake.port)
         self.assertEqual(planner.plan_auto(self.home, self.name, 60, log=lambda *_: None)["rounds"], [])
