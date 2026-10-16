@@ -37,6 +37,16 @@ class TestRunner(RunnerCase):
         spec = os.path.join(self.tmp, "x.json"); open(spec, "w").write("{not json")
         self.assertEqual(subprocess.run([sys.executable, RUNNER, spec], cwd=self.code, capture_output=True).returncode, 2)
         self.assertEqual(subprocess.run([sys.executable, RUNNER, "/no/such/spec.json"], cwd=self.code, capture_output=True).returncode, 2)
+    def test_checks_no_code_can_pass_are_unusable(self):
+        # verbatim from the 2026-10-15 level-1 run (trial 2): a schema field leaked into the inputs, and a stray ] in python3 -c
+        for bad in ([{"type": "call", "module": "textutil", "func": "slugify", "args": ["", "expect"], "expect": ""}],
+                    [{"type": "call", "module": "m", "func": "f", "args": [], "kwargs": {"raises": 1}, "expect": 1}],
+                    [{"type": "run", "argv": ["python3", "-c", "from textutil import truncate; print(truncate.__doc__)]", "stdout_contains"], "exit": 0}],
+                    [{"type": "run", "argv": ["python3", "-c", "print((1)"], "exit": 0}]):
+            rc, out = self.run_spec(bad); self.assertEqual(rc, 2, (bad, out)); self.assertIn("SPEC ERROR", out)
+        rc, out = self.run_spec([{"type": "call", "module": "textutil", "func": "slug", "args": ["expected Results"], "expect": "expected-results"},     # near-misses stay legal
+                                 {"type": "run", "argv": ["python3", "-c", "import textutil; print(textutil.slug('A B'))"], "stdout": "a-b"}])
+        self.assertEqual(rc, 0, out)
     def test_numbers_compare_like_json_and_bool_is_not_a_number(self):
         self.write_code("n.py", "def f(): return 2\ndef g(): return True\ndef h(): return 0.1 + 0.2\n")
         rc, out = self.run_spec([{"type": "call", "module": "n", "func": "f", "expect": 2.0}, {"type": "call", "module": "n", "func": "h", "expect": 0.3}]); self.assertEqual(rc, 0, out)
@@ -86,6 +96,9 @@ class TestGuardStrict(Sandboxed):
         r = guard.probe(self.proj(), K.command_for("T9"), 30); self.assertEqual(r["verdict"], "broken"); self.assertIn("does not exist", r["out"])      # no spec file at all
         open(os.path.join(self.state, "checks", "T8.spec.json"), "w").write('{"asserts": [{"type": "shell"}]}')                                      # a spec the runner refuses: exit 2
         r = guard.probe(self.proj(), K.command_for("T8"), 30); self.assertEqual(r["verdict"], "broken"); self.assertIn("SPEC ERROR", r["out"])
+    def test_a_check_no_code_can_pass_is_broken_although_it_fails_on_the_seed(self):
+        r = self.verdict([{"type": "call", "module": "m", "func": "f", "args": ["", "expect"], "expect": ""}]); self.assertEqual(r["verdict"], "broken"); self.assertIn("'expect'", r["out"])
+        r = self.verdict([{"type": "run", "argv": ["python3", "-c", "import m; print(m.f())]"], "stdout": "2"}]); self.assertEqual(r["verdict"], "broken"); self.assertIn("not valid Python", r["out"])
 
 PLAN_REPLY = {"goal": "Utilities.", "context": "stdlib only", "done": "all assertions hold", "tasks": [
     {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [

@@ -21,6 +21,19 @@ TYPES = {
     "file_not_contains": ({"path", "text"}, set()),
 }
 
+# Field names a 9B planner leaked into the DATA (real runs: "args": ["", "expect"] whenever the expected value was "", argv ending in "stdout_contains").
+# No real input is exactly one of these words, and a check carrying one can never pass, so it is a spec error rather than a failing test.
+LEAKED = {"expect", "raises", "args", "kwargs", "argv", "stdin", "stdout", "stdout_contains", "stdout_json"}
+
+def _leaked(values):
+    return next((v for v in values if isinstance(v, str) and v in LEAKED), None)
+
+def _python_c(argv):
+    """The code of `python3 -c CODE ...`, or None."""
+    if argv[0] not in PY: return None
+    i = next((k for k, x in enumerate(argv[1:], 1) if x == "-c"), None)
+    return argv[i + 1] if i is not None and i + 1 < len(argv) else None
+
 def _safe_rel(p):
     return isinstance(p, str) and p and not os.path.isabs(p) and ".." not in p.replace("\\", "/").split("/") and "\x00" not in p
 
@@ -39,11 +52,19 @@ def validate(asserts):
             if not isinstance(a.get("args", []), list) or not isinstance(a.get("kwargs", {}), dict): return f"assertion {i}: args is a list and kwargs an object"
             if "expect" not in a and "raises" not in a: return f"assertion {i}: call needs expect (the return value) or raises (an exception class name)"
             if "expect" in a and "raises" in a: return f"assertion {i}: give expect OR raises, not both"
+            w = _leaked([*a.get("args", []), *a.get("kwargs", {}), *a.get("kwargs", {}).values()])
+            if w: return f"assertion {i}: the field name {w!r} is inside the inputs; args holds only the values passed to {a['func']}, and the expected result goes in expect"
         elif t == "run":
             av = a["argv"]
             if not (isinstance(av, list) and av and all(isinstance(x, str) for x in av)): return f"assertion {i}: argv is a list of strings, e.g. [\"python3\", \"cli.py\", \"slug\", \"Hello World\"]"
             if not (set(a) & {"exit", "stdout", "stdout_contains", "stdout_json"}): return f"assertion {i}: run needs at least one of exit, stdout, stdout_contains, stdout_json"
             if "exit" in a and not isinstance(a["exit"], int): return f"assertion {i}: exit must be an integer"
+            w = _leaked(av[1:])
+            if w: return f"assertion {i}: the field name {w!r} is inside argv; argv holds only the command and its arguments"
+            code = _python_c(av)
+            if code is not None:
+                try: compile(code, "<python3 -c>", "exec")
+                except (SyntaxError, ValueError) as e: return f"assertion {i}: the python3 -c code is not valid Python ({type(e).__name__}: {getattr(e, 'msg', e)}), so it can never pass"
         else:
             if not _safe_rel(a["path"]): return f"assertion {i}: path must be a relative path inside the code directory"
             if t != "file_exists" and not (isinstance(a["text"], str) and a["text"]): return f"assertion {i}: text must be a non-empty string"
