@@ -122,6 +122,10 @@ Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Moni
   effects no test catches (the coverage wording collapsed plans). Change the prompt only with a planning-only probe (3-5 plans, about 10 min each) against the reference.
 - **Full runs measure; they are not for finding bugs.** Do not tune against level 1 alone: confirm on level 2 or 3 before calling a fix general.
 
+### Model evaluation (started 2026-10-16)
+
+Method, scores, candidates and commands: `docs/MODEL_EVAL.md`. 10 candidates pulled into `models/` (the control `ornith:9b` is never updated in place). Per-role settings in `lib/codebot/roles.py`; scorer, mutants, gate and planner probe in `lib/codebot/evalkit/`; `codebot eval ...`. First finding: the control is Ornith 1.0 (Qwen3.5-9B + agentic-coding RL) and codebot runs every call with thinking off; its plans have better coverage than the hand-written reference plan but 1 in 3 tasks carries an impossible assertion.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.

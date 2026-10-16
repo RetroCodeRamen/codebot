@@ -26,7 +26,9 @@ def cmd_run(home, a):
     items = [M.load(home, f"level_{n:02d}") for n in levels] if levels else [M.load(home, "growing")]
     problems = RN.preflight(home, items, need_model=not a.dry_run, mode=a.mode, driver=a.driver, env_overrides_ok=a.allow_env_overrides)
     if problems: print("cannot start:\n  - " + "\n  - ".join(problems)); return 2
-    try: store = RN.create_run(home, suite, levels, repeats, a.mode, a.task_minutes, a.plan_minutes, a.plan_rounds, a.model, a.seed, a.interactive, a.name, a.poll, not a.no_notify, a.order, a.driver, a.checkpoints)
+    try: store = RN.create_run(home, suite, levels, repeats, a.mode, a.task_minutes, a.plan_minutes, a.plan_rounds, a.model, a.seed, a.interactive, a.name, a.poll, not a.no_notify, a.order, a.driver, a.checkpoints,
+                                  roles={"PLANNER_MODEL": a.planner_model, "PLANNER_THINK": a.planner_think, "SPLITTER_MODEL": a.splitter_model, "SPLITTER_THINK": a.splitter_think,
+                                         "WORKER_THINK": a.worker_think, "ESCALATE_MODEL": a.escalate_model})
     except RN.RunError as e: print(e); return 2
     n = len(store.load()["trials"])
     print(f"run {store.run_id}: {n} trial(s), mode {a.mode}, {a.task_minutes:g} min per task (no limit on the project as a whole)")
@@ -130,7 +132,10 @@ def main(argv, home):
     r.add_argument("--level", help="one level, e.g. 1 (repeats default to 1)"); r.add_argument("--levels", help="e.g. 1-12, 3,5 (default 1-12)"); r.add_argument("--suite", choices=["ladder", "growing"], default="ladder")
     r.add_argument("--repeats", type=int, help="trials per level (default 3 for a suite, 1 for --level)"); r.add_argument("--mode", choices=list(RN.MODES), default="full", help="full | reference-plan | minimal (diagnostics)")
     r.add_argument("--task-minutes", type=float, default=90.0, help="wall-clock budget of EACH planned task (default 90); there is no project-wide limit"); r.add_argument("--plan-minutes", type=float, default=45.0)
-    r.add_argument("--plan-rounds", type=int, default=3); r.add_argument("--model"); r.add_argument("--seed", type=int); r.add_argument("--name"); r.add_argument("--poll", type=float, default=20.0)
+    r.add_argument("--plan-rounds", type=int, default=3); r.add_argument("--model", help="the worker model (CODEBOT_MODEL); also the default for every other role")
+    r.add_argument("--planner-model"); r.add_argument("--planner-think", choices=["off", "on", "low", "medium", "high"]); r.add_argument("--splitter-model")
+    r.add_argument("--splitter-think", choices=["off", "on", "low", "medium", "high"]); r.add_argument("--worker-think", choices=["off", "on", "low", "medium", "high"])
+    r.add_argument("--escalate-model", help="ladder rung 5 retries a stuck task with this model"); r.add_argument("--seed", type=int); r.add_argument("--name"); r.add_argument("--poll", type=float, default=20.0)
     r.add_argument("--interactive", action="store_true", help="a blocked task waits for `codebot answer` instead of being a terminal outcome"); r.add_argument("--no-notify", action="store_true")
     r.add_argument("--order", choices=["repeat-major", "level-major"], default="repeat-major"); r.add_argument("--driver", choices=["loop", "engine"], default="loop", help="loop = the real bash supervisor (unattended); engine = in-process steps")
     r.add_argument("--checkpoints", action="store_true", help="also score the independent tests after every verified task"); r.add_argument("--foreground", action="store_true"); r.add_argument("--dry-run", action="store_true")

@@ -8,11 +8,14 @@ class ModelError(Exception):
 def base_url(proj):
     return f"http://127.0.0.1:{proj.get('OLLAMA_PORT', 11500, int)}"
 
-def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=None, timeout=900, retries=3, options=None):
-    """One non-streaming chat call. `schema` constrains the output (structured outputs). Thinking is always off:
-    the harness wants a single JSON action, not hidden reasoning. Returns dict(content, prompt_tokens, gen_tokens, secs)."""
+def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=None, timeout=900, retries=3, options=None, think=False, role=None):
+    """One non-streaming chat call. `schema` constrains the output (structured outputs). Thinking is off unless the caller's role enables it
+    (roles.py); a thinking call gets THINK_BUDGET extra output tokens, because its reasoning counts against num_predict. role is recorded in the
+    audit log so per-role cost can be measured. Returns dict(content, thinking, prompt_tokens, gen_tokens, secs, ...)."""
+    from . import roles
     thermal.wait(proj)
-    body = {"model": model or proj.get("CODEBOT_MODEL", "codebot-model"), "messages": messages, "stream": False, "think": False,
+    if think and num_predict: num_predict = int(num_predict) + roles.think_budget(proj)
+    body = {"model": model or proj.get("CODEBOT_MODEL", "codebot-model"), "messages": messages, "stream": False, "think": think,
             "keep_alive": proj.get("KEEP_ALIVE", "30m"), "options": {"num_ctx": tokens.num_ctx(proj)}}   # explicit on every request: a different value would reload the model
     if schema is not None: body["format"] = schema
     if temperature is not None: body["options"]["temperature"] = float(temperature)
@@ -30,8 +33,10 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
             ms = lambda k: round(out.get(k, 0) / 1e6)                     # Ollama reports nanoseconds
             st = {"prompt_tokens": out.get("prompt_eval_count", 0), "gen_tokens": out.get("eval_count", 0), "prompt_ms": ms("prompt_eval_duration"),
                   "gen_ms": ms("eval_duration"), "load_ms": ms("load_duration"), "total_ms": ms("total_duration")}
-            audit.log(proj, "model_request", endpoint=base_url(proj).split("//")[1], model=body["model"], secs=round(time.time() - t0, 1), **st)
-            return {"content": msg.get("content", ""), "secs": round(time.time() - t0, 1), "done_reason": out.get("done_reason", ""), **st}
+            thinking = msg.get("thinking") or ""
+            audit.log(proj, "model_request", endpoint=base_url(proj).split("//")[1], model=body["model"], secs=round(time.time() - t0, 1), **st,
+                      **({"role": role} if role else {}), **({"think": think, "thinking_chars": len(thinking)} if think else {}))
+            return {"content": msg.get("content", ""), "thinking": thinking, "secs": round(time.time() - t0, 1), "done_reason": out.get("done_reason", ""), **st}
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:300]
             last = ModelError(f"HTTP {e.code}: {detail}")

@@ -1,0 +1,1332 @@
+{
+ "level": "level_01",
+ "manifest_version": "1.0.0",
+ "solution_sha256": "773dde982d758bad731829bb096501ea584277a9e63bed33a9ae9d901dabd414",
+ "tried": 136,
+ "mutants": [
+  {
+   "id": "fileutil.py:16:bool",
+   "file": "fileutil.py",
+   "op": "bool",
+   "desc": "line 5: Or -> And",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s and 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 9,
+   "requirements": [
+    "R5"
+   ]
+  },
+  {
+   "id": "fileutil.py:18:cmp:0",
+   "file": "fileutil.py",
+   "op": "cmp:0",
+   "desc": "line 8: In -> NotIn",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' not in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:19:noraise",
+   "file": "fileutil.py",
+   "op": "noraise",
+   "desc": "line 8: raise removed",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        pass\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:22:bool",
+   "file": "fileutil.py",
+   "op": "bool",
+   "desc": "line 10: Or -> And",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 and i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:32:str",
+   "file": "fileutil.py",
+   "op": "str",
+   "desc": "line 8: '/' -> '#'",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '#' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:38:str",
+   "file": "fileutil.py",
+   "op": "str",
+   "desc": "line 9: '.' -> '#'",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('#')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:40:cmp:0",
+   "file": "fileutil.py",
+   "op": "cmp:0",
+   "desc": "line 10: LtE -> Lt",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i < 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:41:cmp:0",
+   "file": "fileutil.py",
+   "op": "cmp:0",
+   "desc": "line 10: Eq -> NotEq",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i != len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:47:str",
+   "file": "fileutil.py",
+   "op": "str",
+   "desc": "line 4: '.' -> '#'",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('#')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R5"
+   ]
+  },
+  {
+   "id": "fileutil.py:48:int+1",
+   "file": "fileutil.py",
+   "op": "int+1",
+   "desc": "line 4: 255 -> 256",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:256]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R5"
+   ]
+  },
+  {
+   "id": "fileutil.py:48:int-1",
+   "file": "fileutil.py",
+   "op": "int-1",
+   "desc": "line 4: 255 -> 254",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:254]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R5"
+   ]
+  },
+  {
+   "id": "fileutil.py:57:int+1",
+   "file": "fileutil.py",
+   "op": "int+1",
+   "desc": "line 10: 0 -> 1",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 1 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:57:int-1",
+   "file": "fileutil.py",
+   "op": "int-1",
+   "desc": "line 10: 0 -> -1",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= -1 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:60:bin",
+   "file": "fileutil.py",
+   "op": "bin",
+   "desc": "line 10: Sub -> Add",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) + 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:78:int+1",
+   "file": "fileutil.py",
+   "op": "int+1",
+   "desc": "line 10: 1 -> 2",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 2:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:78:int-1",
+   "file": "fileutil.py",
+   "op": "int-1",
+   "desc": "line 10: 1 -> 0",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '_', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 0:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R6"
+   ]
+  },
+  {
+   "id": "fileutil.py:86:str",
+   "file": "fileutil.py",
+   "op": "str",
+   "desc": "line 4: '_' -> '#'",
+   "source": "import re\n\ndef safe_filename(name):\n    s = re.sub('[^A-Za-z0-9._-]', '#', name).lstrip('.')[:255]\n    return s or 'unnamed'\n\ndef split_ext(name):\n    if '/' in name:\n        raise ValueError('name must not contain /')\n    i = name.rfind('.')\n    if i <= 0 or i == len(name) - 1:\n        return (name, '')\n    return (name[:i], name[i:])\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R5"
+   ]
+  },
+  {
+   "id": "netutil.py:15:not",
+   "file": "netutil.py",
+   "op": "not",
+   "desc": "line 2: drop `not`",
+   "source": "def is_valid_ipv4(text):\n    if isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 10,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:19:cmp:0",
+   "file": "netutil.py",
+   "op": "cmp:0",
+   "desc": "line 4: NotEq -> Eq",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) == 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 10,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:26:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 9: True -> False",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return False\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 8,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:28:not",
+   "file": "netutil.py",
+   "op": "not",
+   "desc": "line 12: drop `not`",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:29:noraise",
+   "file": "netutil.py",
+   "op": "noraise",
+   "desc": "line 12: raise removed",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        pass\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:31:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 13: 0 -> 1",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 1\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:31:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 13: 0 -> -1",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = -1\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:38:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 2: False -> True",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return True\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:41:str",
+   "file": "netutil.py",
+   "op": "str",
+   "desc": "line 3: '.' -> '#'",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('#')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 8,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:44:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 4: 4 -> 5",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 5:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 9,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:44:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 4: 4 -> 3",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 3:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 10,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:45:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 4: False -> True",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return True\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:48:bool",
+   "file": "netutil.py",
+   "op": "bool",
+   "desc": "line 6: Or -> And",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p and (not all((c in '0123456789' for c in p))):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:50:bool",
+   "file": "netutil.py",
+   "op": "bool",
+   "desc": "line 7: And -> Or",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 or p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:52:cmp:0",
+   "file": "netutil.py",
+   "op": "cmp:0",
+   "desc": "line 8: Gt -> GtE",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) >= 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:60:str",
+   "file": "netutil.py",
+   "op": "str",
+   "desc": "line 14: '.' -> '#'",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('#'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:62:bin",
+   "file": "netutil.py",
+   "op": "bin",
+   "desc": "line 14: BitOr -> BitAnd",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 & int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:72:not",
+   "file": "netutil.py",
+   "op": "not",
+   "desc": "line 6: drop `not`",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 9,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:73:not",
+   "file": "netutil.py",
+   "op": "not",
+   "desc": "line 6: drop `not`",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 9,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:74:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 6: False -> True",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return True\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:76:cmp:0",
+   "file": "netutil.py",
+   "op": "cmp:0",
+   "desc": "line 7: Gt -> GtE",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) >= 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:77:cmp:0",
+   "file": "netutil.py",
+   "op": "cmp:0",
+   "desc": "line 7: Eq -> NotEq",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] != '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:78:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 7: False -> True",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return True\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:81:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 8: 255 -> 256",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 256:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:81:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 8: 255 -> 254",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 254:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:82:boolconst",
+   "file": "netutil.py",
+   "op": "boolconst",
+   "desc": "line 8: False -> True",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return True\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:90:bin",
+   "file": "netutil.py",
+   "op": "bin",
+   "desc": "line 14: LShift -> RShift",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n >> 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:105:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 7: 1 -> 2",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 2 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:105:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 7: 1 -> 0",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 0 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:108:str",
+   "file": "netutil.py",
+   "op": "str",
+   "desc": "line 7: '0' -> '#'",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '#':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:119:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 14: 8 -> 9",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 9 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:119:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 14: 8 -> 7",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 7 | int(p)\n    return n\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:128:int+1",
+   "file": "netutil.py",
+   "op": "int+1",
+   "desc": "line 7: 0 -> 1",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[1] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:128:int-1",
+   "file": "netutil.py",
+   "op": "int-1",
+   "desc": "line 7: 0 -> -1",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[-1] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "netutil.py:137:cmp:0",
+   "file": "netutil.py",
+   "op": "cmp:0",
+   "desc": "line 6: In -> NotIn",
+   "source": "def is_valid_ipv4(text):\n    if not isinstance(text, str):\n        return False\n    parts = text.split('.')\n    if len(parts) != 4:\n        return False\n    for p in parts:\n        if not p or not all((c not in '0123456789' for c in p)):\n            return False\n        if len(p) > 1 and p[0] == '0':\n            return False\n        if int(p) > 255:\n            return False\n    return True\n\ndef ipv4_to_int(text):\n    if not is_valid_ipv4(text):\n        raise ValueError(f'not a valid IPv4 address: {text!r}')\n    n = 0\n    for p in text.split('.'):\n        n = n << 8 | int(p)\n    return n\n",
+   "hidden_failures": 9,
+   "requirements": [
+    "R7",
+    "R8"
+   ]
+  },
+  {
+   "id": "numutil.py:19:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 2: Gt -> GtE",
+   "source": "def clamp(value, low, high):\n    if low >= high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R3"
+   ]
+  },
+  {
+   "id": "numutil.py:20:noraise",
+   "file": "numutil.py",
+   "op": "noraise",
+   "desc": "line 2: raise removed",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        pass\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R3"
+   ]
+  },
+  {
+   "id": "numutil.py:27:bool",
+   "file": "numutil.py",
+   "op": "bool",
+   "desc": "line 8: Or -> And",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) and (not isinstance(n, int)):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:28:noraise",
+   "file": "numutil.py",
+   "op": "noraise",
+   "desc": "line 8: raise removed",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        pass\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:29:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 9: Lt -> LtE",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n <= 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:31:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 10: Lt -> LtE",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n <= 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:33:bool",
+   "file": "numutil.py",
+   "op": "bool",
+   "desc": "line 11: Or -> And",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 and n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:36:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 12: 5 -> 6",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 6\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:36:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 12: 5 -> 4",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 4\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:37:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 13: LtE -> Lt",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i < n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:40:boolconst",
+   "file": "numutil.py",
+   "op": "boolconst",
+   "desc": "line 16: True -> False",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return False\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:56:not",
+   "file": "numutil.py",
+   "op": "not",
+   "desc": "line 8: drop `not`",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 8,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:60:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 9: 2 -> 3",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 3:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:60:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 9: 2 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 1:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:61:boolconst",
+   "file": "numutil.py",
+   "op": "boolconst",
+   "desc": "line 9: False -> True",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return True\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:64:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 10: 4 -> 5",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 5:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:64:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 10: 4 -> 3",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 3:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:65:boolconst",
+   "file": "numutil.py",
+   "op": "boolconst",
+   "desc": "line 10: True -> False",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return False\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:67:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 11: Eq -> NotEq",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 != 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:68:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 11: Eq -> NotEq",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 != 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:69:boolconst",
+   "file": "numutil.py",
+   "op": "boolconst",
+   "desc": "line 11: False -> True",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return True\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:71:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 13: Mult -> Add",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i + i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:74:bool",
+   "file": "numutil.py",
+   "op": "bool",
+   "desc": "line 14: Or -> And",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 and n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:78:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 15: 6 -> 7",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 7\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:78:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 15: 6 -> 5",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 5\n    return True\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:98:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 11: Mod -> FloorDiv",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n // 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:100:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 11: 0 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 1 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:100:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 11: 0 -> -1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == -1 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:101:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 11: Mod -> FloorDiv",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n // 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:103:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 11: 0 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 1:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:103:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 11: 0 -> -1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == -1:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:109:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 14: Eq -> NotEq",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i != 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:110:cmp:0",
+   "file": "numutil.py",
+   "op": "cmp:0",
+   "desc": "line 14: Eq -> NotEq",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) != 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:111:boolconst",
+   "file": "numutil.py",
+   "op": "boolconst",
+   "desc": "line 14: False -> True",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return True\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:123:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 11: 2 -> 3",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 3 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:123:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 11: 2 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 1 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:126:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 11: 3 -> 4",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 4 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:126:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 11: 3 -> 2",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 2 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 2,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:129:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 14: Mod -> FloorDiv",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n // i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:131:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 14: 0 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 1 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:131:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 14: 0 -> -1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == -1 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:132:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 14: Mod -> FloorDiv",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n // (i + 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:134:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 14: 0 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 1:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 4,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:134:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 14: 0 -> -1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == -1:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:145:bin",
+   "file": "numutil.py",
+   "op": "bin",
+   "desc": "line 14: Add -> Sub",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i - 2) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:151:int+1",
+   "file": "numutil.py",
+   "op": "int+1",
+   "desc": "line 14: 2 -> 3",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 3) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "numutil.py:151:int-1",
+   "file": "numutil.py",
+   "op": "int-1",
+   "desc": "line 14: 2 -> 1",
+   "source": "def clamp(value, low, high):\n    if low > high:\n        raise ValueError('low must not exceed high')\n    if value < low:\n        return low\n    if value > high:\n        return high\n    return value\n\ndef is_prime(n):\n    if isinstance(n, bool) or not isinstance(n, int):\n        raise TypeError('n must be an int')\n    if n < 2:\n        return False\n    if n < 4:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 1) == 0:\n            return False\n        i += 6\n    return True\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R4"
+   ]
+  },
+  {
+   "id": "textutil.py:14:not",
+   "file": "textutil.py",
+   "op": "not",
+   "desc": "line 2: drop `not`",
+   "source": "def slugify(text):\n    if isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 8,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:15:noraise",
+   "file": "textutil.py",
+   "op": "noraise",
+   "desc": "line 2: raise removed",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        pass\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:26:str",
+   "file": "textutil.py",
+   "op": "str",
+   "desc": "line 12: '...' -> '#'",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='#'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:27:cmp:0",
+   "file": "textutil.py",
+   "op": "cmp:0",
+   "desc": "line 13: Lt -> LtE",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width <= 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:28:noraise",
+   "file": "textutil.py",
+   "op": "noraise",
+   "desc": "line 13: raise removed",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        pass\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:29:cmp:0",
+   "file": "textutil.py",
+   "op": "cmp:0",
+   "desc": "line 14: LtE -> Lt",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) < width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:33:bin",
+   "file": "textutil.py",
+   "op": "bin",
+   "desc": "line 16: Add -> Sub",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] - suffix\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:47:bool",
+   "file": "textutil.py",
+   "op": "bool",
+   "desc": "line 6: Or -> And",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 and 65 <= o <= 90 and (97 <= o <= 122):\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 7,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:56:int+1",
+   "file": "textutil.py",
+   "op": "int+1",
+   "desc": "line 13: 0 -> 1",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 1:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 3,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:56:int-1",
+   "file": "textutil.py",
+   "op": "int-1",
+   "desc": "line 13: 0 -> -1",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < -1:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:82:cmp:0",
+   "file": "textutil.py",
+   "op": "cmp:0",
+   "desc": "line 6: LtE -> Lt",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 < o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:83:cmp:0",
+   "file": "textutil.py",
+   "op": "cmp:0",
+   "desc": "line 6: LtE -> Lt",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 < o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:84:bool",
+   "file": "textutil.py",
+   "op": "bool",
+   "desc": "line 7: And -> Or",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending or out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:87:boolconst",
+   "file": "textutil.py",
+   "op": "boolconst",
+   "desc": "line 8: False -> True",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = True\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:90:boolconst",
+   "file": "textutil.py",
+   "op": "boolconst",
+   "desc": "line 9: True -> False",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = False\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:122:int+1",
+   "file": "textutil.py",
+   "op": "int+1",
+   "desc": "line 6: 65 -> 66",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 66 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 1,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:127:int+1",
+   "file": "textutil.py",
+   "op": "int+1",
+   "desc": "line 6: 97 -> 98",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 98 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  },
+  {
+   "id": "textutil.py:148:bin",
+   "file": "textutil.py",
+   "op": "bin",
+   "desc": "line 16: Sub -> Add",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('-')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width + len(suffix)] + suffix\n",
+   "hidden_failures": 5,
+   "requirements": [
+    "R2"
+   ]
+  },
+  {
+   "id": "textutil.py:155:str",
+   "file": "textutil.py",
+   "op": "str",
+   "desc": "line 7: '-' -> '#'",
+   "source": "def slugify(text):\n    if not isinstance(text, str):\n        raise TypeError('text must be a str')\n    out, pending = ([], False)\n    for ch in text:\n        o = ord(ch)\n        if 48 <= o <= 57 or 65 <= o <= 90 or 97 <= o <= 122:\n            if pending and out:\n                out.append('#')\n            pending = False\n            out.append(ch.lower())\n        else:\n            pending = True\n    return ''.join(out)\n\ndef truncate(text, width, suffix='...'):\n    if width < 0:\n        raise ValueError('width must not be negative')\n    if len(text) <= width:\n        return text\n    if width < len(suffix):\n        return suffix[:width]\n    return text[:width - len(suffix)] + suffix\n",
+   "hidden_failures": 6,
+   "requirements": [
+    "R1"
+   ]
+  }
+ ]
+}

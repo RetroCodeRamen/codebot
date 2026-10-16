@@ -85,7 +85,9 @@ def markdown(rep, store=None):
     L = [f"# Capability ladder run `{rep['run_id']}`", "", banner, ""]
     c, e = rep["config"], rep["environment"]
     L += [f"- mode `{rep['mode']}`, suite `{rep['suite']}`, per-task budget **{c['task_minutes']:g} min** (no project-wide limit), model `{c['model']}`, seed {c['seed']}, driver {c['driver']}",
-          f"- codebot `{(e.get('codebot_commit') or '?')[:10]}`{' (uncommitted changes)' if e.get('codebot_dirty') else ''}, framework {e.get('benchmark_framework_version')}, {e.get('cpu') or '?'}, {e.get('gpu') or 'no GPU info'}", ""]
+          f"- codebot `{(e.get('codebot_commit') or '?')[:10]}`{' (uncommitted changes)' if e.get('codebot_dirty') else ''}, framework {e.get('benchmark_framework_version')}, {e.get('cpu') or '?'}, {e.get('gpu') or 'no GPU info'}"]
+    if c.get("roles"): L += ["- role settings: " + ", ".join(f"`{k}={v}`" for k, v in sorted(c["roles"].items()))]
+    L += [""]
     if p.get("current"): L += [f"- now: `{p['current']['trial']}` in phase `{p['current']['phase']}`", ""]
     lvl_rows = [[g["benchmark"], f"{g['finished']}/{g['trials']}", g["complete"], f"{g['verified_tasks']}/{g['tasks']}", _pct(g["internal_rate_mean"]),
                  f"{_pct(g['reference_rate_median'])} ({_pct(g['reference_rate_min'])}-{_pct(g['reference_rate_max'])})", g["timeouts"], g["retries"], g["splits"], _min(g["run_s_mean"]), g["verified_per_hour_mean"]] for g in rep["levels"]]

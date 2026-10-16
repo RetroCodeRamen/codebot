@@ -4,7 +4,7 @@ rejected tasks only, asks the model for corrected assertions with the exact reas
 interpreter or a file, so the mistakes the free-form opencode planner made (wrong paths, backticks, <placeholders>, scripts run with the wrong
 interpreter, implementation written instead of tests) cannot occur. The interactive `codebot plan` (a human in the loop) is unchanged."""
 import json, os, re, subprocess, sys, time
-from . import assertions as A, checkspec as K, guard, ollama, packer, planparse
+from . import assertions as A, checkspec as K, guard, ollama, packer, planparse, roles
 from .config import Project, now, append_jsonl
 
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
@@ -48,7 +48,8 @@ GUIDE_ITEM = GUIDE.replace("Turn the SPECIFICATION into a plan of small tasks, i
                            " Also give: goal (one sentence), context (stack, conventions, off-limits),\ndone (how the whole thing is verified).", "")
 
 def _chat(proj, system, user, schema, left, num_predict=5000):
-    r = ollama.chat(proj, [{"role": "system", "content": system}, {"role": "user", "content": user}], schema=schema, temperature=0.2, num_predict=num_predict, timeout=max(60, int(left)), retries=2)
+    r = ollama.chat(proj, [{"role": "system", "content": system}, {"role": "user", "content": user}], schema=schema, temperature=0.2, num_predict=num_predict, timeout=max(60, int(left)), retries=2,
+                    model=roles.model(proj, "planner"), think=roles.think(proj, "planner"), role="planner")
     raw = r.get("content") or ""
     try: return json.loads(raw), None, raw
     except ValueError: return None, ("the reply was not valid JSON (cut off by the token limit?)" if r.get("done_reason") == "length" else "the reply was not valid JSON"), raw

@@ -40,6 +40,7 @@ codebot re-config                        # rebuild the REA agent config after ed
 codebot bench --preflight                # prove the context setup against the live model server
 codebot bench --suite pyutils --plan fixed   # run a benchmark suite through the real pipeline (--plan auto = unattended planner)
 codebot bench --thermal --minutes 4      # sweep threads / power profile / GPU for sustained speed vs heat
+codebot eval gate MODEL            # model evaluation: speed/compatibility gate, mutant sets, scored planner probes (docs/MODEL_EVAL.md)
 ```
 
 Subscribe to your ntfy topic (`config/codebot.env`) on your phone: pushes for start, blocked (with the exact question), tamper, budget stops, COMPLETE and the morning report.

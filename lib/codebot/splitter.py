@@ -2,7 +2,7 @@
 Like the planner, the model emits declarative ASSERTIONS (assertions.py), never a shell command: the harness writes each child's spec file (a locked
 fixture) and builds its check command, so a split child can never get a check that cannot fail, cannot pass, or points at a path that does not exist."""
 import json, os, sys
-from . import assertions as A, checkspec as K, checks as C, ollama, packer
+from . import assertions as A, checkspec as K, checks as C, ollama, packer, roles
 from .config import Project, now, append_jsonl
 
 SCHEMA = {"type": "object", "properties": {"subtasks": {"type": "array", "minItems": 2, "maxItems": 4, "items": {     # asked for 2-4; a split survives with 1 usable child
@@ -41,7 +41,8 @@ def main():
     raw, why, notes = None, "", []
     try:
         r = ollama.chat(proj, [{"role": "system", "content": "You decompose coding tasks. Reply with JSON only."}, {"role": "user", "content": prompt}],
-                        schema=SCHEMA, temperature=0.2, num_predict=1500, timeout=600, retries=2)
+                        schema=SCHEMA, temperature=0.2, num_predict=1500, timeout=600, retries=2,
+                        model=roles.model(proj, "splitter"), think=roles.think(proj, "splitter"), role="splitter")
         raw = r.get("content") or ""; subs = json.loads(raw)["subtasks"]
     except Exception as e: subs = None; why = f"no usable reply: {type(e).__name__}: {str(e)[:200]}"
     if raw is not None:                                    # kept for the replay corpus (tests/corpus/build_corpus.py)

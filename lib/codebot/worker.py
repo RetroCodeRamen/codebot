@@ -2,7 +2,7 @@
 schema; the harness validates every action before applying it and builds all context itself. The worker's own claim
 of success is irrelevant: the engine runs the frozen check afterwards."""
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-from . import audit, memory, modes, ollama, packer, planops, sandbox, tokens
+from . import audit, memory, modes, ollama, packer, planops, roles, sandbox, tokens
 from .config import Project, now, append_jsonl
 
 ACTIONS = ("read_file", "list_dir", "write_file", "edit_file", "run", "replan", "note_lesson", "finish")
@@ -208,7 +208,7 @@ def run_attempt(proj, task, attempt, last_error, variant="", model=None, tempera
         turns += 1
         messages, cut = fit(proj, messages, num_predict); est = est_tokens(proj, messages)
         stats["max_est"] = max(stats["max_est"], est); stats["truncated"] += 1 if cut else 0
-        try: resp = ollama.chat(proj, messages, schema=schema, model=model, temperature=temp, num_predict=num_predict)
+        try: resp = ollama.chat(proj, messages, schema=schema, model=model, temperature=temp, num_predict=num_predict, think=roles.think(proj, "worker"), role="worker")
         except ollama.ModelError as e:
             if "HTTP 400" in str(e) and schema is not flat_schema():       # server cannot compile anyOf: use the flat schema
                 schema = flat_schema(); trace(proj, {"event": "schema_fallback", "task": task["id"], "attempt": attempt}); continue

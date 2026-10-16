@@ -30,7 +30,7 @@ class Cfg:
         except (TypeError, ValueError): return d
     def p(self, *x): return os.path.join(self.home, "logs", *x)
 
-INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "PLAN_PER_ITEM", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
+INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "PLAN_PER_ITEM", "PLANNER_MODEL", "PLANNER_THINK", "SPLITTER_MODEL", "SPLITTER_THINK", "WORKER_THINK", "ESCALATE_MODEL", "THINK_BUDGET", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
 
 class Ctx:
     """Everything a trial needs; tests replace `sleep`, `sender` and `driver` to run without real time or a real model."""
@@ -105,7 +105,8 @@ def build_trials(home, suite, levels, repeats, order="repeat-major"):
     return out
 
 def create_run(home, suite="ladder", levels=None, repeats=3, mode="full", task_minutes=90.0, plan_minutes=45.0, plan_rounds=3, model=None, seed=None, interactive=False,
-               name=None, poll_s=20.0, notify=True, order="repeat-major", driver="loop", checkpoints=False):
+               name=None, poll_s=20.0, notify=True, order="repeat-major", driver="loop", checkpoints=False, roles=None):
+    """roles: per-role settings written into every trial's project.env, e.g. {"PLANNER_MODEL": "granite4.2:8b-q4_K_M", "PLANNER_THINK": "on"} (roles.py)."""
     if mode not in MODES: raise RunError(f"mode must be one of {', '.join(MODES)}")
     if suite == "growing" and mode != "full": raise RunError("the growing project is only available in full mode")
     if suite != "growing" and not levels: raise RunError("no levels selected")
@@ -115,7 +116,8 @@ def create_run(home, suite="ladder", levels=None, repeats=3, mode="full", task_m
     env = RS.environment(home, model=model)
     state = {"run_id": run_id, "created": RS.now_iso(), "status": "created", "suite": suite, "mode": mode, "levels": levels, "repeats": repeats,
              "config": {"task_minutes": task_minutes, "plan_minutes": plan_minutes, "plan_rounds": plan_rounds, "model": model or env["model"], "seed": seed, "interactive": interactive, "poll_s": poll_s,
-                        "notify": notify, "driver": driver, "checkpoints": checkpoints, "ollama_port": env["ollama_port"], "order": order},
+                        "notify": notify, "driver": driver, "checkpoints": checkpoints, "ollama_port": env["ollama_port"], "order": order,
+                        "roles": {k: str(v) for k, v in (roles or {}).items() if v not in (None, "")}},
              "environment": env, "trials": trials}
     store.save(state); return store
 
@@ -147,7 +149,7 @@ def _spec_for(ctx, tr, m, st):
     return M.spec_text(m, st)
 
 def _cfg_for(ctx, tr, minimal=False):
-    c = ctx.cfg; return W.project_settings(ctx.home, c["task_minutes"], c.get("model"), c.get("seed"), c.get("interactive"), minimal=minimal)
+    c = ctx.cfg; return W.project_settings(ctx.home, c["task_minutes"], c.get("model"), c.get("seed"), c.get("interactive"), extra=c.get("roles") or None, minimal=minimal)
 
 def setup_trial(ctx, tr, td):
     m, st = _benchmark(ctx, tr); minimal = ctx.state["mode"] == "minimal"
@@ -331,6 +333,8 @@ def verify_trial(ctx, tr, td, proj):
     td["tasks"] = mt["tasks"]; td["totals"] = MT.project_totals(mt["tasks"], proj) if mt["frozen"] else {}
     w = (td.get("plan") or {}).get("window")
     if w: td["planning_model"] = MT.planning_stats(proj, w[0], w[1])
+    from .. import roles as ROL
+    td["roles"] = ROL.describe(proj)                    # exactly which model played which role, and whether it thought
     td["calls_sample"] = MT.model_calls(proj)[:2000]
     if ctx.state["mode"] != "minimal" and os.path.isdir(proj.p("checks")):
         seed, sol = _trees_for_audit(ctx, tr, m, st, proj)
