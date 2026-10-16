@@ -24,16 +24,18 @@ def run(proj, model, think=False, n=3, log=print):
     """One model through the gate. proj supplies the server port and num_ctx. Returns a result dict (never raises for a model problem)."""
     m = M.load(proj.home, "level_01"); spec = open(M.spec_path(m)).read(); items = PL.item_texts(spec)
     row = {"model": model, "think": think, "ok": False, "errors": [], "temp_max": None}
-    temps = []; t0 = time.time()
+    temps = []; t0 = time.time(); row["replies"] = []
     def call(messages, schema, num_predict):
         t = thermal.read_temp(); temps.append(t) if t is not None else None
         r = ollama.chat(proj, messages, schema=schema, model=model, temperature=0.2, num_predict=num_predict, timeout=1800, retries=1, think=think, role="gate")
         t = thermal.read_temp(); temps.append(t) if t is not None else None
+        row["replies"].append({"content": r["content"][:6000], "thinking": (r.get("thinking") or "")[:2000], "gen_tokens": r["gen_tokens"], "done_reason": r.get("done_reason")})
         return r
     try:
         r = call([{"role": "user", "content": "Reply with the JSON {\"ok\": true}."}], {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}, 20)
         row["load_s"] = round(r["load_ms"] / 1000, 1)
-        ps = next((x for x in _ps(proj) if x.get("name", "").startswith(model.split(":")[0]) or x.get("model") == model), None)
+        names = {model, model if ":" in model else model + ":latest"}             # exact match: a prefix match picked the wrong entry for gemma4
+        ps = next((x for x in _ps(proj) if x.get("name") in names or x.get("model") in names), None)
         if ps and ps.get("size"): row.update(size_gb=round(ps["size"] / 1e9, 2), gpu_share=round(ps.get("size_vram", 0) / ps["size"], 2))
         plans, works, speeds = [], [], []
         head = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n(empty)\n\n"

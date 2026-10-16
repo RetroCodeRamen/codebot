@@ -24,7 +24,7 @@ def main(argv, home):
         return 0
     if a.cmd == "gate":
         proj = _scratch(home); think = {"off": False, "on": True}.get(a.think, a.think); rows = []
-        for mo in a.models: rows.append(G.run(proj, mo, think, a.n))
+        for mo in a.models: rows.append(G.run(proj, mo, think, a.n, log=lambda s: print(s, flush=True)))
         out = os.path.join(home, "bench", "results", "eval"); os.makedirs(out, exist_ok=True)
         path = os.path.join(out, f"gate-{time.strftime('%Y%m%d-%H%M%S')}.json")
         with open(path, "w") as f: json.dump(rows, f, indent=1)
@@ -32,6 +32,6 @@ def main(argv, home):
     if a.cmd == "planner":
         for lv in _levels(home, a.levels):
             if not MU.load(M.load(home, lv)): print(f"{lv}: no current mutant set; run `codebot eval mutants --levels ...` first"); return 2
-        run_id, out_dir, rows = PE.run(home, a.models.split(","), a.think.split(","), _levels(home, a.levels), a.plans, a.name, a.plan_minutes)
+        run_id, out_dir, rows = PE.run(home, a.models.split(","), a.think.split(","), _levels(home, a.levels), a.plans, a.name, a.plan_minutes, log=lambda s: print(s, flush=True))
         print(f"run {run_id}: {len(rows)} plans; summary: {os.path.join(out_dir, 'summary.md')}"); return 0
     return 2
