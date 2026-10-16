@@ -103,6 +103,20 @@ codebot bench run --level 1 --repeats 1 --mode reference-plan   # then: does the
 ```
 Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Monitor` that reports only state changes (tasks.json statuses), not per-turn noise. After each run: put the results in `docs/ROADMAP.md`, commit, and tell the user what was found including what failed. Do not edit `lib/` while a bench is running (every engine step imports it fresh).
 
+### How to change the harness (agreed with the user on 2026-10-16, after the same problem kept coming back in different forms)
+
+- **Salvage, do not reject wholesale.** Wherever model output enters (plan, repair round, split, assertions): repair when the intent is unambiguous, drop the bad
+  item and keep the rest, ask the model again only as a last resort (a 9B model mostly repeats its mistake), fail only when nothing usable is left. Log every drop/repair.
+  Audit of the entry points (2026-10-16): planner drops a whole task for one invalid assertion and fails the whole plan if any task is still rejected after the last
+  round; the splitter needs 2 usable children and records nothing about why it failed; the worker already handles each action separately (keep).
+- **Replay corpus before real runs.** `tests/corpus/` holds every real assertion a planner/splitter froze (judged against the reference solution) and the raw plan
+  replies; `tests/test_w_corpus.py` replays them in about 2 s. A rule must never reject or change a sound corpus assertion; the ratchet counts (impossible assertions
+  let through, collapsed plans) may only go down. Rebuild with `python3 tests/corpus/build_corpus.py` after every real run. Corpus facts: 105 of 282 real assertions
+  fail on the reference; the splitter is much worse than the planner on level 1 (12/21 unsound vs 11/80).
+- **Structure over wording.** Constraints the harness enforces (schema minItems, required fields, deterministic repair) work; prompt wording changes have side
+  effects no test catches (the coverage wording collapsed plans). Change the prompt only with a planning-only probe (3-5 plans, about 10 min each) against the reference.
+- **Full runs measure; they are not for finding bugs.** Do not tune against level 1 alone: confirm on level 2 or 3 before calling a fix general.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.
