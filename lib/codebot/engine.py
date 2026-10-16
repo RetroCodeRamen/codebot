@@ -73,6 +73,23 @@ def err_text(task, res):
     if out: return out[-1500:]
     return f"The acceptance check `{task.get('check')}` exited with status {res['rc']} and printed nothing. It is run in the code directory."
 
+def regression_gate(proj): return str(proj.get("REGRESSION_GATE", "1")).lower() not in ("0", "", "false", "no")
+
+def regressions(proj, data, task, clk=None):
+    """Re-run the check of every task already done (other than this one) against the code as it is now. A task only counts as done when it broke
+    nothing earlier: in the first full level-1 run every trial lost tasks this way (fileutil.safe_filename verified at T5, then broken by the edit
+    for split_ext at T6). Returns (failure dict like run_check's, or None, [ids that fail now])."""
+    if not regression_gate(proj): return None, []
+    ct = proj.get("CHECK_TIMEOUT", 600, int); broke, outs = [], []
+    for t in data["tasks"]:
+        if t is task or t["id"] == task["id"] or t.get("status") != "done" or not t.get("check"): continue
+        r = C.run_check(proj, t, clk.cap(ct) if clk else ct)
+        if r["rc"] != 0: broke.append(t["id"]); outs.append(f"{t['id']} \"{t['title'][:70]}\":\n{(r['out'] or '').strip()[-500:]}")
+    if not broke: return None, []
+    out = (f"This task's own check passes, but the change broke {len(broke)} task(s) that were already done and verified: {', '.join(broke)}. "
+           f"Keep the new work and make those pass again; do not change their behaviour.\n" + "\n".join(outs))
+    return {"rc": 1, "out": out, "sig": C.failure_sig(out), "secs": 0}, broke
+
 def _block(proj, task, why_text, res):
     task["status"] = "blocked"; task["blocked_question"] = L.question(proj, task, why_text)
     Z.record(proj, task, "blocked")
@@ -152,6 +169,9 @@ def _step(proj, fresh, box):
         ct = proj.get("CHECK_TIMEOUT", 600, int)
         pre = C.run_check(proj, task, clk.cap(ct) if clk else ct) if task.get("check") else None
         if pre is not None and pre["rc"] == 0:
+            reg, _ = regressions(proj, data, task, clk)            # leftovers of failed attempts may have broken a done task: then work on, told what broke
+            if reg: pre = reg
+        if pre is not None and pre["rc"] == 0:
             task["status"] = "done"; task["commit"] = G.checkpoint(proj, task)
             task["history"].append({"ts": now(), "precheck_pass": True, "gate": bool(task.get("split_into"))})
             if not task.get("split_into"): Z.record(proj, task, "done")
@@ -180,10 +200,13 @@ def _step(proj, fresh, box):
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "attempt": attempt, "event": "attempt_cut_by_budget", "worker_secs": w.get("secs")})
             return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out during attempt {attempt}")
         res = C.run_check(proj, task, clk.cap(proj.get("CHECK_TIMEOUT", 600, int)) if clk else proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
-        passed = res["rc"] == 0 and not tamper2
+        passed = res["rc"] == 0 and not tamper2; broke = []
+        if passed:
+            reg, broke = regressions(proj, data, task, clk)
+            if reg: res, passed = reg, False
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"), "worker_secs": w.get("secs"),
                "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
-               "files": G.changed_files(proj.rundir)}
+               "files": G.changed_files(proj.rundir), **({"regressed": broke} if broke else {})}
         packed = []                                    # lessons the worker's context actually contained this attempt
         try:
             with open(proj.p("packed.json")) as f: packed = json.load(f).get("lessons", [])

@@ -30,7 +30,7 @@ class Cfg:
         except (TypeError, ValueError): return d
     def p(self, *x): return os.path.join(self.home, "logs", *x)
 
-INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
+INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
 
 class Ctx:
     """Everything a trial needs; tests replace `sleep`, `sender` and `driver` to run without real time or a real model."""

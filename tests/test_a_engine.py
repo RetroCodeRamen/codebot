@@ -49,6 +49,28 @@ class TestStep(Sandboxed):
         self.assertEqual(engine.step(self.proj())["event"], "all_done")
         plan = self.read("PLAN.md")
         self.assertIn("- [x] T1.", plan); self.assertIn("- [x] T2.", plan)
+    def test_a_task_that_breaks_a_done_task_is_not_done(self):
+        # the T6-broke-T5 pattern from the first full level-1 run: T2's own check passes but its edit breaks T1
+        self.set_env(WORKER_CMD=self.worker("""
+            import os
+            tid = os.environ['CODEBOT_TASK_ID']; fix = os.path.exists('fixed.flag')
+            if tid == 'T1': open('a.txt', 'w').write('hi\\n')
+            else:
+                open('b.txt', 'w').write('yo\\n'); open('a.txt', 'w').write('hi\\n' if fix else 'oops\\n'); open('fixed.flag', 'w').write('')
+        """))
+        self.assertEqual(engine.step(self.proj())["event"], "task_done")
+        e = engine.step(self.proj()); self.assertEqual((e["event"], e["task"]), ("task_failed", "T2"))
+        self.assertIn("broke 1 task(s) that were already done", e["out_tail"]); self.assertIn("T1", e["out_tail"])
+        data = T.TaskStore(self.proj()).load(); self.assertEqual(T.get(data, "T1")["status"], "done"); self.assertEqual(T.get(data, "T2")["status"], "pending")
+        rec = [json.loads(l) for l in self.read("attempts.jsonl").splitlines() if '"regressed"' in l]; self.assertEqual(rec[0]["regressed"], ["T1"])
+        e = engine.step(self.proj()); self.assertEqual((e["event"], e["task"]), ("task_done", "T2"))       # the next attempt keeps T1 working
+        self.assertEqual(engine.step(self.proj())["event"], "all_done")
+    def test_regression_gate_can_be_switched_off(self):
+        self.set_env(REGRESSION_GATE="0", WORKER_CMD=self.worker("""
+            import os
+            open('a.txt', 'w').write('hi\\n' if os.environ['CODEBOT_TASK_ID'] == 'T1' else 'oops\\n'); open('b.txt', 'w').write('yo\\n')
+        """))
+        engine.step(self.proj()); self.assertEqual(engine.step(self.proj())["event"], "task_done")
     def test_dependency_order(self):
         # T2 may not run before T1 is done even if its file already exists
         self.write_code("b.txt", "yo\n")
