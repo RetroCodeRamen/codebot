@@ -17,7 +17,7 @@ to reverse, or anything outside the codebot directory**.
 
 ## 2. Where everything lives
 
-Repo: `/home/aj/Documents/Development/codebot` (git, branch with ~27 commits; `projects/ models/ tools/ logs/ workspaces/ bench/runs/ bench/results/` are git-ignored).
+Repo: the codebot checkout (here `~/Documents/Development/codebot`) (git, branch with ~27 commits; `projects/ models/ tools/ logs/ workspaces/ bench/runs/ bench/results/` are git-ignored).
 
 | path | what |
 |---|---|
@@ -92,7 +92,7 @@ Done since the last handoff (details and numbers in `docs/dev/ROADMAP.md`): NVID
 ## 6. Next steps, in order (copy-paste)
 
 ```
-cd /home/aj/Documents/Development/codebot
+cd ~/Documents/Development/codebot        # your checkout
 codebot setup                      # starts the private Ollama (the model is unloaded after a reboot; the first request reloads it)
 tests/run.sh                       # full suite, about 2.5 min
 codebot bench --preflight          # about 5 min, must say PREFLIGHT OK

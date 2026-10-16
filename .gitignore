@@ -16,3 +16,4 @@ memory/lessons.raw.jsonl
 memory/lessons.status.json
 memory/sizing.json
 *.lock
+scripts/private-patterns.txt
