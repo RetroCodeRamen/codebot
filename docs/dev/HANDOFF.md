@@ -1,7 +1,7 @@
 # codebot: handoff (read this first in a new session)
 
 Last updated: 2026-10-15 (late), after the Capability Ladder Benchmark, its first real-model smoke run, a project review and per-trial memory isolation. Everything described here is committed (`git log` in this repo); the full suite (401 tests) is green.
-This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/ROADMAP.md` has
+This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/dev/ROADMAP.md` has
 the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
 
 ## 1. What codebot is
@@ -35,12 +35,12 @@ Repo: `/home/aj/Documents/Development/codebot` (git, branch with ~27 commits; `p
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
-Models: `codebot-model` (ornith:9b, default) and `qwen-coder-model` (qwen2.5-coder:7b, for comparison only; `config/Modelfile.qwen-coder`). `codebot bench --model <name>` runs a whole bench with one model; `codebot bench --compare <run> <run>` prints a side-by-side table; `--plan-only` samples a planner in about 3 minutes. Results so far: ornith is the better worker (5/5 in 1 attempt each vs 4/5 with 2 attempts for qwen on the same plan; qwen is 18% faster per token but needs 4.6x the turns) and, with the revised prompt, both models write mostly-but-not-fully sound plans. See `docs/ROADMAP.md`, section "Model comparison".
+Models: `codebot-model` (ornith:9b, default) and `qwen-coder-model` (qwen2.5-coder:7b, for comparison only; `config/Modelfile.qwen-coder`). `codebot bench --model <name>` runs a whole bench with one model; `codebot bench --compare <run> <run>` prints a side-by-side table; `--plan-only` samples a planner in about 3 minutes. Results so far: ornith is the better worker (5/5 in 1 attempt each vs 4/5 with 2 attempts for qwen on the same plan; qwen is 18% faster per token but needs 4.6x the turns) and, with the revised prompt, both models write mostly-but-not-fully sound plans. See `docs/dev/ROADMAP.md`, section "Model comparison".
 
 Environment facts: Acer Predator PT314-51s (Triton 300 SE), i7-11375H (4 cores / 8 threads), 15 GB RAM + 16 GB swap (heavily used), RTX 3050 Ti 4 GB with the **NVIDIA 595-open driver loaded** (about 35% of the model's layers are offloaded automatically; forcing `num_gpu=99` runs out of VRAM), Ubuntu 24.04 / KDE. Private Ollama 0.40.3 binary in `tools/ollama`, models in `models/`, port
 **11500** (the system Ollama 0.22 on :11434 is too old for ornith; leave it alone). Model `codebot-model` = `ornith:9b` (Q4_K_M, 5.6 GB, architecture `qwen35`, a
 hybrid/recurrent model) + 32k context. opencode 1.19.0 lives in `tools/node_modules`. Docker works for this user (group `docker`); sandbox image `ubuntu:24.04` is
-already local. REA: `rea` 6.4.0 (`~/.local/node/bin/rea`), Ghidra 12.1.4 (`~/.local/ghidra_12.1.4_PUBLIC`), JDK 21 (`~/.local/jdk-21`). ntfy topic `codebot-tahlokffwnfdc7`
+already local. REA: `rea` 6.4.0 (`~/.local/node/bin/rea`), Ghidra 12.1.4 (`~/.local/ghidra_12.1.4_PUBLIC`), JDK 21 (`~/.local/jdk-21`). ntfy topic in `config/local.env` (rotated 2026-10-16; the old one was in git history)
 (reply topic `...-reply`). A systemd **user** timer `codebot.timer` restarts loops that die (only projects with a `.active` file). `codebot` is symlinked into `~/.local/bin`.
 
 ## 3. How a run works (engine mode), in one paragraph
@@ -52,7 +52,7 @@ the harness, commands in an offline Docker sandbox), run the frozen check, check
 prompt, optional larger model, blocked + a pushed question). Budgets, stuck signals, an audit log (`codebot audit --probe`), evidence-backed memory, thermal guard,
 morning report (`codebot report`). Projects without `tasks.json` still run on the original opencode loop.
 
-## 4. Status of the roadmap (`docs/ROADMAP.md`)
+## 4. Status of the roadmap (`docs/dev/ROADMAP.md`)
 
 All 12 requested features (1 locked per-task checks, 2 git checkpoints, 3 budgets/stuck, 4 ladder, 5 adaptive sizing, 6 controlled replanning, 7 constrained outputs,
 8 context packing, 9 evidence memory, 10 sandbox + audit, 11 pluggable modes, 12 morning report) are **implemented and tested** (fake model +
@@ -80,7 +80,7 @@ Project review (2026-10-15), weakest points in order: (a) the planner's assertio
 
 Older items:
 
-Done since the last handoff (details and numbers in `docs/ROADMAP.md`): NVIDIA driver installed and offload measured (thermal sweep, auto-fit puts about 35% of the layers on the 4 GB GPU: 3.4x the throughput of CPU-only, still 90+ C); hard suite run twice with the real model (4/5 verified, T5 blocked as designed, all ladder steps seen); the splitter bug found there fixed (guard on split children, children inherit `files`); the free-form opencode planner found unusable after three real runs and replaced by **declarative checks** (planner and splitter emit assertion data, the harness owns the runner, paths and check commands, exit status 0/1/2 is a contract the guard enforces). First real run of the new planner (`bench-auto-6`): plan in 178 s with 0 rejected checks, 5/5 tasks verified, 1 attempt each, 6.7 min.
+Done since the last handoff (details and numbers in `docs/dev/ROADMAP.md`): NVIDIA driver installed and offload measured (thermal sweep, auto-fit puts about 35% of the layers on the 4 GB GPU: 3.4x the throughput of CPU-only, still 90+ C); hard suite run twice with the real model (4/5 verified, T5 blocked as designed, all ladder steps seen); the splitter bug found there fixed (guard on split children, children inherit `files`); the free-form opencode planner found unusable after three real runs and replaced by **declarative checks** (planner and splitter emit assertion data, the harness owns the runner, paths and check commands, exit status 0/1/2 is a contract the guard enforces). First real run of the new planner (`bench-auto-6`): plan in 178 s with 0 rejected checks, 5/5 tasks verified, 1 attempt each, 6.7 min.
 
 1. **Harder real-model evidence for the new planner.** `bench-auto-6` used the easy suite: no ladder step fired. Needed: a hard-suite spec run through `--plan auto` (needs a `spec.md` for `bench/suite/pyhard`, which has only a fixed plan today), and a few repeated runs to see how often the planner needs repair rounds and writes weak or unsatisfiable assertions.
 2. **Splitter with declarative assertions has only been tested with the fake model** (`tests/test_s_declarative.py`, `tests/test_h_worker.py`). It needs a real run where a task actually splits (the hard suite does this).
@@ -101,7 +101,7 @@ nohup codebot bench --suite pyhard  --plan fixed --name bench-hard-N --max-minut
 codebot bench run --level 1 --repeats 3      # the first real capability number: up to 90 min per task, several hours per trial; only when the user asks (overnight)
 codebot bench run --level 1 --repeats 1 --mode reference-plan   # then: does the validated plan raise the hidden-test rate? (planning vs implementation)
 ```
-Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Monitor` that reports only state changes (tasks.json statuses), not per-turn noise. After each run: put the results in `docs/ROADMAP.md`, commit, and tell the user what was found including what failed. Do not edit `lib/` while a bench is running (every engine step imports it fresh).
+Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Monitor` that reports only state changes (tasks.json statuses), not per-turn noise. After each run: put the results in `docs/dev/ROADMAP.md`, commit, and tell the user what was found including what failed. Do not edit `lib/` while a bench is running (every engine step imports it fresh).
 
 ### How to change the harness (agreed with the user on 2026-10-16, after the same problem kept coming back in different forms)
 
@@ -121,6 +121,10 @@ Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Moni
 - **Structure over wording.** Constraints the harness enforces (schema minItems, required fields, deterministic repair) work; prompt wording changes have side
   effects no test catches (the coverage wording collapsed plans). Change the prompt only with a planning-only probe (3-5 plans, about 10 min each) against the reference.
 - **Full runs measure; they are not for finding bugs.** Do not tune against level 1 alone: confirm on level 2 or 3 before calling a fix general.
+
+### Public release prep (2026-10-16)
+
+MIT `LICENSE`, `install.sh` (pinned Ollama 0.40.3 with sha256, `ornith:9b` -> `codebot-model`, optional opencode, writes `config/local.env`), `bin/codebot-doctor` (`codebot doctor`), `SECURITY.md`, `CONTRIBUTING.md`, README rewritten for new users. Settings are split: `config/codebot.env` = tracked defaults (notifications and phone control OFF, no topic), `config/local.env` = this machine (untracked; read after it by bash and by `config.home_env`). The old ntfy topic was in git history and was rotated. Memory run data, `*.lock` and the generated `config/opencode-re.json` are untracked. The user chose: MIT, a fresh one-commit public repo (this repo keeps its history), empty memory starters.
 
 ### Model evaluation (started 2026-10-16)
 

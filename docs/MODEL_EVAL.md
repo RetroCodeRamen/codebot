@@ -86,6 +86,27 @@ codebot bench run --level 1 --mode reference-plan --model W    worker quality wi
 3. **Worker** with reference plans, task-level repeats, for the gate survivors proposed as workers.
 4. **Integrated**: best planner + control worker, control planner + best worker, both, and the control with escalation to the best planner model.
 
+## Results
+
+**Gate (2026-10-16, thinking off, `bench/results/eval/gate-20261016-123545.json`)** [V]: every candidate loads on Ollama 0.40.3 and produces valid
+planner and worker JSON, except LFM2.5-8B-A1B (one planner reply ran past 2,500 tokens and was cut off; its worker replies were 750-1,500 tokens
+where others need 50-200). Generation speed (tokens/s): control 9.0, Ornith 1.5 7.4, Granite 8B 6.3, Granite 3B 20.4, Qwen3.5 4B 16.2, Qwen3 4B 10.8,
+LFM2.5 61.0, Gemma E4B 18.2, Gemma 12B 7.3, Ministral 8B 6.4, Qwen3.5 9B 7.6, Qwen2.5-Coder 7B 10.0. No 8-12B candidate is faster than the
+control; Qwen3 4B takes 7.6 GB at a 32k context (only a third on the GPU). The Gemma GPU shares in that file are wrong (a bug in the gate, fixed).
+
+**Thinking on the planner (C0 vs C1, `bench/results/eval/20261016-124511-c0-vs-c1/`)** [V]: Ornith 1.0, level 1, 5 plans each.
+
+| | E | S | K | Q | minutes per plan | generated tokens |
+|---|---|---|---|---|---|---|
+| thinking off | 0.75 ± 0.09 | 0.97 ± 0.01 | 0.82 ± 0.01 | **0.62 ± 0.07** | 7.0 | 3,411 |
+| thinking on | 0.78 ± 0.16 | 0.92 ± 0.05 | 0.72 ± 0.07 | 0.56 ± 0.15 | 12.1 | 5,907 |
+
+Thinking does not pay: the same share of doomed tasks (10 of 40 off, 9 of 40 on), lower soundness and coverage, 1.7x the time and tokens, and more
+variance. It changes the kind of mistake: off, most impossible assertions are wrong expected values; on, most (17) expect a value for inputs the
+spec says must raise. The planner stays thinking-off. The model view and the frozen view differ little (Q 0.60 vs 0.62): with per-item planning
+the model rarely makes the mechanical mistakes codebot's repairs fix, so the remaining 25% of doomed tasks is a model-level problem. Next: other
+planner models (Ornith 1.5, Granite 4.2 8B).
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

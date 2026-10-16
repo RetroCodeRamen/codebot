@@ -1,6 +1,10 @@
 """Paths and config. Reads the same KEY="value" env files the bash side uses."""
 import os, re, json, time
 
+def home_env(home):
+    """The harness settings: config/codebot.env (tracked defaults) with config/local.env (this machine's settings, not tracked) on top."""
+    cfg = read_env(os.path.join(home, "config", "codebot.env")); cfg.update(read_env(os.path.join(home, "config", "local.env"))); return cfg
+
 def read_env(path):
     out = {}
     try:
@@ -29,7 +33,7 @@ class Project:
         self.name = name
         self.state = os.path.join(self.home, "projects", name)
         if not os.path.isdir(self.state): raise SystemExit(f"codebot-engine: unknown project '{name}'")
-        self.cfg = read_env(os.path.join(self.home, "config", "codebot.env"))
+        self.cfg = home_env(self.home)
         penv = read_env(os.path.join(self.state, "project.env"))
         self.cfg.update(penv)
         self.workdir = penv.get("WORKDIR", "")

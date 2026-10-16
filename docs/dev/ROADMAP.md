@@ -1,6 +1,6 @@
 # codebot roadmap: a harness for small, slow, offline models
 
-> **Current state, what is in flight and the exact next steps are in `docs/HANDOFF.md`.** This file is the design record: decisions, per-step learnings, and real-model results.
+> **Current state, what is in flight and the exact next steps are in `docs/dev/HANDOFF.md`.** This file is the design record: decisions, per-step learnings, and real-model results.
 
 Identity: the autonomous coding agent built for small, slow, fully offline models (ornith:9b on CPU via the
 private Ollama on :11500) running unattended for hours. Every feature exists to make a weak model finish real
@@ -331,7 +331,7 @@ by H (native worker) and K (modes); it is not applied to the legacy opencode pat
 
 ## What is left
 
-See `docs/HANDOFF.md` section 5 (in flight / not done) and section 6 (next steps, copy-paste). In short: re-run the unattended planner benchmark with the harness-driven repair rounds, run the
+See `docs/dev/HANDOFF.md` section 5 (in flight / not done) and section 6 (next steps, copy-paste). In short: re-run the unattended planner benchmark with the harness-driven repair rounds, run the
 hard suite (ladder steps and a blocked task), run the thermal sweep, re-run the interactive grill-me planner end to end, and record every result here.
 
 ## Additions after the original 12 features (all implemented and tested)

@@ -4,7 +4,7 @@ import glob, json, os, re, subprocess, unittest
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 def read(*p):
     with open(os.path.join(REPO, *p)) as f: return f.read()
-DOCS = {"README.md": read("README.md"), "docs/HANDOFF.md": read("docs", "HANDOFF.md"), "docs/ROADMAP.md": read("docs", "ROADMAP.md"), "modes/README.md": read("modes", "README.md"), "memory/README.md": read("memory", "README.md")}
+DOCS = {"README.md": read("README.md"), "docs/dev/HANDOFF.md": read("docs", "dev", "HANDOFF.md"), "docs/dev/ROADMAP.md": read("docs", "dev", "ROADMAP.md"), "modes/README.md": read("modes", "README.md"), "memory/README.md": read("memory", "README.md")}
 ALL = "\n".join(DOCS.values())
 INTERNAL = {"__loop", "ui", "menu"}
 
@@ -34,7 +34,7 @@ class TestCommands(unittest.TestCase):
             if m and m.group(1): self.assertIn(m.group(1), cmds, ln)
     def test_every_engine_subcommand_is_in_the_handoff(self):
         subs = re.search(r'choices=\[(.*?)\]', read("bin", "codebot-engine"), re.S).group(1); subs = re.findall(r'"([a-z-]+)"', subs)
-        self.assertEqual([s for s in subs if s not in DOCS["docs/HANDOFF.md"]], [], "engine subcommands missing from docs/HANDOFF.md")
+        self.assertEqual([s for s in subs if s not in DOCS["docs/dev/HANDOFF.md"]], [], "engine subcommands missing from docs/dev/HANDOFF.md")
 
 class TestConfig(unittest.TestCase):
     def keys(self):
@@ -64,7 +64,7 @@ class TestPaths(unittest.TestCase):
         self.assertEqual(bad, [], "docs mention paths that do not exist")
     def test_every_python_module_is_in_the_handoff_file_map(self):
         mods = [os.path.basename(f)[:-3] for f in glob.glob(os.path.join(REPO, "lib", "codebot", "*.py")) if not f.endswith("__init__.py")]
-        self.assertEqual([m for m in mods if not re.search(rf"`{m}`|{m}\.py", DOCS["docs/HANDOFF.md"])], [], "lib/codebot modules missing from docs/HANDOFF.md section 2")
+        self.assertEqual([m for m in mods if not re.search(rf"`{m}`|{m}\.py", DOCS["docs/dev/HANDOFF.md"])], [], "lib/codebot modules missing from docs/dev/HANDOFF.md section 2")
     def test_every_test_file_has_a_place_in_the_docs(self): self.assertIn("tests/run.sh", ALL)
 
 class TestModesDoc(unittest.TestCase):
@@ -77,12 +77,22 @@ class TestModesDoc(unittest.TestCase):
             if os.path.isfile(os.path.join(REPO, "modes", d, "mode.json")): self.assertIn(f"`{d}`", DOCS["README.md"] + DOCS["modes/README.md"], d)
 
 class TestRoadmap(unittest.TestCase):
-    def test_no_step_is_left_marked_todo(self): self.assertEqual(re.findall(r"^\|[^\n]*\| todo \|$", DOCS["docs/ROADMAP.md"], re.M), [])
+    def test_no_step_is_left_marked_todo(self): self.assertEqual(re.findall(r"^\|[^\n]*\| todo \|$", DOCS["docs/dev/ROADMAP.md"], re.M), [])
     def test_the_status_table_has_every_step(self):
-        tbl = DOCS["docs/ROADMAP.md"].split("## Status")[1]
+        tbl = DOCS["docs/dev/ROADMAP.md"].split("## Status")[1]
         for s in "ABCDEFGHIJKLMN": self.assertRegex(tbl, rf"\| {s} \|", s)
     def test_handoff_points_to_the_other_docs_and_the_next_steps(self):
-        h = DOCS["docs/HANDOFF.md"]
-        for frag in ("docs/ROADMAP.md", "README.md", "Next steps", "In flight", "codebot setup"): self.assertIn(frag, h)
+        h = DOCS["docs/dev/HANDOFF.md"]
+        for frag in ("docs/dev/ROADMAP.md", "README.md", "Next steps", "In flight", "codebot setup"): self.assertIn(frag, h)
+
+class TestTestIsolation(unittest.TestCase):
+    def test_no_test_home_inherits_the_developers_local_settings(self):
+        # config/local.env holds this machine's ntfy topic and server; a test home that copies config/ with it would push to a real phone
+        offenders = []
+        for f in glob.glob(os.path.join(REPO, "tests", "test_*.py")):
+            src = read("tests", os.path.basename(f))
+            for m in re.finditer(r"for d in \(([^)]*)\):\s*\n?\s*shutil\.copytree\([^\n]*", src):
+                if '"config"' in m.group(1) and "local.env" not in m.group(0): offenders.append(os.path.basename(f))
+        self.assertEqual(offenders, [])
 
 if __name__ == "__main__": unittest.main()

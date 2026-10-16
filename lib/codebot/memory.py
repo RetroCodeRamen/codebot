@@ -102,10 +102,9 @@ def rebuild_md(home, cap=None):
     """Regenerate lessons.md from the raw log: active lessons, best evidence first, within the size cap."""
     d, _, _, md = _paths(home)
     if cap is None:
-        try:
-            with open(os.path.join(getattr(home, "home", home), "config", "codebot.env")) as f:
-                cap = int(next((l.split("=")[1].split("#")[0].strip().strip('"') for l in f if l.startswith("LESSONS_MAX=")), 4000))
-        except (OSError, ValueError, StopIteration): cap = 4000
+        from .config import home_env
+        try: cap = int(home_env(getattr(home, "home", home)).get("LESSONS_MAX", 4000))
+        except ValueError: cap = 4000
     raw = load_raw(home)
     with _Status(home) as s: st = {i: dict(e) for i, e in s["lessons"].items()}
     act = sorted(((rate(st.get(i, {"used": 0, "pass": 0})), r["ts"], i, r["text"]) for i, r in raw.items() if not st.get(i, {}).get("pruned")), reverse=True)

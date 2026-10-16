@@ -3,7 +3,7 @@ real model, and record what it did: pass rate, attempts, time, per-turn prompt v
 every ladder step, every blocked task, heat."""
 import json, os, re, shutil, statistics, subprocess, sys, time
 from . import modes, planparse, tasks as T, thermal, tokens
-from .config import Project, now, read_env
+from .config import Project, now, read_env, home_env
 
 def suite_dir(home, suite): return os.path.join(home, "bench", "suite", suite)
 
@@ -232,14 +232,14 @@ def main(argv):
     ap.add_argument("--only", help="comma separated substrings of config names to run (thermal sweep)")
     ap.add_argument("--model", help="model for this run (default CODEBOT_MODEL from config); stored in the project so planner, worker and splitter all use it"); ap.add_argument("--compare", nargs="+", metavar="RUN", help="print a side-by-side table of stored bench results and exit")
     ap.add_argument("--plan-only", action="store_true", help="with --plan auto: stop after planning and the reference audit (about 3 minutes; for sampling a model's planner repeatedly)")
-    ap.add_argument("--name"); ap.add_argument("--record", action="store_true", help="append the result to docs/ROADMAP.md"); ap.add_argument("--collect-only")
+    ap.add_argument("--name"); ap.add_argument("--record", action="store_true", help="append the result to docs/dev/ROADMAP.md"); ap.add_argument("--collect-only")
     a = ap.parse_args(argv); from .config import home_dir; home = a.home or home_dir()
     if a.compare: print(compare(a.compare, home)); return 0
     if a.model: os.environ["CODEBOT_MODEL"] = a.model       # preflight and every child process of this run
     if a.preflight:
         probe = Project(next(iter(sorted(os.listdir(os.path.join(home, "projects")))), "x"), home) if os.path.isdir(os.path.join(home, "projects")) and os.listdir(os.path.join(home, "projects")) else None
         class P:   # preflight only needs config values: read them like a project would, without needing a project
-            def __init__(s): s.home, s.cfg, s.name, s.mode, s.rundir, s.state = home, read_env(os.path.join(home, "config", "codebot.env")), "preflight", "code", home, home
+            def __init__(s): s.home, s.cfg, s.name, s.mode, s.rundir, s.state = home, home_env(home), "preflight", "code", home, home
             def get(s, k, d=None, cast=str):
                 v = os.environ.get(k, s.cfg.get(k)); 
                 try: return cast(v) if v not in (None, "") else d
@@ -250,7 +250,7 @@ def main(argv):
     if a.thermal:
         from . import thermalbench as TB
         class P:
-            def __init__(s): s.home, s.cfg, s.name, s.mode, s.rundir, s.state = home, read_env(os.path.join(home, "config", "codebot.env")), "thermal", "code", home, home
+            def __init__(s): s.home, s.cfg, s.name, s.mode, s.rundir, s.state = home, home_env(home), "thermal", "code", home, home
             def get(s, k, d=None, cast=str):
                 v = os.environ.get(k, s.cfg.get(k))
                 try: return cast(v) if v not in (None, "") else d
@@ -265,7 +265,7 @@ def main(argv):
         os.makedirs(os.path.join(home, "bench", "results"), exist_ok=True)
         with open(os.path.join(home, "bench", "results", f"thermal-{time.strftime('%m%d-%H%M%S')}.json"), "w") as f: json.dump(res, f, indent=1)
         if a.record:
-            with open(os.path.join(home, "docs", "ROADMAP.md"), "a") as f: f.write("\n" + md + "\n")
+            with open(os.path.join(home, "docs", "dev", "ROADMAP.md"), "a") as f: f.write("\n" + md + "\n")
         return 0
     if a.collect_only:
         proj = Project(a.collect_only, home); res = collect(proj); print(json.dumps(res, indent=1)); return 0
@@ -293,5 +293,5 @@ def main(argv):
     else: md = render_md(res, run, plan_info)
     print("\n" + md)
     if a.record:
-        with open(os.path.join(home, "docs", "ROADMAP.md"), "a") as f: f.write("\n" + md + "\n")
+        with open(os.path.join(home, "docs", "dev", "ROADMAP.md"), "a") as f: f.write("\n" + md + "\n")
     return 0 if run["status"] == "finished" else 1

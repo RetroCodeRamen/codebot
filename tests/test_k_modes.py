@@ -113,7 +113,7 @@ class TestReMode(ModeHome):
 class TestBash(ModeHome):
     def setUp(self):
         super().setUp()
-        for d in ("bin", "lib", "memory", "config"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "projects", "*.snap"))
+        for d in ("bin", "lib", "memory", "config"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("local.env", "__pycache__", "projects", "*.snap"))
         self.set_env(MODE="docs")
     def cli(self, *a): return subprocess.run([os.path.join(self.home, "bin", "codebot"), *a], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     def test_modes_command_lists_the_new_mode(self):

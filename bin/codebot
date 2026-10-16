@@ -4,6 +4,8 @@ set -uo pipefail
 CODEBOT_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$CODEBOT_HOME/config/codebot.env"
+# shellcheck disable=SC1091
+[[ -f "$CODEBOT_HOME/config/local.env" ]] && source "$CODEBOT_HOME/config/local.env"     # this machine's settings (not tracked by git)
 OLLAMA_BIN="$CODEBOT_HOME/tools/ollama/bin/ollama"
 OPENCODE_BIN="$CODEBOT_HOME/tools/node_modules/.bin/opencode"
 export OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT"
@@ -434,6 +436,7 @@ case "$c" in
   check-plan) cmd_check_plan "$@";;
   bench) cmd_bench "$@";;
   eval) exec "$CODEBOT_HOME/bin/codebot-eval" "$@";;
+  doctor) exec "$CODEBOT_HOME/bin/codebot-doctor" "$@";;
   notify) cmd_notify "$@";;
   notify-test) cmd_notify_test;;
   resume-all) cmd_resume_all;;
@@ -466,6 +469,7 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)
   eval mutants|gate|planner   model evaluation: mutant sets, a speed/compatibility gate per model, scored planner probes (docs/MODEL_EVAL.md)
+  doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)

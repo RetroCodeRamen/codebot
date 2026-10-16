@@ -10,7 +10,7 @@ Modes (what is being measured):
   minimal         one task = the whole spec, no acceptance check, no recovery ladder (isolates the model + bare coding loop)"""
 import fcntl, json, os, shutil, subprocess, sys, tempfile, time, urllib.request
 from .. import bench, checkspec as K, engine, guard, planner as PL, planparse, sandbox, taskclock as TC, tasks as T, thermal
-from ..config import Project, read_env
+from ..config import Project, read_env, home_env
 from . import classify as CL, manifests as M, metrics as MT, notify as NT, reference as R, results as RS, workspace as W
 
 MODES = ("full", "reference-plan", "minimal")
@@ -23,7 +23,7 @@ class Cfg:
     """Minimal project-like object for checks that happen before a trial project exists (it deliberately ignores the process environment)."""
     def __init__(self, home, **extra):
         self.home, self.name, self.mode, self.rundir, self.state = home, "capbench", "code", home, home
-        self.cfg = read_env(os.path.join(home, "config", "codebot.env")); self.cfg.update({k: str(v) for k, v in extra.items()})
+        self.cfg = home_env(home); self.cfg.update({k: str(v) for k, v in extra.items()})
     def get(self, k, d=None, cast=str):
         v = self.cfg.get(k)
         try: return cast(v) if v not in (None, "") else d
@@ -46,7 +46,7 @@ class Ctx:
 
 # ---------- infrastructure ----------
 def model_up(home, port=None):
-    port = port or read_env(os.path.join(home, "config", "codebot.env")).get("OLLAMA_PORT", "11500")
+    port = port or home_env(home).get("OLLAMA_PORT", "11500")
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/tags", timeout=5) as r: return r.status == 200
     except OSError: return False
@@ -61,7 +61,7 @@ def ensure_model_server(ctx):
 
 def unload_model(home, model=None, port=None):
     """Free RAM/heat when the benchmark is idle (keep_alive 0 on the model)."""
-    cfg = read_env(os.path.join(home, "config", "codebot.env")); port = port or cfg.get("OLLAMA_PORT", "11500"); model = model or cfg.get("CODEBOT_MODEL", "codebot-model")
+    cfg = home_env(home); port = port or cfg.get("OLLAMA_PORT", "11500"); model = model or cfg.get("CODEBOT_MODEL", "codebot-model")
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/api/generate", data=json.dumps({"model": model, "keep_alive": 0}).encode(), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=30) as r: r.read()

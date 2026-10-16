@@ -7,3 +7,12 @@ workspaces/
 bench/runs/
 bench/results/
 __pycache__/
+# this machine's settings and generated config
+config/local.env
+config/opencode-re.json
+# memory run data (each install builds its own; memory/README.md and memory/expertise.md are the shipped starters)
+memory/lessons.md
+memory/lessons.raw.jsonl
+memory/lessons.status.json
+memory/sizing.json
+*.lock

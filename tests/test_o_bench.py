@@ -11,7 +11,7 @@ class BenchHome(Sandboxed):
     """A temp home that has the real suite, modes and config, with the standard bench project laid out."""
     def setUp(self):
         super().setUp()
-        for d in ("bench", "modes", "config", "lib", "bin"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "results", "runs"))
+        for d in ("bench", "modes", "config", "lib", "bin"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("local.env", "__pycache__", "results", "runs"))
         with open(os.path.join(self.home, "config", "codebot.env"), "a") as f: f.write("\nITER_TIMEOUT=60\nCHECK_TIMEOUT=60\n")
         self.name = bench.setup(self.home, self.SUITE, "fixed", "b1"); self.state = os.path.join(self.home, "projects", "b1")
         self.code = os.path.join(self.home, "bench", "runs", "b1", "code")

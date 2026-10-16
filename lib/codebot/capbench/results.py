@@ -117,8 +117,8 @@ def _run(*a, cwd=None, t=10):
 
 def environment(home, proj_like=None, model=None):
     """What a result must be compared against later: code version, model and inference settings, hardware, software."""
-    from ..config import read_env
-    cfg = read_env(os.path.join(home, "config", "codebot.env")); dirty = bool(_run("git", "status", "--porcelain", "--untracked-files=no", cwd=home))
+    from ..config import read_env, home_env
+    cfg = home_env(home); dirty = bool(_run("git", "status", "--porcelain", "--untracked-files=no", cwd=home))
     cpu = ""
     try:
         with open("/proc/cpuinfo") as f: cpu = next((l.split(":", 1)[1].strip() for l in f if l.startswith("model name")), "")

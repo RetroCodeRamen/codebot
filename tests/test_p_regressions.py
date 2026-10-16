@@ -12,7 +12,7 @@ CHECK = "import sys\nsys.exit(0 if open('a.txt').read().strip() == 'hi' else 1)\
 class WorktreeHome(Sandboxed):
     def setUp(self):
         super().setUp()
-        for d in ("bin", "lib", "modes", "memory", "config"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "projects", "*.snap"))
+        for d in ("bin", "lib", "modes", "memory", "config"): shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("local.env", "__pycache__", "projects", "*.snap"))
         self.fake = FakeOllama(); open(os.path.join(self.home, "config", "codebot.env"), "a").write(f"\nOLLAMA_PORT={self.fake.port}\nNTFY_ENABLED=0\nPHONE_CONTROL=0\nITER_TIMEOUT=30\n")
         os.makedirs(os.path.join(self.state, "checks")); open(os.path.join(self.state, "checks", "t.py"), "w").write(CHECK); self.write_plan(PLAN)
         self.set_env(WORKER_CMD=self.worker("pass"), CHECK_BASELINE_GUARD="1")

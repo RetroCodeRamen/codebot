@@ -8,5 +8,7 @@ Shared by every project; the model only sees a few relevant lines per task (the 
   clearly less often than the baseline and regenerates it.
 - `sizing.json`: machine-wide first-try success by task size and type; fed to the planner as the sizing history.
 
-Benchmark trials (`codebot bench run`) do not use this folder: each gets a private one (`MEMORY_DIR` in the trial's `project.env`). Note that
-runs made before 2026-10-15 (the bench suites and the first ladder smoke test) DID write here, so `sizing.json` and the lesson counters include bench history.
+Benchmark trials (`codebot bench run`) do not use this folder: each gets a private one (`MEMORY_DIR` in the trial's `project.env`).
+
+Only `README.md` and `expertise.md` are tracked by git; the run data (`lessons.raw.jsonl`, `lessons.status.json`, `lessons.md`, `sizing.json`) is
+created on first use and stays on your machine.

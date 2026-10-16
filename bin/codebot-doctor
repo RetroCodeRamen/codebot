@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# codebot doctor: is this machine ready to run codebot? Read-only: it checks, it never installs or changes anything.
+# Exit status: 0 = ready, 1 = a required piece is missing (each line says how to fix it). `./install.sh` runs this at the end.
+set -uo pipefail
+HOME_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+cfg() { # value of KEY from config/local.env, else config/codebot.env
+  local k="$1" v=""
+  for f in "$HOME_DIR/config/codebot.env" "$HOME_DIR/config/local.env"; do
+    [[ -f "$f" ]] && v="$(sed -nE "s/^$k=\"?([^\"#]*)\"?.*/\1/p" "$f" | tail -1 | sed 's/[[:space:]]*$//')" && [[ -n "$v" ]] && val="$v"
+  done; echo "${val:-}"; val=""; }
+bad=0; warn=0
+ok()   { printf '  \033[32mok\033[0m    %s\n' "$*"; }
+miss() { printf '  \033[31mMISSING\033[0m %s\n' "$*"; bad=1; }
+note() { printf '  \033[33mnote\033[0m  %s\n' "$*"; warn=1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+echo "codebot doctor ($HOME_DIR)"
+echo "required:"
+[[ "$(uname -s)" == Linux ]] && ok "Linux $(uname -m)" || miss "Linux is required (found $(uname -s))"
+if have python3 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then ok "python3 $(python3 -c 'import platform; print(platform.python_version())')"
+else miss "python3 3.10 or newer (sudo apt install python3)"; fi
+for t in git curl jq; do have "$t" && ok "$t" || miss "$t (sudo apt install $t)"; done
+if have docker; then
+  if docker info >/dev/null 2>&1; then ok "docker (daemon reachable)"
+    img="$(cfg SANDBOX_IMAGE)"; img="${img:-ubuntu:24.04}"
+    docker image inspect "$img" >/dev/null 2>&1 && ok "sandbox image $img is local" || miss "sandbox image $img (docker pull $img; codebot never pulls it by itself)"
+  else miss "docker is installed but not usable by $(whoami) (sudo usermod -aG docker $(whoami), then log out and in)"; fi
+else miss "docker: every command the model runs is sandboxed in a container (https://docs.docker.com/engine/install/)"; fi
+port="$(cfg OLLAMA_PORT)"; port="${port:-11500}"
+if [[ -x "$HOME_DIR/tools/ollama/bin/ollama" ]]; then
+  ok "private Ollama in tools/ollama"
+  if curl -sf -m 3 "http://127.0.0.1:$port/api/version" >/dev/null; then
+    ok "Ollama server on 127.0.0.1:$port ($(curl -s -m 3 "http://127.0.0.1:$port/api/version" | jq -r .version))"
+    m="$(cfg CODEBOT_MODEL)"; m="${m:-codebot-model}"
+    if curl -s -m 5 "http://127.0.0.1:$port/api/tags" | jq -e --arg m "$m" '.models[] | select(.name == $m or .name == ($m + ":latest"))' >/dev/null; then ok "model $m"
+    else miss "model $m (./install.sh, or: codebot setup after pulling ornith:9b)"; fi
+  else note "Ollama server not running on :$port (codebot starts it on demand; codebot setup starts it now)"; fi
+else miss "private Ollama (./install.sh puts a pinned build in tools/ollama)"; fi
+free_gb=$(df -Pk "$HOME_DIR" | awk 'NR==2 {print int($4/1048576)}')
+(( free_gb >= 15 )) && ok "disk: ${free_gb} GB free" || miss "disk: ${free_gb} GB free; the model alone needs about 6 GB, keep 15 GB free"
+echo "optional:"
+mem_gb=$(awk '/MemTotal/ {print int($2/1048576)}' /proc/meminfo)
+(( mem_gb >= 14 )) && ok "RAM ${mem_gb} GB" || note "RAM ${mem_gb} GB: a 9B model plus its context wants about 12-14 GB"
+have nvidia-smi && ok "NVIDIA GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) (Ollama offloads part of the model)" \
+  || note "no NVIDIA driver: CPU only (works, slower)"
+ls /sys/class/thermal/thermal_zone*/temp >/dev/null 2>&1 && ok "CPU temperature readable (the thermal guard pauses model calls when hot)" \
+  || note "no /sys/class/thermal zones: the thermal guard cannot read the CPU temperature and stays off"
+[[ -x "$HOME_DIR/tools/node_modules/.bin/opencode" ]] && ok "opencode (interactive planner)" || note "opencode not installed: only needed for 'codebot plan' (the interview) and the legacy loop (./install.sh --with-opencode)"
+have zstd && ok "zstd" || note "zstd missing: needed only to unpack the Ollama download (sudo apt install zstd)"
+have systemd-run && ok "systemd (watchdog: codebot install-service)" || note "no systemd-run: the watchdog service is unavailable"
+if [[ -f "$HOME_DIR/config/local.env" ]]; then ok "config/local.env (your machine's settings, not tracked by git)"
+else note "no config/local.env yet (./install.sh writes one with a fresh private ntfy topic)"; fi
+if [[ "$(cfg NTFY_ENABLED)" == 1 ]]; then
+  t="$(cfg NTFY_TOPIC)"; [[ -n "$t" ]] && note "ntfy notifications ON to topic $t: anyone who knows a topic name can read it and, with PHONE_CONTROL=1, send commands. Keep it private." \
+    || miss "NTFY_ENABLED=1 but NTFY_TOPIC is empty (set it in config/local.env)"
+else ok "ntfy notifications off (nothing leaves this machine)"; fi
+have codebot && ok "codebot on PATH ($(command -v codebot))" || note "codebot is not on PATH (ln -s $HOME_DIR/bin/codebot ~/.local/bin/codebot)"
+echo
+if (( bad )); then echo "NOT READY: fix the MISSING lines above (or run ./install.sh)"; exit 1; fi
+echo "READY$( (( warn )) && echo ' (see the notes above)')"

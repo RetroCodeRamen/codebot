@@ -2,6 +2,9 @@
 
 Measures what codebot (planner -> worker -> assertion runner -> recovery ladder) can build with the local model, on 12 projects of rising difficulty and on one project that grows over 8 stages. It runs the REAL harness; the benchmark only supplies the spec, the isolated workspace, the clock and the independent scoring. Code: `lib/codebot/capbench/`, catalog: `bench/ladder/catalog/`, results: `bench/results/ladder/` (git-ignored), trial workspaces `bench/runs/` and `projects/cap-*` (git-ignored).
 
+All results in this file come from one laptop (i7-11375H, 15 GB RAM, RTX 3050 Ti 4 GB, thermally limited) and one model unless stated; they are
+comparable with each other, not with other machines.
+
 ## Running it
 
 ```

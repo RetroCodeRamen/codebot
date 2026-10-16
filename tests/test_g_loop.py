@@ -40,7 +40,7 @@ class LoopBase(Sandboxed):
     def setUp(self):
         super().setUp()
         for d in ("bin", "lib", "modes", "memory", "config"):
-            shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "projects", "*.snap"))
+            shutil.copytree(os.path.join(REPO, d), os.path.join(self.home, d), dirs_exist_ok=True, ignore=shutil.ignore_patterns("local.env", "__pycache__", "projects", "*.snap"))   # never the developer's own settings
         self.ntfy = FakeNtfy()
         with open(os.path.join(self.home, "config", "codebot.env"), "w") as f:
             f.write(f'NTFY_SERVER="http://127.0.0.1:{self.ntfy.port}"\nNTFY_TOPIC="t"\nITER_TIMEOUT=60\nCHECK_TIMEOUT=30\nOLLAMA_PORT=1\n'
