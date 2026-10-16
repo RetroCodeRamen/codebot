@@ -421,7 +421,7 @@ Bugs this run found in the splitter (the ladder itself behaved as designed):
 - Split children never went through the baseline guard. Children passed with 0 attempts on checks that cannot fail: `cat config.json`, a `grep`, a `print(...)` with no comparison, a check ending in `echo "exit=$?"`.
 - A child check could be impossible to pass: T4.3's check called `wrap('a', 0)` without catching the ValueError, so the model's correct code crashed the check. T4.3 was blocked by that check, and the question sent to the user was misleading.
 - Children lost the parent's `files`.
-Fixes (tested, `tests/test_d_planops.py`, class TestSplitGuard): `_split` probes every child check with the baseline guard (a rejected split falls through to the next rung as "no split available"), children inherit the parent's `files`, and the splitter prompt now requires asserting checks that catch expected exceptions. The guard cannot detect an impossible check; only the prompt change addresses that. The hard suite needs a re-run to confirm the effect.
+Fixes (tested, `tests/test_d_planops.py`, class TestSplitGuard): `_split` probes every child check with the baseline guard (a rejected split falls through to the next rung as "no split available"), children inherit the parent's `files`, and the splitter prompt now requires asserting checks that catch expected exceptions. The guard cannot detect an impossible check; only the prompt change addresses that. The hard suite needs a re-run to confirm the effect. (2026-10-16: changed to per-child: an already-passing or broken child is dropped, and the split is rejected only when no child fails now.)
 
 ### Hard suite re-run with the splitter fix, `bench-hard-2`, 2026-10-14 (68.7 min wall, GPU auto-offload)
 

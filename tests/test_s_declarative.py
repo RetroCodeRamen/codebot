@@ -141,6 +141,11 @@ class TestPlanner(Sandboxed):
         self.assertIn("numbered items", info["rounds"][0]["error"]); self.assertEqual(info["rounds"][0]["tasks"], None)           # why the round failed is recorded, not only that it did
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "plan_round_failed" in l]; self.assertIn("numbered items", log[0]["reason"])
         self.assertEqual(json.load(open(os.path.join(self.state, "plan.reply.1.json")))["tasks"][0]["title"], "Add slugify")                # and the model's own reply is kept
+    def test_the_plan_schema_demands_one_task_per_spec_item(self):
+        self.start([{**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}, {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1] * 3}])
+        open(os.path.join(self.state, "SPEC.md"), "w").write("1. a\n2. b\n3. c\n"); planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
+        self.assertEqual(self.fake.requests[0]["format"]["properties"]["tasks"]["minItems"], 3)
+        self.assertEqual(planner.plan_schema(4, 9)["properties"]["tasks"]["minItems"], 4); self.assertEqual(planner.plan_schema(10, 0)["properties"]["tasks"]["minItems"], 1)
     def test_no_spec_means_no_plan(self):
         self.fake = FakeOllama([]); self.addCleanup(self.fake.stop); self.set_env(OLLAMA_PORT=self.fake.port)
         self.assertEqual(planner.plan_auto(self.home, self.name, 60, log=lambda *_: None)["rounds"], [])
@@ -164,11 +169,18 @@ class TestSplitter(Sandboxed):
         kids, fx = splitter.build(self.proj(), "T1", self.SUBS, ["textutil.py"]); self.assertIn(K.RUNNER, fx)       # this project has no runner yet: it ships as a locked fixture
         r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness"); self.assertTrue(r["ok"], r)
         self.assertEqual(r["result"], ["T1.1", "T1.2"]); self.assertEqual(C.verify(self.proj(), T.TaskStore(self.proj()).load()), [])
-    def test_a_child_whose_assertions_already_hold_rejects_the_split(self):
+    def test_a_child_whose_assertions_already_hold_is_dropped_and_the_failing_child_kept(self):
         K.ensure_runner(self.proj()); holds = [{"title": "readme", "asserts": [{"type": "file_exists", "path": "README.md"}]}, self.SUBS[1]]
         kids, fx = splitter.build(self.proj(), "T1", holds)
         r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness")
-        self.assertFalse(r["ok"]); self.assertIn("subtask 1", r["error"]); self.assertFalse(os.path.exists(os.path.join(self.state, "checks", "T1.1.spec.json")))
+        self.assertTrue(r["ok"], r); self.assertEqual(r["result"], ["T1.2"]); self.assertEqual(r["dropped"], ["T1.1:passes"])
+        self.assertFalse(os.path.exists(os.path.join(self.state, "checks", "T1.1.spec.json"))); self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "T1.2.spec.json")))
+        self.assertEqual(C.verify(self.proj(), T.TaskStore(self.proj()).load()), [])                  # the kept child's spec is frozen and locked
+    def test_a_split_where_every_child_already_holds_is_rejected_and_leaves_nothing(self):
+        K.ensure_runner(self.proj()); holds = [{"title": "readme", "asserts": [{"type": "file_exists", "path": "README.md"}]}] * 2
+        kids, fx = splitter.build(self.proj(), "T1", holds)
+        r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness")
+        self.assertFalse(r["ok"]); self.assertIn("no subtask", r["error"]); self.assertFalse([n for n in os.listdir(os.path.join(self.state, "checks")) if n.startswith("T1.") and n.endswith(".spec.json")])
 
 class TestAudit(Sandboxed):
     def setUp(self):

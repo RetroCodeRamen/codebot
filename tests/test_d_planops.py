@@ -112,12 +112,17 @@ class TestSplitGuard(Base):
     """Split children go through the same baseline guard as add_task, and inherit the parent's files."""
     def setUp(self): super().setUp(); self.set_env(CHECK_BASELINE_GUARD="1")
     def split(self, c1, c2): return self.op(op="split_task", task="T1", reason="too big", subtasks=[{"title": "one", "check": c1}, {"title": "two", "check": c2}])
-    def test_child_check_that_already_passes_rejects_the_split(self):
-        r = self.split("cat /dev/null", "test -f a2.txt")                   # always exits 0: tests nothing
-        self.assertFalse(r["ok"], r); self.assertIn("subtask 1", r["error"] if "error" in r else str(r)); self.assertEqual(self.ids(), ["T1", "T2"])
+    def test_a_child_that_already_passes_is_dropped_and_the_rest_of_the_split_kept(self):
+        # 2026-10-16, T2 truncate: one already-passing child rejected the whole split, losing the narrow child aimed at the failure
+        r = self.split("cat /dev/null", "test -f a2.txt")                   # child 1 always exits 0: that part is already done
+        self.assertTrue(r["ok"], r); self.assertEqual(r["dropped"], ["T1.1:passes"]); self.assertEqual(self.ids(), ["T1.2", "T1", "T2"])
+        self.assertEqual(T.get(self.data(), "T1")["deps"], ["T1.2"]); self.assertEqual(T.get(self.data(), "T1")["split_into"], ["T1.2"])
         self.assertTrue(any(l.get("op") == "check_rejected" and l["task"] == "T1.1" for l in self.planlog()))
-    def test_broken_child_check_rejects_the_split(self):
-        r = self.split("test -f a1.txt", "no_such_command_xyz"); self.assertFalse(r["ok"], r); self.assertEqual(self.ids(), ["T1", "T2"])
+        self.assertEqual([l["dropped"] for l in self.planlog() if l.get("op") == "split_task"], [["T1.1:passes"]])
+    def test_a_broken_child_is_dropped_too(self):
+        r = self.split("test -f a1.txt", "no_such_command_xyz"); self.assertTrue(r["ok"], r); self.assertEqual(r["dropped"], ["T1.2:broken"]); self.assertEqual(self.ids(), ["T1.1", "T1", "T2"])
+    def test_a_split_with_no_child_that_fails_now_is_rejected(self):
+        r = self.split("cat /dev/null", "no_such_command_xyz"); self.assertFalse(r["ok"], r); self.assertIn("no subtask has a check that fails now", r["error"]); self.assertEqual(self.ids(), ["T1", "T2"])
     def test_good_children_inherit_parent_files(self):
         r = self.split("test -f a1.txt", "test -f a2.txt"); self.assertTrue(r["ok"], r)
         self.assertEqual(T.get(self.data(), "T1.1")["files"], ["a.txt"]); self.assertEqual(T.get(self.data(), "T1.2")["files"], ["a.txt"])

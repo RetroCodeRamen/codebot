@@ -62,17 +62,26 @@ def _split(proj, data, op):
     for s in subs: _need_check(proj, s)
     fx_before = set(os.listdir(C.checks_dir(proj))) if os.path.isdir(C.checks_dir(proj)) else set()
     _fixtures(proj, op.get("fixtures"))
-    if GD.enabled(proj):                                          # same guard as add_task: a child check that already passes (or is broken) tests nothing
+    keep = list(enumerate(subs, 1))
+    if GD.enabled(proj):      # same guard as add_task, per child: a child whose check already passes is a part that is DONE, a broken one tests nothing; both are dropped
+        new_fx = set(os.listdir(C.checks_dir(proj))) - fx_before; keep, dropped = [], []
         for i, s in enumerate(subs, 1):
             pr = GD.probe(proj, s["check"], proj.get("CHECK_TIMEOUT", 600, int)) if (s.get("check") or "").strip() else {"verdict": "ok", "out": ""}
-            if pr["verdict"] != "ok":
-                for n in set(os.listdir(C.checks_dir(proj))) - fx_before:
-                    try: os.remove(os.path.join(C.checks_dir(proj), n))
+            if pr["verdict"] == "ok": keep.append((i, s)); continue
+            dropped.append(f"{parent['id']}.{i}:{pr['verdict']}")
+            GD.log_rejection(proj, f"{parent['id']}.{i}", s.get("title", ""), s["check"], pr["verdict"], pr["out"], op.get("_actor", "model"))
+            for n in re.findall(r"\$\{?CODEBOT_CHECKS\}?/([\w.\-]+\.spec\.json)", s.get("check") or ""):
+                if n in new_fx:
+                    try: os.remove(os.path.join(C.checks_dir(proj), n))      # do not leave unlocked fixture files behind
                     except OSError: pass
-                GD.log_rejection(proj, f"{parent['id']}.{i}", s.get("title", ""), s["check"], pr["verdict"], pr["out"], op.get("_actor", "model"))
-                raise Rejected(f"subtask {i}: " + GD.REASON[pr["verdict"]])
+        if not keep:              # 2026-10-16 (T2 truncate): one already-passing child used to reject the whole split, so the narrow child that targeted the failure was lost too
+            for n in set(os.listdir(C.checks_dir(proj))) - fx_before:
+                try: os.remove(os.path.join(C.checks_dir(proj), n))
+                except OSError: pass
+            raise Rejected("no subtask has a check that fails now (" + ", ".join(dropped) + ")")
+        if dropped: op["_dropped"] = dropped
     kids, prev_dep = [], list(parent["deps"])
-    for i, s in enumerate(subs, 1):
+    for i, s in keep:             # children keep their proposed number, so T2.2 still names checks/T2.2.spec.json
         k = T.new_task(f"{parent['id']}.{i}", s["title"].strip(), s.get("check") or None, s.get("files") or list(parent.get("files") or []), s.get("size") or "S", list(prev_dep), parent["id"])
         if parent.get("budget_root"): k["budget_root"] = parent["budget_root"]
         kids.append(k); prev_dep = [k["id"]]                 # children run in order
@@ -109,10 +118,10 @@ def apply(proj, op, actor="model"):
             result = _DISPATCH[name](proj, data, op)
             C.freeze(proj, data, only_new=True)           # new checks are frozen immediately, old ones untouched
             store.save(data)
-            out = {"ok": True, "op": name, "result": result}
+            out = {"ok": True, "op": name, "result": result, **({"dropped": op["_dropped"]} if op.get("_dropped") else {})}
         except Rejected as e:
             out = {"ok": False, "op": name, "error": str(e)}
         append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": actor, "op": name, "reason": (op.get("reason") or ""),
-                     "ok": out["ok"], "error": out.get("error"), "before": before,
+                     "ok": out["ok"], "error": out.get("error"), **({"dropped": out["dropped"]} if out.get("dropped") else {}), "before": before,
                      "after": _summary(store.load()) if out["ok"] else before})
     return out

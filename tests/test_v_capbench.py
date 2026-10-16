@@ -180,8 +180,9 @@ class TestRunEndToEnd(CapCase):
         proj = Project(store.load()["trials"][0]["project"], self.home); spent = TC.used(proj, "T1"); self.assertGreaterEqual(spent, 2.7)
         self.assertEqual(store.load()["trials"][0]["phase"], "running")
         ctx2 = RN.Ctx(self.home, store, store.load(), NT.Notifier(self.home, False), driver="engine", sleep=lambda s: None, log=lambda m: None, poll_s=0, model_check=False)
-        t0 = time.time(); RN.execute(ctx2); td = store.all_trials()[0]
-        t1 = next(t for t in td["tasks"] if t["id"] == "T1"); self.assertEqual(t1["status"], "TIMEOUT"); self.assertLess(time.time() - t0, 4.0)        # only the remaining ~2 s were available, not a fresh 4.8 s
+        RN.execute(ctx2); td = store.all_trials()[0]
+        t1 = next(t for t in td["tasks"] if t["id"] == "T1"); self.assertEqual(t1["status"], "TIMEOUT")
+        self.assertLess(TC.used(proj, "T1") - spent, 4.0)          # after the resume T1 only got the remaining ~2 s, not a fresh 4.8 s (timed on T1's own clock: the other tasks and the regression gate also take time)
         self.assertLessEqual(t1["timing"]["used_s"], 4.8 + 2.5)
     def test_minimal_mode_is_one_task_without_an_internal_check_and_full_mode_is_untouched(self):
         store, ctx = self.make(mode="minimal"); os.environ["CB_MAP"] = json.dumps({"T1": ["textutil.py", "numutil.py", "fileutil.py", "netutil.py"]}); RN.execute(ctx); td = store.all_trials()[0]

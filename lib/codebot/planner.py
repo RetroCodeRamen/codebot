@@ -10,9 +10,11 @@ from .config import Project, now, append_jsonl
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
                       "deps": {"type": "array", "items": {"type": "integer"}}, "asserts": K.assert_schema()}
 
-def plan_schema(max_tasks=10):
+def plan_schema(max_tasks=10, min_tasks=1):
+    """min_tasks is enforced by constrained decoding (verified on this Ollama: asked for one item under minItems 4, it returned 5), so a plan cannot end
+    after one task; ornith did that in 3 of 6 first rounds with an 8-item spec."""
     s = {"type": "string"}
-    return {"type": "object", "properties": {"goal": s, "context": s, "done": s, "tasks": {"type": "array", "minItems": 1, "maxItems": max_tasks, "items": {
+    return {"type": "object", "properties": {"goal": s, "context": s, "done": s, "tasks": {"type": "array", "minItems": max(1, min(min_tasks, max_tasks)), "maxItems": max_tasks, "items": {
         "type": "object", "properties": TASK_PROPS(), "required": ["title", "files", "size", "asserts"], "additionalProperties": False}}},
         "required": ["goal", "context", "done", "tasks"], "additionalProperties": False}
 
@@ -103,8 +105,8 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print, max_tasks=10, num_p
         try:
             if plan is None:
                 user = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n{repo or '(empty)'}\n\n{('SIZING HISTORY: ' + sizing) if sizing else ''}\n{note}\nReply with the JSON plan."
-                plan, err, raw = _chat(proj, GUIDE, user, plan_schema(max_tasks), left, num_predict)
                 want = spec_items(spec)
+                plan, err, raw = _chat(proj, GUIDE, user, plan_schema(max_tasks, want), left, num_predict)
                 if plan is not None and plan.get("tasks") and len(plan["tasks"]) < want:
                     err, plan = f"it had {len(plan['tasks'])} task(s) but the specification has {want} numbered items; plan one task per item", None
                 if plan is None or not plan.get("tasks"): why_failed = err or "it had no tasks"; plan, note, rc = None, f"Your previous reply was rejected: {err or 'it had no tasks'}. Reply with the complete JSON plan.", 1
