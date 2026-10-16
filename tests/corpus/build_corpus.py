@@ -64,11 +64,17 @@ def collect_assertions():
     return out
 
 def collect_plan_replies():
+    """kind: plan (a whole-plan reply), item (one task from per-item planning: plan.reply.<round>.item<n>.<try>.json), split (split.reply.<task>.json)."""
     out = []
-    for f in sorted(glob.glob(os.path.join(HOME, "projects", "*", "plan.reply.*.json"))):
-        pdir = os.path.dirname(f); su = suite_of(pdir); n = int(re.search(r"plan\.reply\.(\d+)\.json$", f).group(1))
+    for f in sorted(glob.glob(os.path.join(HOME, "projects", "*", "plan.reply.*.json")) + glob.glob(os.path.join(HOME, "projects", "*", "split.reply.*.json"))):
+        pdir = os.path.dirname(f); su = suite_of(pdir); base = os.path.basename(f)
+        m = re.fullmatch(r"plan\.reply\.(\d+)(?:\.item(\d+)\.(\d+))?\.json", base); ms = re.fullmatch(r"split\.reply\.(.+)\.json", base)
         with open(f) as fh: raw = fh.read()
-        out.append({"suite": su[0] if su else None, "project": os.path.basename(pdir), "round": n, "model": model_of(os.path.basename(pdir)), "raw": raw})
+        row = {"suite": su[0] if su else None, "project": os.path.basename(pdir), "model": model_of(os.path.basename(pdir)), "raw": raw}
+        if m: row.update(kind="item" if m.group(2) else "plan", round=int(m.group(1)), **({"item": int(m.group(2)), "try": int(m.group(3))} if m.group(2) else {}))
+        elif ms: row.update(kind="split", task=ms.group(1))
+        else: continue
+        out.append(row)
     return out
 
 def main():

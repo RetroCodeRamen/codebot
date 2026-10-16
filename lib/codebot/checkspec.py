@@ -47,6 +47,42 @@ def clean(a):
 
 def prepare(asserts): return [clean(a) for a in asserts or []]
 
+def _arities(groups):
+    """{func: the most common number of positional args} over every call in a plan (or a split plus its parent)."""
+    from collections import Counter
+    c = {}
+    for asserts in groups:
+        for a in asserts or []:
+            if isinstance(a, dict) and a.get("type") == "call" and isinstance(a.get("args"), list): c.setdefault(a.get("func"), Counter())[len(a["args"])] += 1
+    return {f: n.most_common(1)[0][0] for f, n in c.items()}
+
+def _same_value(x, want): return x is want if isinstance(want, bool) or isinstance(x, bool) else x == want
+
+def repair(a, arity):
+    """Deterministic repairs of call assertions whose intent is unambiguous, judged on the replay corpus (tests/test_w_corpus.py: 8 of 8 impossible
+    assertions became sound, 0 sound ones changed). arity: this function's usual number of positional args in the same plan. Returns (assertion, note)."""
+    if not isinstance(a, dict) or a.get("type") != "call" or not isinstance(a.get("args"), list) or arity is None: return a, None
+    args = a["args"]
+    want = a["raises"] if "raises" in a else a.get("expect", object())
+    if len(args) == arity + 1 and _same_value(args[-1], want):         # the expected value copied in as an extra last input: slugify("", "") == ""
+        return {**a, "args": args[:-1]}, f"{a.get('func')}: removed an extra last input equal to the expected value"
+    if arity == 1 and len(args) > 1 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in args):
+        return {**a, "args": [list(args)]}, f"{a.get('func')}: numbers spread over several inputs were put back into one list"     # mean(1, 2, 3) -> mean([1, 2, 3])
+    return a, None
+
+def repair_plan(groups, context=()):
+    """Repair every assertion list in groups using the arities seen across groups + context (assertion lists that are not repaired, e.g. a split's
+    parent). Returns (repaired groups, [notes])."""
+    ar = _arities(list(groups) + list(context)); out, notes = [], []
+    for asserts in groups:
+        fixed = []
+        for a in asserts or []:
+            b, note = repair(a, ar.get(a.get("func")) if isinstance(a, dict) else None)
+            fixed.append(b)
+            if note: notes.append(note)
+        out.append(fixed if isinstance(asserts, list) else asserts)
+    return out, notes
+
 def write_spec(proj, tid, asserts):
     """Write checks/<id>.spec.json (a fixture: it is hashed and locked at freeze) and return the check command. Overwrites only before freezing."""
     os.makedirs(C.checks_dir(proj), exist_ok=True)

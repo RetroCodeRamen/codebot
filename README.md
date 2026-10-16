@@ -102,7 +102,7 @@ model turn with timings) · `thermal.jsonl` · `stats.json` · `report-*.md` · 
 ## Configuration (`config/codebot.env`, every key documented inline there)
 
 Model/server: `CODEBOT_MODEL`, `OLLAMA_PORT`, `NUM_CTX` (must equal the Modelfile and opencode configs; a test enforces it), `KEEP_ALIVE`, `THINK`. Planning: `PLAN_STYLE=grill|quick`,
-`CHECK_BASELINE_GUARD`, `REGRESSION_GATE` (a task is done only when every done task still passes). Worker: `WORKER=native`, `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`, `WORKER_CONTEXT_TOKENS`, `WORKER_TEMPERATURE`, `RUN_TIMEOUT`. Ladder/budgets: `LADDER_TRIES`,
+`CHECK_BASELINE_GUARD`, `REGRESSION_GATE` (a task is done only when every done task still passes), `PLAN_PER_ITEM` (one planner call per numbered spec item). Worker: `WORKER=native`, `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`, `WORKER_CONTEXT_TOKENS`, `WORKER_TEMPERATURE`, `RUN_TIMEOUT`. Ladder/budgets: `LADDER_TRIES`,
 `ALT_TEMPERATURE`, `ESCALATE_MODEL`, `TASK_MAX_ATTEMPTS`, `STUCK_SAME_FAILURE`, `STUCK_NO_PROGRESS`, `PINGPONG_WINDOW`, `MAX_ITERATIONS`, `PROJECT_MAX_MINUTES`. Notifications: `NTFY_SERVER`, `NTFY_TOPIC`, `NTFY_TOKEN` (protected topics), `NOTIFY_EACH_TASK`. Legacy opencode loop only: `ITER_TIMEOUT`, `STALL_LIMIT`, `LESSONS_MAX`. Less common:
 `CHECK_TIMEOUT` (seconds per acceptance check), `WORKER_MAX_TOKENS` (generation limit per worker turn), `WORKER_CMD` (replace the native worker, used by tests), `IDLE_POLL` (seconds between
 checks while waiting for your answer), `SANDBOX_PIDS`, `THERMAL_MAX_WAIT`. Safety: `SANDBOX=auto|docker|none`,

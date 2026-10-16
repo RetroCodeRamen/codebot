@@ -170,6 +170,9 @@ cmd_start() {
     systemd-run --user --quiet --collect --unit="codebot-loop-$NAME-$(date +%s)" \
       --property=StandardOutput=append:"$S/loop.log" --property=StandardError=append:"$S/loop.log" \
       "$CODEBOT_HOME/bin/codebot" __loop "$NAME" || die "systemd-run failed"
+    # the loop writes loop.pid itself; wait for it so a `stop` right after `start` finds the loop (2026-10-16: a cancelled benchmark left an orphan loop for 2.5 h)
+    local i; for i in $(seq 1 100); do alive "$S/loop.pid" && break; sleep 0.1; done
+    alive "$S/loop.pid" || echo "warning: $NAME loop did not report its pid within 10 s"
     echo "started $NAME (own systemd unit)"
   else
     setsid nohup "$0" __loop "$NAME" >> "$S/loop.log" 2>&1 &

@@ -80,8 +80,9 @@ class TestForbidden(Base):
     def test_add_without_check_rejected(self): self.assertIn("check", self.assertRejected(op="add_task", title="x", reason="r")["error"])
     def test_split_without_checks_rejected(self):
         self.assertRejected(op="split_task", task="T1", reason="r", subtasks=[{"title": "a"}, {"title": "b"}])
-    def test_split_needs_two_to_six(self):
-        self.assertRejected(op="split_task", task="T1", reason="r", subtasks=[{"title": "a", "check": "true"}])
+    def test_split_needs_one_to_six(self):
+        self.assertRejected(op="split_task", task="T1", reason="r", subtasks=[])
+        self.assertRejected(op="split_task", task="T1", reason="r", subtasks=[{"title": f"c{i}", "check": f"test -f c{i}"} for i in range(7)])
     def test_cannot_split_done_task(self):
         self.write_code("a.txt", "hi\n"); engine.step(self.proj())            # precheck passes -> T1 done
         self.assertRejected(op="split_task", task="T1", reason="r", subtasks=[{"title": "a", "check": "true"}, {"title": "b", "check": "true"}])

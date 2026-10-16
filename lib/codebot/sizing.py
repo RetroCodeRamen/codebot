@@ -68,7 +68,7 @@ def auto_split(proj, tid, last_error="", actor="harness", timeout=1800):
     prop = propose(proj, task, last_error, timeout)
     if not prop: return {"ok": False, "error": "no split available"}
     subs = [s for s in prop["subtasks"] if (s.get("check") or "").strip() != (task.get("check") or "").strip()]
-    if len(subs) < 2: return {"ok": False, "error": "split would not simplify the task"}
+    if len(subs) < 1: return {"ok": False, "error": "split would not simplify the task"}       # one narrower child + the parent's check as the final gate is still a split
     r = planops.apply(proj, {"op": "split_task", "task": tid, "subtasks": subs, "fixtures": prop.get("fixtures"),
                               "reason": f"auto-split after repeated failure of {tid}"}, actor)
     if r["ok"]: record(proj, task, "split")

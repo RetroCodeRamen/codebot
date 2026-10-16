@@ -166,6 +166,16 @@ class TestRunEndToEnd(CapCase):
         try: self.assertEqual(RN.execute(ctx), "cancelled")
         finally: RN.PL.install_plan = orig
         st = store.load(); self.assertEqual([t["phase"] for t in st["trials"]], ["finished", "created", "created"]); self.assertEqual(st["status"], "cancelled")
+    def test_a_cancel_already_requested_never_starts_the_trial_loop(self):
+        # 2026-10-16: a cancel that landed as a trial's loop was starting left that loop running for 2.5 h (stop found no loop.pid yet)
+        store, ctx = self.make(); ctx.driver = "loop"; calls = []
+        orig_codebot = RN.bench.codebot; RN.bench.codebot = lambda home, *a: calls.append(a) or orig_codebot(home, *a)
+        orig_plan = RN.PL.install_plan
+        def plan_then_cancel(proj, plan): r = orig_plan(proj, plan); store.request_cancel(); return r
+        RN.PL.install_plan = plan_then_cancel
+        try: self.assertEqual(RN.execute(ctx), "cancelled")
+        finally: RN.bench.codebot = orig_codebot; RN.PL.install_plan = orig_plan
+        self.assertFalse([c for c in calls if c and c[0] == "start"], calls)
     def test_a_runner_crash_mid_trial_resumes_with_the_time_already_spent(self):
         os.environ["CB_SLOW"] = "T1"; store, ctx = self.make(task_minutes=0.08)      # 4.8 s per task; every attempt of T1 burns 1.4 s and fails
         from codebot import engine; real = engine.step; n = {"c": 0}

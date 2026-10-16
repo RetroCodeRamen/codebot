@@ -30,7 +30,7 @@ class Cfg:
         except (TypeError, ValueError): return d
     def p(self, *x): return os.path.join(self.home, "logs", *x)
 
-INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
+INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "PLAN_PER_ITEM", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
 
 class Ctx:
     """Everything a trial needs; tests replace `sleep`, `sender` and `driver` to run without real time or a real model."""
@@ -253,9 +253,15 @@ def drive_loop(ctx, tr, td, proj):
     def start(keep):
         r = bench.codebot(home, "start", proj.name, *(["--keep"] if keep else []))
         if r.returncode != 0 and not _loop_alive(proj): raise RunError(f"codebot start failed: {(r.stdout + r.stderr).strip()[-400:]}")
+    def stop():                    # confirm the loop is really gone: a stop that races a just-started loop finds no pid and leaves it running
+        for _ in range(5):
+            bench.codebot(home, "stop", proj.name)
+            if not _loop_alive(proj): return
+            time.sleep(1)
+    if ctx.store.cancel_requested(): return "cancelled"
     if not _loop_alive(proj) and _counts(proj) and not (_counts(proj)["pending"] == 0 and _counts(proj)["running"] == 0): start(started)
     while True:
-        if ctx.store.cancel_requested(): bench.codebot(home, "stop", proj.name); return "cancelled"
+        if ctx.store.cancel_requested(): stop(); return "cancelled"
         ctx.sleep(ctx.poll_s); c = _progress(ctx, tr, td, proj, t0, temps); _track(ctx, tr, td, proj, seen)
         if c is None: continue
         busy = c["pending"] or c["running"] or (interactive and c["blocked"])

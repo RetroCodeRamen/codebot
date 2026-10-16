@@ -58,7 +58,7 @@ def _split(proj, data, op):
     if parent is None: raise Rejected(f"unknown task {op.get('task')!r}")
     if parent["status"] not in ("pending", "blocked"): raise Rejected(f"cannot split a {parent['status']} task")
     subs = op.get("subtasks") or []
-    if not (2 <= len(subs) <= 6): raise Rejected("split needs 2-6 subtasks")
+    if not (1 <= len(subs) <= 6): raise Rejected("split needs 1-6 subtasks")
     for s in subs: _need_check(proj, s)
     fx_before = set(os.listdir(C.checks_dir(proj))) if os.path.isdir(C.checks_dir(proj)) else set()
     _fixtures(proj, op.get("fixtures"))

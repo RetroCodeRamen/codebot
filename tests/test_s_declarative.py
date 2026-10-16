@@ -76,6 +76,14 @@ class TestCheckspec(Sandboxed):
         self.assertEqual(K.clean({"type": "call", "module": "textutil", "func": "slugify", "args": ["", "expect"], "expect": ""})["args"], [""])
         r = K.clean({"type": "run", "argv": ["python3", "-c", "import m; print(m.f())", "stdout_contains"], "exit": 0}); self.assertEqual(r["argv"], ["python3", "-c", "import m; print(m.f())"])
         self.assertIsNone(A.validate([r])); self.assertEqual(K.clean({"type": "call", "module": "m", "func": "f", "args": ["expected"], "expect": 1})["args"], ["expected"])
+    def test_repair_plan_uses_the_plan_wide_arity(self):
+        c = lambda args, **kw: {"type": "call", "module": "m", "func": "f", "args": args, **kw}
+        groups, notes = K.repair_plan([[c(["x"], expect="X"), c(["y"], expect="Y"), c(["z"], expect="Z")], [c(["", ""], expect=""), c(["", False], expect=False), c(["a", "b"], expect="c")]])
+        self.assertEqual([a["args"] for a in groups[1]], [[""], [""], ["a", "b"]]); self.assertEqual(len(notes), 2)      # usual arity 1 across the plan; only an extra input EQUAL to the expected value goes
+        groups, _ = K.repair_plan([[{**c([[1, 2]], expect=1.5), "func": "mean"}, {**c([1, 2, 3], expect=2.0), "func": "mean"}]])
+        self.assertEqual(groups[0][1]["args"], [[1, 2, 3]])
+        two = [c(["hello", 8], expect="hello..."), c(["hello", 8, ".."], expect="hell..")]                                              # a real optional argument is never touched
+        self.assertEqual(K.repair_plan([two])[0][0], two)
     def test_a_self_contradicting_assertion_list_is_unusable(self):
         both = [{"type": "file_contains", "path": "a.py", "text": "def f"}, {"type": "file_not_contains", "path": "a.py", "text": "def f"}]
         self.assertIn("contradiction", A.validate(both))
@@ -135,17 +143,47 @@ class TestPlanner(Sandboxed):
         self.assertEqual(planner.spec_items("1. a\n2) b\n  3. c\nnot 4. item"), 3)
     def test_a_plan_with_fewer_tasks_than_spec_items_is_sent_back(self):
         good = {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}; two = {**PLAN_REPLY, "tasks": [PLAN_REPLY["tasks"][0], {**PLAN_REPLY["tasks"][0], "title": "Also"}]}
-        self.start([good, two]); open(os.path.join(self.state, "SPEC.md"), "w").write("1. Add slugify.\n2. Add title.\n")
+        self.start([good, two]); open(os.path.join(self.state, "SPEC.md"), "w").write("1. Add slugify.\n2. Add title.\n"); self.set_env(PLAN_PER_ITEM="0")          # the whole-plan path
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
         self.assertEqual(info["rounds"][0]["rc"], 1); self.assertIn("numbered items", self.fake.requests[1]["messages"][1]["content"])
         self.assertIn("numbered items", info["rounds"][0]["error"]); self.assertEqual(info["rounds"][0]["tasks"], None)           # why the round failed is recorded, not only that it did
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "plan_round_failed" in l]; self.assertIn("numbered items", log[0]["reason"])
         self.assertEqual(json.load(open(os.path.join(self.state, "plan.reply.1.json")))["tasks"][0]["title"], "Add slugify")                # and the model's own reply is kept
     def test_the_plan_schema_demands_one_task_per_spec_item(self):
-        self.start([{**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}, {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1] * 3}])
+        self.start([{**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}, {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1] * 3}]); self.set_env(PLAN_PER_ITEM="0")          # the whole-plan path
         open(os.path.join(self.state, "SPEC.md"), "w").write("1. a\n2. b\n3. c\n"); planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
         self.assertEqual(self.fake.requests[0]["format"]["properties"]["tasks"]["minItems"], 3)
         self.assertEqual(planner.plan_schema(4, 9)["properties"]["tasks"]["minItems"], 4); self.assertEqual(planner.plan_schema(10, 0)["properties"]["tasks"]["minItems"], 1)
+    def test_per_item_planning_asks_once_per_item_and_leaves_out_an_unusable_item(self):
+        slug = {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}]}
+        title = {"title": "Add title", "files": ["textutil.py"], "size": "S", "deps": [1], "asserts": [{"type": "call", "module": "textutil", "func": "title", "args": ["a"], "expect": "A"}]}
+        self.start([slug, "not json", "still not json", title])                     # item 2 fails twice: left out; item 3's dep on item 1 survives the renumbering
+        open(os.path.join(self.state, "SPEC.md"), "w").write("# Text utils\nPython 3.\n\n1. Add slugify.\n2. Add shout.\n3. Add title.\n")
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info)
+        self.assertEqual(len(self.fake.requests), 4); self.assertIn("item 1 of 3", self.fake.requests[0]["messages"][1]["content"])
+        self.assertEqual(self.fake.requests[0]["format"], planner.task_schema()); self.assertNotIn("Also give", self.fake.requests[0]["messages"][0]["content"])
+        self.assertIn("item 2", info["rounds"][0]["error"])
+        _, tasks = planparse.parse_plan(self.read("PLAN.md")); self.assertEqual([t["title"] for t in tasks], ["Add slugify", "Add title"]); self.assertEqual(tasks[1]["deps"], ["T1"])
+        self.assertIn("# Goal\nText utils", self.read("PLAN.md"))
+        self.assertTrue(os.path.exists(os.path.join(self.state, "plan.reply.1.item2.2.json")))
+    def test_after_the_last_round_the_good_tasks_are_kept(self):
+        good = {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}]}
+        holds = {"title": "Keep README", "files": ["README.md"], "size": "S", "deps": [1], "asserts": [{"type": "file_exists", "path": "README.md"}]}    # already holds: rejected every round
+        later = {**good, "title": "Add title", "deps": [2], "asserts": [{"type": "call", "module": "textutil", "func": "title", "args": ["a"], "expect": "A"}]}
+        still = {"tasks": [{"id": 2, "asserts": [{"type": "file_exists", "path": "README.md"}]}]}
+        self.start([good, holds, later, still, still])
+        open(os.path.join(self.state, "SPEC.md"), "w").write("1. Add slugify.\n2. Keep the README.\n3. Add title.\n")
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
+        self.assertTrue(info["ok"], info); self.assertEqual(info["dropped_tasks"], ["Keep README"]); self.assertEqual(len(info["rounds"]), 3)
+        _, tasks = planparse.parse_plan(self.read("PLAN.md")); self.assertEqual([t["title"] for t in tasks], ["Add slugify", "Add title"]); self.assertEqual(tasks[1]["deps"], [])
+        self.assertFalse(os.path.exists(os.path.join(self.state, "checks", "T3.spec.json")))
+        self.assertTrue(any(json.loads(l).get("op") == "plan_salvaged" for l in open(os.path.join(self.state, "plan.log"))))
+    def test_a_bad_assertion_costs_only_itself_not_its_task(self):
+        plan = {"goal": "g", "context": "c", "done": "d", "tasks": [{"title": "t", "files": [], "size": "S", "asserts": [
+            {"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}, {"type": "run", "argv": ["python3", "-c", "print(1))"], "exit": 0}]}]}
+        self.start([]); self.assertEqual(planner._write(self.proj(), plan), {})
+        self.assertEqual([a["type"] for a in K.read_spec(self.proj(), "T1")], ["call"])
+        self.assertTrue(any(json.loads(l).get("op") == "assertions_salvaged" for l in open(os.path.join(self.state, "plan.log"))))
     def test_no_spec_means_no_plan(self):
         self.fake = FakeOllama([]); self.addCleanup(self.fake.stop); self.set_env(OLLAMA_PORT=self.fake.port)
         self.assertEqual(planner.plan_auto(self.home, self.name, 60, log=lambda *_: None)["rounds"], [])
@@ -181,6 +219,16 @@ class TestSplitter(Sandboxed):
         kids, fx = splitter.build(self.proj(), "T1", holds)
         r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness")
         self.assertFalse(r["ok"]); self.assertIn("no subtask", r["error"]); self.assertFalse([n for n in os.listdir(os.path.join(self.state, "checks")) if n.startswith("T1.") and n.endswith(".spec.json")])
+
+    def test_build_repairs_with_the_parent_as_context_and_keeps_a_single_usable_child(self):
+        parent = [{"type": "call", "module": "textutil", "func": "slugify", "args": [x], "expect": x.lower()} for x in ("A", "B", "C")]
+        kids_in = [{"title": "empty input", "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["", ""], "expect": ""}]},       # repaired via the parent's arity
+                   {"title": "broken", "asserts": [{"type": "run", "argv": ["python3", "-c", "print(1))"], "exit": 0}]}]                                 # no usable assertion: dropped
+        notes = []; kids, fx = splitter.build(self.proj(), "T1", kids_in, ["textutil.py"], parent, notes)
+        self.assertEqual(len(kids), 1); self.assertEqual(json.loads(fx["T1.1.spec.json"])["asserts"][0]["args"], [""])
+        self.assertTrue(any("removed an extra last input" in n for n in notes)); self.assertTrue(any("dropped child" in n for n in notes))
+        r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness"); self.assertTrue(r["ok"], r)
+        self.assertEqual(r["result"], ["T1.1"])                                                                                                           # a one-child split is accepted
 
 class TestAudit(Sandboxed):
     def setUp(self):
