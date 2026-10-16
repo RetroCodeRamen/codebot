@@ -107,6 +107,19 @@ spec says must raise. The planner stays thinking-off. The model view and the fro
 the model rarely makes the mechanical mistakes codebot's repairs fix, so the remaining 25% of doomed tasks is a model-level problem. Next: other
 planner models (Ornith 1.5, Granite 4.2 8B).
 
+**Other planner models (`bench/results/eval/20261016-144707-planners-a/`)** [V]: level 1, 5 plans each, thinking off, interleaved.
+
+| planner | E | S | K | Q | doomed tasks | minutes per plan |
+|---|---|---|---|---|---|---|
+| Ornith 1.0 (control) | 0.75 ± 0.09 | 0.95 | 0.81 | **0.61 ± 0.07** | 10 of 40 | 6.8 |
+| Ornith 1.5 9B | 0.55 ± 0.11 | 0.89 | 0.71 | 0.39 ± 0.08 | 18 of 40 | 6.2 |
+| Granite 4.2 8B | 0.47 ± 0.10 | 0.82 | 0.52 | 0.24 ± 0.04 | 21 of 40 | 12.1 |
+
+The control is the best planner of the three on every metric. Both candidates mostly expect a value for inputs the spec says must raise (Ornith 1.5:
+28 assertions, Granite: 34); Granite also writes wrong exit statuses (15), sometimes tasks with no usable assertion at all (5 repair rounds), and is
+twice as slow. codebot's repairs and salvage matter more the weaker the model is: Granite's own assertions give E 0.20, after the harness 0.47; the
+control's 0.72 becomes 0.75. Whether Q predicts working software is being tested with the Go calculator builds (`calc_go`).
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

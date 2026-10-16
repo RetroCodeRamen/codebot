@@ -137,4 +137,11 @@ class TestAuditCli(Base):
         r = subprocess.run(["python3", os.path.join(os.path.dirname(__file__), "..", "bin", "codebot-engine"), "audit", self.name, "--home", self.home, "--json"], capture_output=True, text=True)
         self.assertFalse(json.loads(r.stdout)["chain_ok"])
 
+class TestProjectSandboxEnv(Sandboxed):
+    def test_project_path_and_env_reach_the_command(self):
+        self.set_env(SANDBOX="none", SANDBOX_PATH="/opt/tool/bin", SANDBOX_SETENV="GOCACHE={rundir}/.gocache;FOO=bar")
+        rc, out, _ = sandbox.execute(self.proj(), ["sh", "-c", 'echo "$PATH|$GOCACHE|$FOO"'], timeout=30)
+        self.assertEqual(rc, 0); p, g, f = out.strip().split("|")
+        self.assertTrue(p.startswith("/opt/tool/bin:")); self.assertEqual(g, os.path.join(self.code, ".gocache")); self.assertEqual(f, "bar")
+
 if __name__ == "__main__": unittest.main()

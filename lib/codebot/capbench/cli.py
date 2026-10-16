@@ -20,10 +20,14 @@ def cmd_list(home, a):
 def cmd_run(home, a):
     suite = "growing" if a.suite == "growing" else "ladder"
     if a.level: a.levels = a.level; suite = "ladder"
+    if a.bench: suite = f"bench:{a.bench}"
     try: levels = M.parse_levels(home, a.levels or "1-12") if suite == "ladder" else None
     except M.CatalogError as e: print(e); return 2
-    repeats = a.repeats if a.repeats else (1 if a.level else 3)
-    items = [M.load(home, f"level_{n:02d}") for n in levels] if levels else [M.load(home, "growing")]
+    try:
+        if a.bench: M.load(home, a.bench)
+    except M.CatalogError as e: print(e); return 2
+    repeats = a.repeats if a.repeats else (1 if a.level or a.bench else 3)
+    items = [M.load(home, f"level_{n:02d}") for n in levels] if levels else [M.load(home, a.bench or "growing")]
     problems = RN.preflight(home, items, need_model=not a.dry_run, mode=a.mode, driver=a.driver, env_overrides_ok=a.allow_env_overrides)
     if problems: print("cannot start:\n  - " + "\n  - ".join(problems)); return 2
     try: store = RN.create_run(home, suite, levels, repeats, a.mode, a.task_minutes, a.plan_minutes, a.plan_rounds, a.model, a.seed, a.interactive, a.name, a.poll, not a.no_notify, a.order, a.driver, a.checkpoints,
@@ -130,6 +134,7 @@ def main(argv, home):
     sub.add_parser("list", help="the catalog")
     r = sub.add_parser("run", help="start a benchmark run (detached unless --foreground)")
     r.add_argument("--level", help="one level, e.g. 1 (repeats default to 1)"); r.add_argument("--levels", help="e.g. 1-12, 3,5 (default 1-12)"); r.add_argument("--suite", choices=["ladder", "growing"], default="ladder")
+    r.add_argument("--bench", help="one named catalog entry outside the numbered ladder, e.g. calc_go (repeats default to 1)")
     r.add_argument("--repeats", type=int, help="trials per level (default 3 for a suite, 1 for --level)"); r.add_argument("--mode", choices=list(RN.MODES), default="full", help="full | reference-plan | minimal (diagnostics)")
     r.add_argument("--task-minutes", type=float, default=90.0, help="wall-clock budget of EACH planned task (default 90); there is no project-wide limit"); r.add_argument("--plan-minutes", type=float, default=45.0)
     r.add_argument("--plan-rounds", type=int, default=3); r.add_argument("--model", help="the worker model (CODEBOT_MODEL); also the default for every other role")

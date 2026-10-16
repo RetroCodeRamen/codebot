@@ -207,6 +207,16 @@ class TestRunEndToEnd(CapCase):
         finally: RN.PL.install_plan = orig
         td = store.all_trials()[0]; self.assertEqual(td["outcome"], "PLANNING_FAILED"); self.assertEqual(td["reference"]["passed"], 0); self.assertIn("PLANNING_UNSOUND", td["classification"]["counts"])
 
+class TestNamedBench(unittest.TestCase):
+    def test_a_named_catalog_entry_makes_one_trial_per_repeat(self):
+        tr = RN.build_trials(REPO, "bench:calc_go", None, 2)
+        self.assertEqual([t["trial_id"] for t in tr], ["calc_go-r1", "calc_go-r2"]); self.assertEqual({t["benchmark"] for t in tr}, {"calc_go"})
+    def test_the_entrys_toolchain_goes_into_the_trial_settings(self):
+        class Ctx: cfg, home = {"task_minutes": 90, "roles": {"PLANNER_MODEL": "p"}}, REPO
+        cfg = RN._cfg_for(Ctx(), {}, False, M.load(REPO, "calc_go"))
+        self.assertEqual(cfg["SANDBOX_PATH"], "/usr/local/go/bin"); self.assertIn("GOCACHE={rundir}/.gocache", cfg["SANDBOX_SETENV"]); self.assertEqual(cfg["PLANNER_MODEL"], "p")
+        self.assertNotIn("SANDBOX_PATH", RN._cfg_for(Ctx(), {}, False, M.load(REPO, "level_01")))
+
 class TestReportsAndClassification(unittest.TestCase):
     def row(self, bench, rate, phase="finished", level=1, outcome="COMPLETE"):
         return {"trial_id": f"{bench}", "benchmark": bench, "level": level, "stage": None, "repeat": 1, "phase": phase, "outcome": outcome, "internal_rate": 1.0, "reference_rate": rate, "tasks_total": 4, "verified": 4,

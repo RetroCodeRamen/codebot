@@ -91,6 +91,7 @@ class model_lock:
 
 # ---------- run construction ----------
 def trial_id(kind, level, repeat, stage=None):
+    if kind.startswith("bench:"): return f"{kind[6:]}-r{repeat}"                      # a named catalog entry (e.g. calc_go) outside the numbered ladder
     return f"G-r{repeat}-s{stage}" if kind == "growing" else f"L{level:02d}-r{repeat}"
 
 def build_trials(home, suite, levels, repeats, order="repeat-major"):
@@ -100,6 +101,8 @@ def build_trials(home, suite, levels, repeats, order="repeat-major"):
         for r in range(1, repeats + 1):
             for i, st in enumerate(m["stages"], 1): out.append({"trial_id": trial_id("growing", None, r, i), "benchmark": "growing", "level": None, "stage": i, "stage_id": st["id"], "repeat": r, "phase": "created", "outcome": None})
         return out
+    if suite.startswith("bench:"):
+        return [{"trial_id": trial_id(suite, None, r), "benchmark": suite[6:], "level": None, "stage": None, "repeat": r, "phase": "created", "outcome": None} for r in range(1, repeats + 1)]
     pairs = [(r, lv) for r in range(1, repeats + 1) for lv in levels] if order == "repeat-major" else [(r, lv) for lv in levels for r in range(1, repeats + 1)]
     for r, lv in pairs: out.append({"trial_id": trial_id("ladder", lv, r), "benchmark": f"level_{lv:02d}", "level": lv, "stage": None, "repeat": r, "phase": "created", "outcome": None})
     return out
@@ -109,7 +112,7 @@ def create_run(home, suite="ladder", levels=None, repeats=3, mode="full", task_m
     """roles: per-role settings written into every trial's project.env, e.g. {"PLANNER_MODEL": "granite4.2:8b-q4_K_M", "PLANNER_THINK": "on"} (roles.py)."""
     if mode not in MODES: raise RunError(f"mode must be one of {', '.join(MODES)}")
     if suite == "growing" and mode != "full": raise RunError("the growing project is only available in full mode")
-    if suite != "growing" and not levels: raise RunError("no levels selected")
+    if suite == "ladder" and not levels: raise RunError("no levels selected")
     trials = build_trials(home, suite, levels or [], repeats, order)
     run_id = RS.new_run_id(name); store = RS.Store(home, run_id)
     if store.exists(): raise RunError(f"run {run_id} already exists")
@@ -148,14 +151,18 @@ def _seed_dirs(ctx, tr, m, st):
 def _spec_for(ctx, tr, m, st):
     return M.spec_text(m, st)
 
-def _cfg_for(ctx, tr, minimal=False):
-    c = ctx.cfg; return W.project_settings(ctx.home, c["task_minutes"], c.get("model"), c.get("seed"), c.get("interactive"), extra=c.get("roles") or None, minimal=minimal)
+def _cfg_for(ctx, tr, minimal=False, m=None):
+    c = ctx.cfg; extra = dict(c.get("roles") or {})
+    sb = (m or {}).get("sandbox") or {}                   # a catalog entry may need a toolchain in the sandbox (calc_go: Go on PATH, a build cache in the code dir)
+    if sb.get("path_prepend"): extra["SANDBOX_PATH"] = sb["path_prepend"]
+    if sb.get("env"): extra["SANDBOX_SETENV"] = ";".join(f"{k}={v}" for k, v in sb["env"].items())
+    return W.project_settings(ctx.home, c["task_minutes"], c.get("model"), c.get("seed"), c.get("interactive"), extra=extra or None, minimal=minimal)
 
 def setup_trial(ctx, tr, td):
     m, st = _benchmark(ctx, tr); minimal = ctx.state["mode"] == "minimal"
     name = W.names(ctx.state["run_id"], tr["trial_id"]); W.destroy(ctx.home, name)          # a re-planned trial starts clean: planning keeps no state worth resuming
     t0 = time.time(); spec = _spec_for(ctx, tr, m, st)
-    proj = W.create(ctx.home, name, _seed_dirs(ctx, tr, m, st), spec, _cfg_for(ctx, tr, minimal))
+    proj = W.create(ctx.home, name, _seed_dirs(ctx, tr, m, st), spec, _cfg_for(ctx, tr, minimal, m))
     if minimal:     # the minimal arm has no planner: the worker gets the spec as a file in its own code dir, and ONE task
         with open(os.path.join(proj.workdir, "SPEC.md"), "w") as f: f.write(spec)
         bench._git(proj.workdir, "add", "-A"); bench._git(proj.workdir, "commit", "-qm", "spec")

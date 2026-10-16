@@ -61,6 +61,9 @@ def execute(proj, argv, *, timeout, env=None, rw=None, ro=None, cwd=None):
     for k in [*mc["env"], *[x for x in proj.get("SANDBOX_PASS_ENV", "VIRTUAL_ENV").split(",") if x]]:
         if os.environ.get(k): env.setdefault(k, os.environ[k])
     if mc["path_prepend"]: env["PATH"] = ":".join(mc["path_prepend"]) + ":" + env["PATH"]
+    if proj.get("SANDBOX_PATH"): env["PATH"] = proj.get("SANDBOX_PATH") + ":" + env["PATH"]          # per project (a benchmark entry's toolchain, e.g. Go)
+    for kv in (proj.get("SANDBOX_SETENV") or "").split(";"):                                         # per project KEY=VALUE;...; {rundir} = the code dir
+        if "=" in kv: k, v = kv.split("=", 1); env[k.strip()] = v.strip().replace("{rundir}", proj.rundir)
     if m["mode"] == "docker":
         name = "cb-" + uuid.uuid4().hex[:10]; label = "docker:net=none:ro-root"
         full = _docker_argv(proj, name, cwd, env, rw, ro or [], m["image"]) + list(argv)

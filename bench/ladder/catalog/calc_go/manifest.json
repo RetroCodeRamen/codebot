@@ -1,0 +1,18 @@
+{
+  "id": "calc_go", "level": null, "title": "Command-line calculator in Go", "version": "1.0.0",
+  "difficulty": "easy-moderate: one program, operator precedence, exact output and error contracts, a second language",
+  "primary_challenge": "A whole working program in a language other than Python, judged only by running it",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 7,
+  "planner": {"max_tasks": 10, "num_predict": 6000},
+  "sandbox": {"path_prepend": "/usr/local/go/bin", "env": {"GOCACHE": "{rundir}/.gocache", "GOPATH": "/tmp/gopath", "GOTOOLCHAIN": "local", "GOFLAGS": "-mod=mod", "CGO_ENABLED": "0"}},
+  "requirements": [
+    {"id": "R1", "title": "builds; expression from arguments", "keywords": ["build", "argument"]},
+    {"id": "R2", "title": "the four operators and x", "keywords": ["operator"]},
+    {"id": "R3", "title": "precedence, left to right", "keywords": ["precedence"]},
+    {"id": "R4", "title": "integers, decimals, negatives", "keywords": ["number", "decimal"]},
+    {"id": "R5", "title": "output format", "keywords": ["format", "print"]},
+    {"id": "R6", "title": "errors and exit status", "keywords": ["error", "exit"]},
+    {"id": "R7", "title": "standard input mode", "keywords": ["stdin", "input"]}
+  ]
+}
