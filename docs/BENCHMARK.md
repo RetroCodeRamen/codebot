@@ -69,3 +69,14 @@ Specs, tests, scoring and results live outside the workspace and the Docker sand
 ## Smoke test on record (2026-10-15, ornith:9b, CPU, `codebot bench run --level 1 --task-minutes 4 --plan-minutes 10 --repeats 1`)
 
 One trial through the real planner, bash supervisor, worker, assertion runner and hidden tests: plan 6.3 min (8 tasks, sound), coding 18.3 min, 6 of 8 tasks verified internally, 2 tasks hit the 4-minute budget and were recorded `TIMEOUT` (the other tasks continued), hidden tests 41/64 (64%), 3 `VERIFICATION_GAP` classifications (tasks the internal check accepted but the hidden tests reject), thermal pauses counted inside the budgets (0.0-0.7 min per task), CPU 85-94 C throughout. This proves the pipeline end to end with a shortened budget; it says nothing about the 90-minute capability numbers.
+
+## First full-budget run (2026-10-15, ornith:9b, GPU auto-offload, `codebot bench run --level 1 --repeats 3`, run `20261015-180429-l1-full`)
+
+90 min per task, 3 independent trials (private memory each), 5.4 h wall. Independent (hidden-test) pass rate per trial 78%, 47%, 73% (median 73%, below the 80% bar, so no level is held); internal verification 88%, 62%, 100%; 20/24 tasks verified; 0 timeouts (no task came near 90 min: max 48 min); 60 retries, 5 splits; CPU about 89 C mean, 96 C max.
+
+What decided the score was the planner's assertions, not the time budget or the worker:
+- Trial 2 lost two tasks to checks no code can pass: the planner wrote `slugify("", "expect")` and `safe_filename("", "expect")` (the schema key `expect` leaked into `args` whenever the expected value was an empty string), and the splitter wrote a `run` check with a stray `]` (a Python syntax error). The baseline guard accepts all three because they fail on the seed.
+- Weak checks: 7 VERIFICATION_GAP tasks. Trial 3 had a fully sound plan (0 unsound tasks in the reference audit) and verified 8/8, yet scored 73%: `slugify` 3/8, `truncate` 5/8, `safe_filename` 1/9 on hidden tests. Sound is not enough; the assertions cover only the spec's headline examples.
+- Splits rarely helped: children were often busywork ("create textutil.py with a docstring", "verify slugify still works") or contradicted the spec.
+- The worker could do it: every function was solved in at least one trial (`truncate` verified in trial 3 after failing 13-14 attempts in trials 1 and 2).
+
