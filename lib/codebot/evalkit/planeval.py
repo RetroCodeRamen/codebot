@@ -64,7 +64,7 @@ def summary(rows):
         f = [r["frozen"] or {} for r in rs]
         L.append(f"| {lv} | `{mo}` | {th} | {len(rs)} | {sum(r['ok'] for r in rs)} | {_mean_sd([x.get('E') for x in f])} | {_mean_sd([x.get('S') for x in f])} | "
                  f"{_mean_sd([x.get('K') for x in f])} | {_mean_sd([x.get('Q') for x in f])} | {_mean_sd([x.get('asserts') for x in f])} | "
-                 f"{_mean_sd([r['secs'] / 60 for r in rs])} | {_mean_sd([r['cost']['gen_tokens'] for r in rs])} |")
+                 f"{_mean_sd([r['secs'] / 60 for r in rs])} | {_mean_sd([(r.get('cost') or {}).get('gen_tokens') for r in rs])} |")
     L += ["", "Model view (the planner's own assertions, before codebot's repairs and salvage):", "",
           "| level | model | think | E | S | K | Q | malformed |", "|---|---|---|---|---|---|---|---|"]
     for (lv, mo, th), rs in sorted(groups.items()):
@@ -83,7 +83,8 @@ def run(home, models, thinks, levels, plans, name=None, plan_minutes=45, log=pri
             for c, (mo, th) in enumerate(configs, 1):
                 log(f"plan {i}/{plans} {lv} {mo} think={th}")
                 try: r = one(home, run_id, lv, i, mo, th, plan_minutes, log, c)
-                except (Exception, SystemExit) as e:                       # one broken plan must not end the probe r = {"run": run_id, "level": lv, "plan": i, "model": mo, "think": th, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "secs": 0, "cost": {}, "frozen": None, "model_view": None, "malformed_model_asserts": 0}
+                except (Exception, SystemExit) as e:                       # one broken plan must not end the probe
+                    r = {"run": run_id, "level": lv, "plan": i, "model": mo, "think": th, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "secs": 0, "cost": {}, "frozen": None, "model_view": None, "malformed_model_asserts": 0}
                 rows.append(r)
                 with open(os.path.join(out_dir, "plans.jsonl"), "a") as f: f.write(json.dumps(r) + "\n")
                 fz = r.get("frozen") or {}
