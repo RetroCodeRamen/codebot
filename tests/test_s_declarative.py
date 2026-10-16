@@ -71,6 +71,10 @@ class TestCheckspec(Sandboxed):
         self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "expect": ""}); self.assertIsNone(A.validate([a]))      # "" is a real expectation
         r = K.clean({"type": "run", "argv": ["python3", "cli.py", "slug", ""], "stdout": ""}); self.assertEqual(r["stdout"], ""); self.assertIsNone(A.validate([r]))
         self.assertNotIn("expect", K.clean({"type": "call", "module": "m", "func": "f", "expect": 1, "raises": "ValueError"}))
+    def test_a_whole_command_in_the_program_name_is_split(self):
+        # 2026-10-16 calc_go, control planner: {"argv": ["go run .", "2", "+", "3"]} can never run (no program is called "go run .")
+        self.assertEqual(K.clean({"type": "run", "argv": ["go run .", "2", "+", "3"], "stdout": "5"})["argv"], ["go", "run", ".", "2", "+", "3"])
+        self.assertEqual(K.clean({"type": "run", "argv": ["./calc", "a b"], "stdout": "x"})["argv"], ["./calc", "a b"])     # arguments may contain spaces
     def test_a_field_name_leaked_into_the_inputs_is_removed(self):
         # every real ornith plan so far: "args": ["", "expect"] whenever the expected value is empty, and repair rounds repeat it
         self.assertEqual(K.clean({"type": "call", "module": "textutil", "func": "slugify", "args": ["", "expect"], "expect": ""})["args"], [""])
@@ -109,6 +113,14 @@ class TestGuardStrict(Sandboxed):
         r = guard.probe(self.proj(), K.command_for("T9"), 30); self.assertEqual(r["verdict"], "broken"); self.assertIn("does not exist", r["out"])      # no spec file at all
         open(os.path.join(self.state, "checks", "T8.spec.json"), "w").write('{"asserts": [{"type": "shell"}]}')                                      # a spec the runner refuses: exit 2
         r = guard.probe(self.proj(), K.command_for("T8"), 30); self.assertEqual(r["verdict"], "broken"); self.assertIn("SPEC ERROR", r["out"])
+    def test_a_program_the_task_has_not_built_yet_is_a_real_failing_check(self):
+        # 2026-10-16 calc_go: every check that ran ./calc was rejected as broken ("command not found"), so the plan lost 4 of its 7 tasks
+        r = self.verdict([{"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5"}]); self.assertEqual(r["verdict"], "ok", r); self.assertIn("does not exist yet", r["out"])
+        r = self.verdict([{"type": "run", "argv": ["bin/calc", "2"], "stdout": "2"}] * 30); self.assertEqual(r["verdict"], "ok", r)
+    def test_a_tool_the_sandbox_does_not_have_is_broken(self):
+        r = self.verdict([{"type": "run", "argv": ["no-such-tool-xyz", "--version"], "exit": 0}]); self.assertEqual(r["verdict"], "broken"); self.assertIn("not available", r["out"])
+        many = [{"type": "run", "argv": ["no-such-tool-xyz"], "exit": 0}] + [{"type": "run", "argv": ["./calc", str(i)], "stdout": str(i)} for i in range(40)]
+        self.assertEqual(self.verdict(many)["verdict"], "broken")                            # found even when the output is long and the line is not in its tail
     def test_a_check_no_code_can_pass_is_broken_although_it_fails_on_the_seed(self):
         r = self.verdict([{"type": "call", "module": "m", "func": "f", "args": ["", "expect"], "expect": ""}]); self.assertEqual(r["verdict"], "broken"); self.assertIn("'expect'", r["out"])
         r = self.verdict([{"type": "run", "argv": ["python3", "-c", "import m; print(m.f())]"], "stdout": "2"}]); self.assertEqual(r["verdict"], "broken"); self.assertIn("not valid Python", r["out"])

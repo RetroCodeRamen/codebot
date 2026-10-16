@@ -45,9 +45,13 @@ def probe(proj, check_text, timeout=120):
         rc, out, _ = sandbox.execute(proj, ["bash", "-c", script], timeout=timeout, rw=(), ro=[proj.rundir, C.checks_dir(proj)],
                                      env={"CODEBOT_RUNDIR": proj.rundir, "CODEBOT_CHECKS": C.checks_dir(proj)})
     finally: os.unlink(tmp)
-    out = out.strip()[-400:]
+    full = out; out = out.strip()[-400:]
     if rc == 0: return {"verdict": "passes", "rc": 0, "out": out}
-    if strict and rc != 1: return {"verdict": "broken", "rc": rc, "out": out or f"the assertion runner exited {rc} (only 0 and 1 are valid)"}
+    if strict:        # the runner's own exit contract decides (assertions.py): 1 = a real test that fails now. The shell-check heuristics below do NOT
+                      # apply: "./calc does not exist yet" is exactly how a good check fails before the work (2026-10-16, calc_go: they rejected 4 of 7 tasks)
+        if rc != 1: return {"verdict": "broken", "rc": rc, "out": out or f"the assertion runner exited {rc} (only 0 and 1 are valid)"}
+        if "command not available in the sandbox:" in full: return {"verdict": "broken", "rc": rc, "out": out}
+        return {"verdict": "ok", "rc": rc, "out": out}
     if rc in (126, 127) or re.search(r"command not found|No such file or directory: .*\.sh", out): return {"verdict": "broken", "rc": rc, "out": out}
     return {"verdict": "ok", "rc": rc, "out": out}
 

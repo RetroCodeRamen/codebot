@@ -42,6 +42,8 @@ def clean(a):
     # ornith writes a schema field name into the inputs when the expected value is empty ("args": ["", "expect"], "expect": ""): every real run so far,
     # and repair rounds repeat it. The intended check is plain (slugify("") == ""), so the stray word is removed instead of failing the plan.
     if isinstance(out.get("args"), list): out["args"] = [x for x in out["args"] if not (isinstance(x, str) and x in A.LEAKED)]
+    if isinstance(out.get("argv"), list) and out["argv"] and isinstance(out["argv"][0], str) and len(out["argv"][0].split()) > 1:
+        out["argv"] = out["argv"][0].split() + out["argv"][1:]       # a whole command in the program name ("go run ." as argv[0]): no program name has spaces
     if isinstance(out.get("argv"), list) and len(out["argv"]) > 1: out["argv"] = out["argv"][:1] + [x for x in out["argv"][1:] if not (isinstance(x, str) and x in A.LEAKED)]
     return out
 

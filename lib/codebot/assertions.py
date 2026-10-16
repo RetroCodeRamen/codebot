@@ -100,7 +100,9 @@ def _call(a):
 def _run(a):
     argv = [sys.executable if a["argv"][0] in PY else a["argv"][0], *a["argv"][1:]]
     try: p = subprocess.run(argv, input=a.get("stdin"), capture_output=True, text=True, timeout=60)
-    except FileNotFoundError: return f"command not found: {a['argv'][0]}"
+    except FileNotFoundError:                     # a path (./calc) is a program the task has not built yet: a real failing test; a bare name is a tool
+        c = a["argv"][0]                          # the sandbox does not have, which can never pass (the guard rejects it as broken)
+        return f"{c} does not exist yet" if "/" in c else f"command not available in the sandbox: {c}"
     except subprocess.TimeoutExpired: return f"{' '.join(a['argv'])} timed out after 60 s"
     cmd = " ".join(a["argv"]); out = p.stdout.strip(); want_exit = a.get("exit", 0)
     if p.returncode != want_exit: return f"{cmd} exited {p.returncode}, expected {want_exit}" + (f" (stderr: {p.stderr.strip()[-150:]})" if p.stderr.strip() else "")
