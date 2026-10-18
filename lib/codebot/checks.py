@@ -119,3 +119,35 @@ def run_check(proj, task, timeout=600):
     out = out[-6000:]
     audit.log(proj, "check_run", task=task["id"], rc=rc, secs=round(time.time() - t0, 1), sandbox=label)
     return {"rc": rc, "out": out, "sig": failure_sig(out) if rc else "", "secs": round(time.time() - t0, 1)}
+
+def replace_check(proj, tid, asserts, reason, extra=None):
+    """Harness only (the check re-derivation): give task tid a new declarative check. The assertions go to a NEW frozen spec file (T4.r1.spec.json;
+    the old file stays, locked, for the record); the task's check text, its check script, the lock, the frozen copies and the recorded check text are
+    updated together under the task store's lock, so tamper detection accepts the change and a worker can never make it. A broken check (the runner
+    refuses it, or it needs a tool the sandbox lacks) is refused. extra: task fields to set in the same save. Returns {"ok", "check" | "error"}."""
+    from . import checkspec as K, guard as GD, tasks as T
+    store = T.TaskStore(proj)
+    with store.locked():
+        data = store.load(); task = T.get(data, tid)
+        if task is None: return {"ok": False, "error": f"unknown task {tid}"}
+        k = 1
+        while os.path.exists(os.path.join(checks_dir(proj), f"{tid}.r{k}.spec.json")): k += 1
+        name = f"{tid}.r{k}.spec.json"; path = os.path.join(checks_dir(proj), name); cmd = K.command_for_spec(name)
+        jdump(path, {"asserts": asserts}, indent=1)
+        pr = GD.probe(proj, cmd, proj.get("CHECK_TIMEOUT", 600, int))
+        if pr["verdict"] == "broken":
+            os.remove(path); return {"ok": False, "error": f"the new check is broken: {(pr.get('out') or '')[-200:]}"}
+        task.setdefault("check_history", []).append({"ts": now(), "check": task.get("check"), "reason": reason})
+        task["check"] = cmd; task.update(extra or {})
+        write_script(proj, task)
+        lock = load_lock(proj); lock["checks"][tid] = _sha_text(cmd)
+        for rel in (name, script_rel(tid)):
+            lock["files"][rel] = _sha(os.path.join(checks_dir(proj), rel))
+            dst = os.path.join(frozen_dir(proj), rel); os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(os.path.join(checks_dir(proj), rel), dst)
+        ft = os.path.join(frozen_dir(proj), "_check_text.json"); texts = jload(ft) if os.path.exists(ft) else {}
+        texts[tid] = cmd; jdump(ft, texts, indent=1)
+        lock["updated"] = now(); jdump(lock_path(proj), lock, indent=1)
+        store.save(data)
+    audit.log(proj, "check_replaced", task=tid, check=cmd, reason=reason[:200])
+    return {"ok": True, "check": cmd}

@@ -1,6 +1,6 @@
 """The engine: one `step` = one attempt at the next task, decided and judged by the harness, not the model."""
 import json, os, re, subprocess, sys, time
-from . import taskclock as TC, tasks as T, checks as C, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD, guard as GD
+from . import taskclock as TC, tasks as T, checks as C, checkspec as K, gitops as G, budgets as B, sizing as Z, ladder as L, memory as M, modes as MD, guard as GD, rederive as RD
 from .config import Project, now, append_jsonl
 from .proc import kill_group
 from .planparse import parse_plan
@@ -89,6 +89,13 @@ def regressions(proj, data, task, clk=None):
     out = (f"This task's own check passes, but the change broke {len(broke)} task(s) that were already done and verified: {', '.join(broke)}. "
            f"Keep the new work and make those pass again; do not change their behaviour.\n" + "\n".join(outs))
     return {"rc": 1, "out": out, "sig": C.failure_sig(out), "secs": 0}, broke
+
+def _rederive(proj, tid, out, clk):
+    """The check re-derivation before a split (rederive.py). It calls the model; nothing it does may stop the run."""
+    try: return RD.run(proj, tid, out, timeout=clk.cap(900) if clk else 900)
+    except Exception as e:                                  # noqa: BLE001  (logged, and the split goes ahead as before)
+        append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "check_rederived", "ok": False, "task": tid, "reason": f"error: {type(e).__name__}: {str(e)[:200]}"})
+        return {"changed": False, "avoid": []}
 
 def _block(proj, task, why_text, res):
     task["status"] = "blocked"; task["blocked_question"] = L.question(proj, task, why_text)
@@ -200,13 +207,15 @@ def _step(proj, fresh, box):
             append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "task": task["id"], "attempt": attempt, "event": "attempt_cut_by_budget", "worker_secs": w.get("secs")})
             return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out during attempt {attempt}")
         res = C.run_check(proj, task, clk.cap(proj.get("CHECK_TIMEOUT", 600, int)) if clk else proj.get("CHECK_TIMEOUT", 600, int)) if task.get("check") else {"rc": 0, "out": "", "sig": "", "secs": 0}
-        passed = res["rc"] == 0 and not tamper2; broke = []
+        own = res; passed = res["rc"] == 0 and not tamper2; broke = []
         if passed:
             reg, broke = regressions(proj, data, task, clk)
             if reg: res, passed = reg, False
+        # which of the task's own assertions failed (the runner's numbers): one that fails in EVERY attempt may be the check's fault, not the code's
+        failing = ([] if own["rc"] == 0 else RD.failing_numbers(own["out"])) if K.is_runner_check(task.get("check")) and not tamper2 else None
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"), "worker_secs": w.get("secs"),
                "check_rc": res["rc"], "sig": res["sig"], "secs": res["secs"], "tamper": tamper2, "passed": passed,
-               "files": G.changed_files(proj.rundir), **({"regressed": broke} if broke else {})}
+               "files": G.changed_files(proj.rundir), **({"regressed": broke} if broke else {}), **({"failing": failing} if failing is not None else {})}
         packed = []                                    # lessons the worker's context actually contained this attempt
         try:
             with open(proj.p("packed.json")) as f: packed = json.load(f).get("lessons", [])
@@ -231,7 +240,11 @@ def _step(proj, fresh, box):
             return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out while attempt {attempt} was being judged")
         store.save(data)
     if need_split:     # split needs the store lock itself, so it runs after we release it
-        r = Z.auto_split(proj, task["id"], err_text(task, res), timeout=clk.cap(1800) if clk else 1800)
+        rd = _rederive(proj, task["id"], own["out"], clk)            # first ask whether the check is wrong (rederive.py)
+        if rd.get("changed"):
+            return {"event": "task_failed", "task": task["id"], "attempt": attempt, "rung": 1, "fresh": fresh, "check_rc": res["rc"], "tamper": tamper2,
+                    "out_tail": res["out"][-400:], "check_rederived": {"removed": len(rd["removed"]), "added": len(rd["added"])}}
+        r = Z.auto_split(proj, task["id"], err_text(task, res), timeout=clk.cap(1800) if clk else 1800, avoid=rd.get("avoid"))
         if r["ok"]: return {"event": "task_split", "task": task["id"], "children": r["children"], "attempt": attempt, "tamper": tamper2}
         with store.locked():                                   # no split available: skip straight to the next rung
             data = store.load(); t2 = T.get(data, task["id"]); nr = L.next_rung(proj, 3)

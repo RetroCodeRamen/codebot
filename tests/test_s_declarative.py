@@ -3,7 +3,7 @@ the guard's strict exit-status rule, the native planner (with the scripted fake 
 import json, os, subprocess, sys, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama
-from codebot import assertions as A, checkspec as K, checks as C, engine, grounding as G, guard, planner, planops, planparse, specdoc, splitter, tasks as T
+from codebot import assertions as A, checkspec as K, checks as C, engine, grounding as G, guard, planner, planops, planparse, rederive as RD, specdoc, splitter, tasks as T
 
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
@@ -386,5 +386,80 @@ class TestGrounding(Sandboxed):
     def test_context_is_authority_for_a_split(self):
         parent = {"type": "run", "argv": ["./calc", "4", "x", "2"], "stdout": "8"}; child = dict(parent, stdout="6")
         out, _, why = G.screen([[child]], CALC_SPEC, "other", None, [], [parent]); self.assertEqual(out, [[]]); self.assertIn("already in force", why[0][0])
+
+DOUBLER = """# Doubler
+Python 3, standard library only.
+
+## Requirements
+
+1. `m.py` provides `f(x)`, which doubles a number: `f(2)` is `4`.
+"""
+
+class TestRederive(Sandboxed):
+    """2026-10-17 design review: the ladder assumed a failing check means wrong code, so a task whose check could never pass climbed to the split rung
+    and the splitter copied the check into smaller tasks (38 of the 41 checks the calc_go control rerun froze could not pass for a correct program).
+    Before splitting, the assertions that failed in every attempt are now judged against the spec."""
+    EXAMPLE = {"type": "call", "module": "m", "func": "f", "args": [2], "expect": 4}
+    WRONG = {"type": "call", "module": "m", "func": "f", "args": [3], "expect": 10}           # the spec says f doubles: f(3) is 6, never 10
+    GOOD_F = "open('m.py', 'w').write('def f(x):\\n    return 2 * x\\n')"
+    def setUp(self):
+        super().setUp()
+        with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write(DOUBLER)
+        self.set_env(STUCK_SAME_FAILURE="99", STUCK_NO_PROGRESS="99", THERMAL_GUARD="0")
+    def start(self, asserts, worker=None, replies=()):
+        K.ensure_runner(self.proj()); K.write_spec(self.proj(), "T1", asserts); specdoc.save_map(self.proj(), {"T1": 1})
+        self.write_plan(f"# Tasks\n- [ ] 1. double\n  - check: `{K.command_for('T1')}`\n")
+        self.fake = FakeOllama(list(replies)); self.addCleanup(self.fake.stop)
+        self.set_env(OLLAMA_PORT=self.fake.port, WORKER_CMD=self.worker(worker or self.GOOD_F)); engine.freeze_project(self.proj())
+    def steps(self, n): return [engine.step(self.proj()) for _ in range(n)]
+    def task(self): return T.get(T.TaskStore(self.proj()).load(), "T1")
+    def log(self, op): return [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if f'"{op}"' in l]
+
+    def test_an_assertion_the_spec_does_not_require_is_replaced_before_any_split(self):
+        self.start([self.EXAMPLE, self.WRONG], replies=[{"verdicts": [{"n": 2, "required_by_spec": False, "why": "f doubles: f(3) is 6"}], "replacements": []}])
+        ev = self.steps(4)                                              # rung 1 twice, rung 2 twice: assertion 2 failed every time
+        self.assertEqual([e["event"] for e in ev], ["task_failed"] * 4); self.assertEqual(ev[3]["check_rederived"], {"removed": 1, "added": 0})
+        self.assertEqual(len(self.fake.requests), 1); req = self.fake.requests[0]
+        self.assertEqual(req["format"], RD.schema()); self.assertIn("requirement 1 of 1", req["messages"][1]["content"]); self.assertIn("assertion(s) 2 in every one of its 4 attempts", req["messages"][1]["content"])
+        t = self.task(); self.assertEqual(t["check"], K.command_for_spec("T1.r1.spec.json")); self.assertEqual((t["ladder"], t["rederived"], t["attempts_base"]), (1, 1, 4))
+        self.assertEqual(t["check_history"][0]["check"], K.command_for("T1")); self.assertEqual(K.read_task_spec(self.proj(), t), [self.EXAMPLE])
+        self.assertEqual(C.verify(self.proj(), T.TaskStore(self.proj()).load()), [])            # a harness change, not tampering
+        self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "T1.spec.json")))       # the old check stays, frozen, for the record
+        self.assertEqual(self.log("check_rederived")[-1]["removed"][0]["assert"], self.WRONG); self.assertTrue(self.log("check_rederived")[-1]["ok"])
+        e = engine.step(self.proj()); self.assertEqual((e["event"], e.get("precheck")), ("task_done", True))   # the code already met the spec
+    def test_a_required_assertion_stays_and_the_split_leaves_it_out_of_every_child(self):
+        seen, hook = os.path.join(self.tmp, "split_task.json"), os.path.join(self.tmp, "split_hook.py")      # a split hook that only records what it was given
+        with open(hook, "w") as f: f.write(f"import os, shutil\nshutil.copy(os.environ['CODEBOT_TASK_FILE'], {seen!r})\n")
+        self.set_env(SPLIT_CMD=f"{sys.executable} {hook}")
+        self.start([self.EXAMPLE, self.WRONG], replies=[{"verdicts": [{"n": 2, "required_by_spec": True, "why": "it is in the spec"}], "replacements": []}])
+        ev = self.steps(4); self.assertNotIn("check_rederived", ev[3])
+        self.assertEqual(self.task()["check"], K.command_for("T1")); self.assertFalse(self.log("check_rederived")[-1]["ok"])
+        self.assertEqual(json.load(open(seen))["avoid"], [self.WRONG])
+    def test_the_specs_own_examples_are_never_put_in_question(self):
+        self.start([self.EXAMPLE], worker="open('m.py', 'w').write('def f(x):\\n    return x\\n')")      # wrong code: the example fails every time
+        self.steps(4); self.assertEqual(self.fake.requests, []); self.assertEqual(self.task()["check"], K.command_for("T1"))
+    def test_no_model_call_when_the_tasks_budget_is_nearly_spent(self):
+        # 2026-10-17: the judging call used a 60 s floor and overran a task's budget (test_v_capbench's resumed trial)
+        self.start([self.EXAMPLE, self.WRONG]); data = T.TaskStore(self.proj()).load(); t = T.get(data, "T1")
+        t["history"] = [{"attempt": 1, "failing": [2]}, {"attempt": 2, "failing": [2]}]; T.TaskStore(self.proj()).save(data)
+        r = RD.run(self.proj(), "T1", "", timeout=30)
+        self.assertFalse(r["changed"]); self.assertEqual(r["avoid"], [self.WRONG]); self.assertEqual(self.fake.requests, [])
+    def test_at_most_rederive_max_times(self):
+        self.set_env(REDERIVE_MAX="0"); self.start([self.EXAMPLE, self.WRONG])
+        self.steps(4); self.assertEqual(self.fake.requests, []); self.assertEqual(self.task()["check"], K.command_for("T1"))
+    def test_replacements_are_screened_like_planned_assertions(self):
+        bad = {"type": "call", "module": "m", "func": "f", "args": [2], "expect": 5}              # contradicts the spec's own example
+        good = {"type": "call", "module": "m", "func": "f", "args": [5], "expect": 10}
+        self.start([self.EXAMPLE, self.WRONG], replies=[{"verdicts": [{"n": 2, "required_by_spec": False, "why": "f(3) is 6"}], "replacements": [self.WRONG, bad, good]}])
+        ev = self.steps(4); self.assertEqual(ev[3]["check_rederived"], {"removed": 1, "added": 1})
+        self.assertEqual(K.read_task_spec(self.proj(), self.task()), [self.EXAMPLE, good])
+
+    def test_failing_numbers_and_persistent_failures(self):
+        self.assertEqual(RD.failing_numbers("FAIL: x\nfailing assertions: 2, 5\n2 of 5 assertions failed\n"), [2, 5]); self.assertIsNone(RD.failing_numbers("all 3 assertions hold"))
+        h = lambda n, f: {"attempt": n, "failing": f}
+        self.assertEqual(RD.persistent({"history": [h(1, [1, 2]), h(2, [2, 3]), h(3, [2])]}), [2])
+        self.assertEqual(RD.persistent({"history": [h(1, [2])]}), [])                                  # one attempt is no evidence
+        self.assertEqual(RD.persistent({"attempts_base": 2, "history": [h(1, [9]), h(2, [9]), h(3, [1]), h(4, [1])]}), [1])     # only the current check's attempts
+        self.assertEqual(RD.persistent({"history": [h(1, [2]), h(2, [])]}), [])                        # it passed once
 
 if __name__ == "__main__": unittest.main()
