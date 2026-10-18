@@ -6,8 +6,8 @@
      `calc 2 + 3` prints `5`                               (a command line and its standard output)
    A call needs the function's module, read from "`textutil.py` provides `slugify(...)`"; a command needs a program the sandbox can run: python3 / python,
    a ./path, or a program the spec says how to build ("`go build -o calc .`"), in which case the build command runs first as its own assertion.
-2. screen(): model-written assertions are dropped when they cannot hold for a program that follows the spec: they contradict a spec example or another
-   assertion of the plan (same call or command line, different expected result), pass a flag or shell syntax the spec never mentions to a command that
+2. screen(): model-written assertions are dropped when they cannot hold for a program that follows the spec: they contradict themselves, a spec example
+   or another assertion of the plan (same call or command line, different expected result), pass a flag or shell syntax the spec never mentions to a command that
    is expected to succeed, pack words the spec passes as separate arguments into one, or run Python code in a project that is not Python. A `go run`
    command of a program the spec says how to build is rewritten to run the built program (via_built), so an exit status `go run` hides is testable."""
 import ast, collections, json, os, re, shlex, sys
@@ -302,6 +302,14 @@ def _strike(a, err_only):
     wanted = [s.strip() for s in _contains(a)] + ([a["stdout"].strip()] if isinstance(a.get("stdout"), str) else [])
     return any(t and any(t == x or x in t for x in err_only) for t in wanted)
 
+def _contradictory(a):
+    """Why a run assertion can hold for no program at all: standard output must be exactly S and also contain a text S does not contain. The runner
+    compares stdout stripped, and a contained text, stripped, lies inside the stripped output; so the rule is sound by construction and needs no
+    spec. 2026-10-18 calc4: four of T6's six checks were `"stdout": ""` with `"stdout_contains": ["error:"]`, so T6 could never pass."""
+    if a.get("type") != "run" or not isinstance(a.get("stdout"), str): return None
+    s = a["stdout"].strip(); bad = next((c.strip() for c in _contains(a) if c.strip() and c.strip() not in s), None)
+    return None if bad is None else f"it wants standard output to be exactly {s!r} and also to contain {bad!r}, which no program can do"
+
 def _on_wrong_stream(a, err_only):
     """Why an assertion expects on standard output a text the spec sends to standard error. Not for input on stdin (a spec may print errors on
     standard output in that mode) nor when the command merges the two streams (2>&1). Every such assertion in the corpus is impossible (5 of 5)."""
@@ -368,7 +376,8 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
     task, never dropped). spec_examples: every example of the spec (none may be contradicted). context: assertions already in force elsewhere (a
     split's parent, finished tasks), which a group may not contradict either; they are never dropped here. label: how notes name a group.
     Rules: a `go run` command of a program the spec says how to build with Go is first rewritten to run the built program (via_built); an exact
-    duplicate is merged; Python code in a project that is not Python is dropped; a command expected to succeed that passes an option or shell syntax
+    duplicate is merged; an assertion that contradicts itself (stdout exactly S, and containing a text S does not contain) is dropped; Python code
+    in a project that is not Python is dropped; a command expected to succeed that passes an option or shell syntax
     the spec never mentions, or the program's own name, or packs words the spec passes as separate arguments into one argument, is dropped; an exit
     status `go run` can never report is dropped; text the spec sends to standard error expected on standard output is dropped; an assertion that
     contradicts a spec example or the context is dropped; assertions of the groups that exercise the same call or command line with results that
@@ -386,7 +395,7 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
             k = json.dumps(a, sort_keys=True)
             if k in keys: continue
             keys.add(k)
-            r = (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _joined(a, cmds, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
+            r = _contradictory(a) or (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _joined(a, cmds, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
             if r: notes.append(f"{label}{gi + 1}: dropped {_short(a)}: {r}"); why[gi].append(r); continue
             kept.append(a)
         stage.append(kept)

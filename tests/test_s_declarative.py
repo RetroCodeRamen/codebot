@@ -442,6 +442,14 @@ class TestGrounding(Sandboxed):
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "assertions_salvaged" in l][-1]["notes"]
         self.assertTrue(any("own example" in n for n in log)); self.assertTrue(any("not written in Python" in n for n in log)); self.assertTrue(any("examples" in n for n in log))
         self.assertTrue(any(n.startswith("rewrote 2 `go run`") for n in log))
+    def test_an_assertion_that_contradicts_itself_is_dropped(self):
+        # 2026-10-18 calc4 T6: `./calc abc` with "stdout": "" and "stdout_contains": ["error:"] can hold for no program
+        both = {"type": "run", "argv": ["./calc", "abc"], "exit": 2, "stdout": "", "stdout_contains": ["error:"]}
+        fits = {"type": "run", "argv": ["./calc", "8"], "stdout": "8\n", "stdout_contains": ["8", " 8\n", "\n"]}       # contained texts inside the output: fine
+        partly = {"type": "run", "argv": ["./calc", "2", "+", "2"], "stdout": "4", "stdout_contains": ["4", "four"]}
+        out, _, why = self.screen([[both, fits, partly]]); self.assertEqual(out, [[BUILD, fits]])
+        self.assertIn("no program can do", why[0][0]); self.assertIn("'error:'", why[0][0]); self.assertIn("'four'", why[0][1])
+        self.assertIsNone(G._contradictory({"type": "run", "argv": ["./calc"], "stdout_contains": ["error:"]}))   # no exact stdout: nothing to contradict
     def test_standard_error_text_expected_on_standard_output_is_dropped_except_with_stdin_or_merged_streams(self):
         spec = CALC_SPEC + "4. Division by zero prints `error: division by zero` to standard error.\n"
         out = {"type": "run", "argv": ["./calc", "1", "/", "0"], "stdout_contains": ["error: division by zero"], "exit": 1}       # 2026-10-17 probe, T6

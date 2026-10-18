@@ -23,8 +23,8 @@ def load(name):
 def leaked(a): return a["type"] == "call" and any(isinstance(v, str) and v in A.LEAKED for v in a.get("args") or [])
 
 # Ratchets (2026-10-16). Unsound = fails on the reference solution, so no correct code can ever pass it.
-UNSOUND_ACCEPTED_MAX = {"level_01": 104, "pyutils": 78, "calc_go": 215}      # unsound assertions that clean()+validate() leave unchanged and accept, per suite
-                                    # (2026-10-18 rebuild with the calc3 run: 410 unsound of 788; the plan-level screen, grounding.screen, catches far more: see TestScreenCorpus)
+UNSOUND_ACCEPTED_MAX = {"level_01": 104, "pyutils": 78, "calc_go": 220}      # unsound assertions that clean()+validate() leave unchanged and accept, per suite
+                                    # (2026-10-18 rebuilds with the calc3 and calc4 runs: 415 unsound of 797; the plan-level screen, grounding.screen, catches far more: see TestScreenCorpus)
 COLLAPSED_PLANS = 3                 # raw first-round replies with fewer tasks than the spec has items (all three before minItems = spec items)
 
 def pipeline(rows):
@@ -107,8 +107,11 @@ def screened(rows):
 # 2026-10-18: a kept assertion the harness changed (repaired, or rewritten from `go run` to the built program) is judged again as it is now, which
 # lowered level_01 and pyutils (their repaired assertions hold). The rebuild added the calc3 run and the two planning probes of 2026-10-17; _joined
 # drops the 17 of their checks that pass a whole expression as one argument, and via_built makes 6 malformed-input checks (exit status 2) sound.
+# The rebuild with the calc4 run added 5 impossible checks of its T6 (calc_go 46 -> 51); _contradictory (stdout exactly S, and containing a text S
+# does not contain) drops 17 distinct assertions, all impossible: 4 of those 5 and 14 uses in level_01 (51 -> 47, 153 -> 139). The fifth, `calc 2 3`
+# printing 5, is left to the re-derivation (the spec says two numbers in a row exit with status 2).
 SCREEN_SOUND_DROPPED = {"level_01": 3, "pyutils": 1, "calc_go": 4}
-SCREEN_UNSOUND_KEPT = {"level_01": 153, "pyutils": 100, "calc_go": 46}     # may only go down
+SCREEN_UNSOUND_KEPT = {"level_01": 139, "pyutils": 100, "calc_go": 47}     # may only go down
 
 class TestScreenCorpus(unittest.TestCase):
     @classmethod
@@ -154,6 +157,13 @@ class TestScreenCorpus(unittest.TestCase):
         p = "cap-20261017-215705-calc3-control-calc-go-r1"
         t7 = [r["assert"] for r in self.rows if r["suite"] == "calc_go" for s in r["sources"] if s["project"] == p and s["task"] == "T7"]
         self.assertEqual(len(t7), 12); self.assertEqual([a for a in t7 if self.kept[("calc_go", p, "T7", K.akey(a))] is not None], [])
+    def test_checks_that_contradict_themselves_are_screened_out_and_none_of_them_is_correct(self):
+        # 2026-10-18 calc4 T6: four of its six checks wanted standard output to be "" and to contain "error:" at once, so T6 could never pass
+        p = "cap-20261018-075607-calc4-control-calc-go-r1"
+        t6 = [r["assert"] for r in self.rows if r["suite"] == "calc_go" for s in r["sources"] if s["project"] == p and s["task"] == "T6" and r["assert"].get("stdout_contains")]
+        self.assertEqual(len(t6), 4); self.assertEqual([a for a in t6 if self.kept[("calc_go", p, "T6", K.akey(a))] is not None], [])
+        hit = [r for r in self.rows if G._contradictory(r["assert"])]
+        self.assertGreaterEqual(len(hit), 17); self.assertEqual({r["reference"] for r in hit}, {"fails"})
 
 class TestPlanReplyReplay(Sandboxed):
     """Each raw planner reply goes through the harness's post-processing exactly as plan_auto would (no model), on the level-1 seed."""
