@@ -106,6 +106,17 @@ def _shelve(proj, task):
     if n: task["unverified_patch"] = path
     return path if n else None
 
+def _from_checkpoint(proj, tid, attempt):
+    """Before a split: the last attempt's changes are saved as a patch (unverified/<task>.attempt<N>.patch) and the code goes back to the last
+    verified checkpoint, so the children start from verified code and the guard rejects a child whose check already holds there. 2026-10-18
+    calc4: T6 was split while its last attempt had left a syntax error, so a child whose only assertion was the build step failed 'now', was
+    accepted, and was then verified by fixing that error (T6.1)."""
+    path = proj.p("unverified", f"{tid}.attempt{attempt}.patch")
+    if G.shelve(proj, path):
+        append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "shelve", "ok": True, "task": tid, "patch": path,
+                     "reason": f"{tid}: the split starts from the last verified checkpoint; attempt {attempt}'s changes are in {path}"})
+    G.reset_to_last_good(proj)
+
 def _block(proj, task, why_text, res):
     """2026-10-17 calc3: the blocked T7 left a half-done main.go in the tree, so the program as left was not the one the checks had verified."""
     patch = _shelve(proj, task)
@@ -257,6 +268,7 @@ def _step(proj, fresh, box):
         if rd.get("changed"):
             return {"event": "task_failed", "task": task["id"], "attempt": attempt, "rung": 1, "fresh": fresh, "check_rc": res["rc"], "tamper": tamper2,
                     "out_tail": res["out"][-400:], "check_rederived": {"removed": len(rd["removed"]), "added": len(rd["added"])}}
+        _from_checkpoint(proj, task["id"], attempt)                   # after the re-derivation: a changed check may already hold on the code as it is
         r = Z.auto_split(proj, task["id"], err_text(task, res), timeout=clk.cap(1800) if clk else 1800, avoid=rd.get("avoid"))
         if r["ok"]: return {"event": "task_split", "task": task["id"], "children": r["children"], "attempt": attempt, "tamper": tamper2}
         with store.locked():                                   # no split available: skip straight to the next rung

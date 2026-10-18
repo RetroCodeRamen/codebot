@@ -1,5 +1,5 @@
 """F4: retry-with-error -> reset+fresh -> split -> alternate prompt -> (larger model) -> blocked. Blocked never stops the run."""
-import json, os, re, subprocess, unittest
+import json, os, re, subprocess, sys, unittest
 from helpers import Sandboxed
 from codebot import engine, tasks as T
 
@@ -86,6 +86,21 @@ class TestStopsWhereItSucceeds(Base):
     def test_hard_cap_blocks_even_with_rungs_left(self):
         self.cfg(**{**QUIET, "TASK_MAX_ATTEMPTS": 3}, WORKER_CMD=self.worker(NOTHING))
         ev = self.run_until(lambda e: e["event"] == "task_blocked"); self.assertEqual(len(ev), 3)
+
+class TestSplitFromVerifiedCode(Base):
+    def test_a_split_starts_from_the_last_checkpoint_so_a_child_that_already_holds_there_is_rejected(self):
+        # 2026-10-18 calc4: T6 split while its last attempt had left a syntax error; a child that only built the program failed "now", was accepted,
+        # and was verified by fixing that error (T6.1)
+        self.write_code("good.txt", "fine\n")                                       # part of the verified code (the baseline)
+        hook = os.path.join(self.tmp, "split_hook.py")
+        with open(hook, "w") as f: f.write('import json\nprint(json.dumps({"subtasks": [{"title": "keep good.txt", "check": "test -f good.txt", "files": [], "size": "S"}]}))\n')
+        self.cfg(**QUIET, CHECK_BASELINE_GUARD=1, SPLIT_CMD=f"{sys.executable} {hook}", WORKER_CMD=self.worker("import os\nif os.path.exists('good.txt'): os.remove('good.txt')"))
+        ev = self.run_until(lambda e: e.get("attempt") == 4 or e["event"] in ("task_split", "task_blocked"))     # attempt 4 ends rung 2: the split rung follows
+        self.assertNotIn("task_split", [e["event"] for e in ev])                    # the child's check holds on verified code: it tests nothing
+        self.assertTrue(any(l["op"] == "escalate" and "no split available" in l["reason"] for l in self.plan_log()))
+        shelf = [l for l in self.plan_log() if l["op"] == "shelve"]; self.assertEqual(len(shelf), 1); self.assertIn("attempt 4", shelf[0]["reason"])
+        self.assertTrue(os.path.exists(os.path.join(self.code, "good.txt")))          # the code is back at the checkpoint
+        with open(shelf[0]["patch"]) as f: self.assertIn("deleted file mode", f.read())   # and the attempt's change (good.txt removed) is in the patch
 
 class TestBlocked(Base):
     def block_t1(self):
