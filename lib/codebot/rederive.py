@@ -86,7 +86,7 @@ def run(proj, tid, last_out="", timeout=900):
         return {"changed": False, "avoid": avoid, "why": "judged required"}
     kept = [a for i, a in enumerate(asserts, 1) if i not in wrong]; removed = [asserts[i - 1] for i in sorted(wrong)]
     reps, notes = _replacements(proj, task, data, spec, reply.get("replacements"), kept, removed)
-    new = kept + reps
+    new = G.with_build(kept + reps, spec) if spec else kept + reps
     if A.validate(new):
         append_jsonl(proj.p("plan.log"), {**log, "ok": False, "reason": "removing the wrong assertions would leave no usable check", "wrong": wrong, "notes": notes[:10]})
         return {"changed": False, "avoid": avoid, "why": "nothing usable left"}

@@ -156,9 +156,13 @@ Fixes, in the order they landed:
    (the module comes from "`textutil.py` provides `slugify(...)`" or the spec's only module), "`calc 2 + 3` prints `5`" becomes a `run` of the
    built program after the build command the spec names (`go build -o calc .`). All 59 examples in the catalog hold on the reference solutions.
    Model assertions, in the planner and the splitter, are screened: Python in a project that is not Python, an option, shell syntax or the
-   program's own name passed to a program expected to succeed, an exit status `go run` can never report, a contradiction with a spec example or a
-   finished task's check, and assertions of the plan that expect results for the same input that cannot all hold (a strict majority wins; a tie is
-   broken by text the spec sends to standard error; otherwise all of them go) are dropped and logged. On the replay corpus (rebuilt with the calc_go
+   program's own name passed to a program expected to succeed, an exit status `go run` can never report, text the spec sends to standard error
+   expected on standard output (not for stdin input or merged streams), a contradiction with a spec example or a finished task's check, and
+   assertions of the plan that expect results for the same input that cannot all hold (a strict majority wins; otherwise all of them go) are
+   dropped and logged. A check that runs the program the spec says how to build starts with the build step (the binary is git-ignored, so it
+   survives a reset and would otherwise be judged stale). A requirement whose per-item replies are both unusable is planned from its examples
+   alone (plan.log op `item_from_examples`). Real-model check (2 fresh calc_go plans, control model): 35/45 and 42/45 frozen assertions hold on
+   the reference, against 21/41 and 14/51 for the two earlier control builds; 4 of 7 tasks fully sound in each. On the replay corpus (rebuilt with the calc_go
    runs: 718 real assertions, 381 impossible) the screen drops 491 uses of impossible calc_go assertions and keeps 105 of 109 correct ones (the 4
    are `python3 calc.py` checks that "hold" only because Python cannot open the missing file); on level 1 and pyutils it drops 39 impossible uses
    and 4 correct ones, each half of a pair the model contradicted itself with. `tests/test_w_corpus.py` ratchets these numbers per suite.

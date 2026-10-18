@@ -235,7 +235,7 @@ def _python_in_other(a):
 
 def stderr_only(spec):
     """Texts the spec sends to standard error and never to standard output ("prints `error: division by zero` to standard error"): expecting one of
-    them on standard output is a mistake. Used only to break a tie between assertions that contradict each other."""
+    them on standard output is a mistake (see _on_wrong_stream)."""
     err, out = set(), set()
     for m in re.finditer(r"`([^`\n]+)`\)?\s+(?:to|on)\s+(?:the\s+)?(standard error|stderr|standard output|stdout)\b", spec, re.I):
         (err if m.group(2).lower() in ("standard error", "stderr") else out).add(m.group(1).strip())
@@ -246,6 +246,21 @@ def _strike(a, err_only):
     if a.get("type") != "run" or not err_only: return False
     wanted = [s.strip() for s in _contains(a)] + ([a["stdout"].strip()] if isinstance(a.get("stdout"), str) else [])
     return any(t and any(t == x or x in t for x in err_only) for t in wanted)
+
+def _on_wrong_stream(a, err_only):
+    """Why an assertion expects on standard output a text the spec sends to standard error. Not for input on stdin (a spec may print errors on
+    standard output in that mode) nor when the command merges the two streams (2>&1). Every such assertion in the corpus is impossible (5 of 5)."""
+    if "stdin" in a or any("2>&1" in str(x) for x in a.get("argv") or []) or not _strike(a, err_only): return None
+    return "it expects on standard output a text the specification sends to standard error"
+
+def with_build(asserts, spec):
+    """A check that runs the program the spec says how to build starts by building it, so it never judges a stale binary (the built program is
+    usually git-ignored, so it survives a reset to the last checkpoint and an edit that no check rebuilt)."""
+    build, prog = build_step(spec)
+    if not build or not isinstance(asserts, list): return asserts
+    step = {"type": "run", "argv": list(build), "exit": 0}
+    if not any(isinstance(a, dict) and a.get("type") == "run" and (a.get("argv") or [None])[0] in (prog, "./" + prog) for a in asserts): return asserts
+    return [step] + [a for a in asserts if a != step]
 
 def invocation(a, prog=None):
     """What an assertion exercises: the same call, or the same command line and standard input (./calc and calc are one program; `go run .` is kept
@@ -298,11 +313,11 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
     task, never dropped). spec_examples: every example of the spec (none may be contradicted). context: assertions already in force elsewhere (a
     split's parent, finished tasks), which a group may not contradict either; they are never dropped here. label: how notes name a group.
     Rules: an exact duplicate is merged; Python code in a project that is not Python is dropped; a command expected to succeed that passes an option
-    or shell syntax the spec never mentions, or the program's own name, is dropped; an exit status `go run` can never report is dropped; an
-    assertion that contradicts a spec example or the context is dropped; assertions of the groups that exercise the same call or command line with
-    results that cannot all hold are dropped, except those that agree with a strict majority of them. Without a majority, an assertion that expects
-    on standard output a text the spec sends to standard error loses; otherwise every assertion in the clash goes (at least one of them is wrong
-    and nothing says which)."""
+    or shell syntax the spec never mentions, or the program's own name, is dropped; an exit status `go run` can never report is dropped; text the
+    spec sends to standard error expected on standard output is dropped; an assertion that contradicts a spec example or the context is dropped;
+    assertions of the groups that exercise the same call or command line with results that cannot all hold are dropped, except those that agree
+    with a strict majority of them (a tie drops every assertion in the clash: at least one of them is wrong and nothing says which). A group that
+    runs the program the spec says how to build starts with that build step (with_build)."""
     prepend = prepend or [[] for _ in groups]; _, prog = build_step(spec); toks = spec_tokens(spec); err_only = stderr_only(spec)
     notes, why, gone = [], collections.defaultdict(list), {}
     stage = []
@@ -313,7 +328,7 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
             k = json.dumps(a, sort_keys=True)
             if k in keys: continue
             keys.add(k)
-            r = (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _unobservable(a)
+            r = (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
             if r: notes.append(f"{label}{gi + 1}: dropped {_short(a)}: {r}"); why[gi].append(r); continue
             kept.append(a)
         stage.append(kept)
@@ -338,11 +353,7 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
         clash = [m for m in members if any(not compatible(m[2], o[2]) for o in members if o is not m)]
         if not clash: continue
         sig, n = collections.Counter(_sig(m[2]) for m in members).most_common(1)[0]
-        if n * 2 > len(members): losers = [m for m in members if not compatible(m[2], next(o[2] for o in members if _sig(o[2]) == sig))]
-        else:
-            struck = [m for m in clash if _strike(m[2], err_only)]; rest = [m for m in clash if m not in struck]
-            fine = struck and rest and all(compatible(x[2], y[2]) for x in rest for y in rest)
-            losers = struck if fine else clash          # 2026-10-17 control rerun T6: `stdout ""` vs `stdout_contains "error: division by zero"` (the spec sends it to stderr)
+        losers = [m for m in members if not compatible(m[2], next(o[2] for o in members if _sig(o[2]) == sig))] if n * 2 > len(members) else clash
         for gi, ai, _ in losers: gone[(gi, ai)] = f"it and {len(members) - 1} other assertion(s) of the plan expect results for the same input that cannot all hold"
     out = []
     for gi, (g, ex) in enumerate(zip(stage, prepend)):
@@ -350,5 +361,5 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
         for ai, a in enumerate(g):
             if (gi, ai) in gone: notes.append(f"{label}{gi + 1}: dropped {_short(a)}: {gone[(gi, ai)]}"); why[gi].append(gone[(gi, ai)])
             else: kept.append(a)
-        out.append(list(ex) + kept)
+        out.append(with_build(list(ex) + kept, spec))
     return out, notes, dict(why)

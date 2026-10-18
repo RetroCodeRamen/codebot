@@ -131,7 +131,7 @@ def _per_item(proj, spec, repo, sizing, left, num_predict, log):
     items = item_texts(spec); tasks, errors, raws, t0 = [], [], {}, time.time()
     head = f"SPECIFICATION\n{spec}\n\nCODE DIRECTORY (read only, current files):\n{repo or '(empty)'}\n\n{('SIZING HISTORY: ' + sizing) if sizing else ''}\n"
     for n, text in enumerate(items, 1):
-        task = None
+        task, err = None, "no time left in the planning budget"
         for attempt in (1, 2):
             budget = left - (time.time() - t0)
             if budget < 60: break
@@ -141,6 +141,10 @@ def _per_item(proj, spec, repo, sizing, left, num_predict, log):
             except ollama.ModelError as e: task, err, raw = None, f"model error: {e}", None
             if raw is not None: raws[f"{n}.{attempt}"] = raw
             if task is not None: break
+        if task is None and G.examples(spec, text):          # the spec's own examples are a check without the model: plan the item from them (salvage)
+            task = {"title": re.sub(r"^\s*\d+[.)]\s*", "", text).split(". ")[0].strip()[:120], "files": [], "size": "S", "deps": [], "asserts": []}
+            log(f"planner item {n}: no usable reply ({err}); planned from the specification's own examples")
+            append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "item_from_examples", "ok": True, "reason": f"item {n}: {err}"})
         if task is None: errors.append(f"item {n}: {err}"); log(f"planner item {n}: no usable reply ({err}); left out"); continue
         task["deps"] = [d for d in (task.get("deps") or []) if isinstance(d, int) and 1 <= d < n]
         task["item"] = n; tasks.append(task)                                   # the requirement it implements: the worker is shown that part of the spec

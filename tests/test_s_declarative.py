@@ -168,6 +168,14 @@ class TestPlanner(Sandboxed):
         open(os.path.join(self.state, "SPEC.md"), "w").write("1. a\n2. b\n3. c\n"); planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
         self.assertEqual(self.fake.requests[0]["format"]["properties"]["tasks"]["minItems"], 3)
         self.assertEqual(planner.plan_schema(4, 9)["properties"]["tasks"]["minItems"], 4); self.assertEqual(planner.plan_schema(10, 0)["properties"]["tasks"]["minItems"], 1)
+    def test_an_item_with_no_usable_reply_is_planned_from_the_specs_own_examples(self):
+        slug = {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}]}
+        self.start([slug, "not json", "still not json"])
+        open(os.path.join(self.state, "SPEC.md"), "w").write("# Text\nPython 3.\n\n1. `textutil.py` provides `slugify(text)`.\n2. `textutil.py` provides `shout(text)`: `shout(\"hi\")` is `\"HI\"`.\n")
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info)
+        _, tasks = planparse.parse_plan(self.read("PLAN.md")); self.assertEqual([t["title"] for t in tasks], ["Add slugify", "`textutil.py` provides `shout(text)`: `shout(\"hi\")` is `\"HI\"`."])
+        self.assertEqual(K.read_spec(self.proj(), "T2"), [{"type": "call", "module": "textutil", "func": "shout", "args": ["hi"], "expect": "HI"}])
+        self.assertTrue(any(json.loads(l).get("op") == "item_from_examples" for l in open(os.path.join(self.state, "plan.log"))))
     def test_per_item_planning_asks_once_per_item_and_leaves_out_an_unusable_item(self):
         slug = {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}]}
         title = {"title": "Add title", "files": ["textutil.py"], "size": "S", "deps": [1], "asserts": [{"type": "call", "module": "textutil", "func": "title", "args": ["a"], "expect": "A"}]}
@@ -333,32 +341,32 @@ class TestGrounding(Sandboxed):
     def test_python_in_a_project_that_is_not_python_is_dropped(self):
         call = {"type": "call", "module": "main", "func": "Add", "args": [1, 2], "expect": 3}; py = {"type": "run", "argv": ["python3", "calc.py", "1"], "stdout": "1"}
         tool = {"type": "run", "argv": ["python3", "-c", "import json; json.load(open('out.json'))"], "exit": 0}; ok = {"type": "run", "argv": ["./calc", "9"], "stdout": "9"}
-        out, notes, why = self.screen([[call, py, tool, ok]]); self.assertEqual(out, [[tool, ok]]); self.assertEqual(len(why[0]), 2)
+        out, notes, why = self.screen([[call, py, tool, ok]]); self.assertEqual(out, [[BUILD, tool, ok]]); self.assertEqual(len(why[0]), 2)      # ./calc is built first
         self.assertEqual(self.screen([[call]], PY_SPEC, "python")[0], [[call]])                       # in a Python project a call is the normal test
     def test_options_and_shell_syntax_the_spec_never_mentions_are_dropped_only_from_commands_expected_to_succeed(self):
         flag = {"type": "run", "argv": ["go", "run", ".", "-e", "calc", "-2.5", "+", "1"], "stdout_contains": ["-1.5"]}       # control rerun T4
         echo = {"type": "run", "argv": ["go", "run", ".", "echo", "2 + 3"], "stdout": "5\n", "exit": 0}                       # control rerun T7: stdin through argv
         bad_input = {"type": "run", "argv": ["./calc", "2", "|", "3"], "exit": 2}; neg = {"type": "run", "argv": ["./calc", "-3", "x", "-3"], "stdout": "9"}
-        out, _, why = self.screen([[flag, echo, bad_input, neg]]); self.assertEqual(out, [[bad_input, neg]])
+        out, _, why = self.screen([[flag, echo, bad_input, neg]]); self.assertEqual(out, [[BUILD, bad_input, neg]])
         self.assertTrue(any("'-e'" in w for w in why[0])); self.assertTrue(any("'echo'" in w and "stdin" in w for w in why[0]))
     def test_an_assertion_that_contradicts_a_spec_example_is_dropped(self):
         wrong = {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "6"}; via_go_run = {"type": "run", "argv": ["go", "run", ".", "6", "x", "7"], "stdout": "40"}
         same = {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5\n", "exit": 0}
-        out, _, why = self.screen([[wrong, same], [via_go_run]]); self.assertEqual(out, [[same], []])
+        out, _, why = self.screen([[wrong, same], [via_go_run]]); self.assertEqual(out, [[BUILD, same], []])
         self.assertTrue(all("own example" in w for w in why[0] + why[1]))
     def test_assertions_that_cannot_all_hold_are_dropped_unless_a_majority_agrees(self):
         five = [{"type": "run", "argv": ["go", "run", "."], "stdout": s, "exit": 0} for s in ("5\n", "3.5\n", "0.3333333333333333\n", "0\n", "-1.5\n")]   # control rerun T5
         out, _, why = self.screen([five]); self.assertEqual(out, [[]]); self.assertEqual(len(why[0]), 5)
         err = {"type": "run", "argv": ["go", "run", ".", "10", "/", "0"], "stdout": "", "exit": 1}
         on_stdout = {"type": "run", "argv": ["go", "run", ".", "10", "/", "0"], "stdout_contains": ["error: division by zero"], "exit": 1}       # control rerun T6
-        self.assertEqual(self.screen([[err, on_stdout]])[0], [[err]])               # a tie, broken by the spec: it sends `error:` text to standard error
+        self.assertEqual(self.screen([[err, on_stdout]])[0], [[err]])               # the spec sends `error:` text to standard error, so on_stdout goes first
         plain = dict(err, stdout="oops"); self.assertEqual(self.screen([[err, plain]])[0], [[]])        # a tie nothing breaks: at least one is wrong, both go
         self.assertEqual(G.stderr_only(CALC_SPEC), {"error:"})
         self.assertEqual(G.stderr_only("prints `error: x` to standard error. In batch mode the message (starting with `error:`) goes on standard output"), {"error: x"})
         a3 = {"type": "call", "module": "textutil", "func": "slugify", "args": ["a  b"], "expect": "a-b"}; b = dict(a3, expect="a_b")
         self.assertEqual(self.screen([[a3], [a3], [b]], PY_SPEC, "python")[0], [[a3], [a3], []])       # two tasks agree: the third is dropped
         compatible = [{"type": "run", "argv": ["./calc", "8"], "stdout": "8"}, {"type": "run", "argv": ["./calc", "8"], "stdout_contains": ["8"]}]
-        self.assertEqual(self.screen([compatible])[0], [compatible])
+        self.assertEqual(self.screen([compatible])[0], [[BUILD] + compatible])
     def test_the_harness_examples_come_first_and_duplicates_are_merged(self):
         items = specdoc.item_texts(CALC_SPEC); ex = G.examples(CALC_SPEC, items[0])
         mine = {"type": "run", "argv": ["./calc", "1", "+", "1"], "stdout": "2"}
@@ -383,6 +391,19 @@ class TestGrounding(Sandboxed):
         self.assertEqual(list(bad), [3]); self.assertIn("go run", bad[3])                            # nothing usable left: the repair round is told why
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "assertions_salvaged" in l][-1]["notes"]
         self.assertTrue(any("own example" in n for n in log)); self.assertTrue(any("not written in Python" in n for n in log)); self.assertTrue(any("examples" in n for n in log))
+    def test_standard_error_text_expected_on_standard_output_is_dropped_except_with_stdin_or_merged_streams(self):
+        spec = CALC_SPEC + "4. Division by zero prints `error: division by zero` to standard error.\n"
+        out = {"type": "run", "argv": ["./calc", "1", "/", "0"], "stdout_contains": ["error: division by zero"], "exit": 1}       # 2026-10-17 probe, T6
+        piped = dict(out, stdin="1 / 0\n"); merged = {"type": "run", "argv": ["bash", "-c", "./calc 1 / 0 2>&1"], "stdout_contains": ["error: division by zero"], "exit": 1}
+        res, _, why = G.screen([[out, piped, merged]], spec, "other", None, []); self.assertEqual(res, [[G.build_step(spec) and {"type": "run", "argv": ["go", "build", "-o", "calc", "."], "exit": 0}, piped, merged]])
+        self.assertIn("standard error", why[0][0])
+    def test_a_check_that_runs_the_built_program_builds_it_first(self):
+        # the binary is git-ignored: a check that only runs ./calc judges whatever build was left behind (a reset to the last checkpoint keeps it)
+        run = {"type": "run", "argv": ["./calc", "4"], "stdout": "4"}; build = {"type": "run", "argv": ["go", "build", "-o", "calc", "."], "exit": 0}
+        self.assertEqual(G.with_build([run], CALC_SPEC), [build, run]); self.assertEqual(G.with_build([run, build], CALC_SPEC), [build, run])
+        self.assertEqual(G.with_build([{"type": "file_exists", "path": "go.mod"}], CALC_SPEC), [{"type": "file_exists", "path": "go.mod"}])
+        self.assertEqual(G.with_build([run], PY_SPEC), [run])                                         # nothing to build
+        self.assertEqual(self.screen([[run]])[0], [[build, run]])
     def test_context_is_authority_for_a_split(self):
         parent = {"type": "run", "argv": ["./calc", "4", "x", "2"], "stdout": "8"}; child = dict(parent, stdout="6")
         out, _, why = G.screen([[child]], CALC_SPEC, "other", None, [], [parent]); self.assertEqual(out, [[]]); self.assertIn("already in force", why[0][0])
