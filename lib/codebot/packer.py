@@ -2,7 +2,7 @@
 check, the last error, the files the task names, a compact repo/symbol map, the agreed decisions, a few relevant lessons.
 Nothing else, within a token budget."""
 import json, os, re, subprocess
-from . import checks as C, memory, modes, tokens
+from . import checks as C, memory, modes, specdoc, tokens
 from .config import now
 
 CHARS_PER_TOKEN = 3.5
@@ -132,6 +132,8 @@ def pack(proj, task, last_error="", budget_tokens=None):
     plan = section_from_md(proj.p("PLAN.md"), ["Goal", "Definition of done"], 900)
     if dec: secs.append(("AGREED DECISIONS", dec, 2))
     if plan: secs.append(("PROJECT GOAL", plan, 3))
+    spec = specdoc.for_task(proj, task)          # SPEC.md is in the state dir, which the worker may not read: without this it saw only the task title and the checks
+    if spec: secs.append(("SPECIFICATION (the part this task implements; the code must follow it exactly)", spec, 1))
     try: mnotes = modes.notes(proj.home, proj.mode)
     except modes.ModeError: mnotes = ""
     if mnotes: secs.append((f"MODE NOTES ({proj.mode})", mnotes, 3))
@@ -153,7 +155,7 @@ def pack(proj, task, last_error="", budget_tokens=None):
     if shown: secs.append(("RELEVANT FILES", "\n".join(shown), 3))
     # STABLE-FIRST ORDER: what rarely changes goes first so the model server's KV cache can reuse the longest prefix across turns
     # and attempts; what changes every attempt (task, last error, files) goes last. Priorities (above) still decide what is dropped.
-    ORDER = ["PROJECT GOAL", "AGREED DECISIONS", "MODE NOTES", "LESSONS", "REPO MAP", "TASK", "ACCEPTANCE CHECK", "PREVIOUS ATTEMPTS", "HUMAN ANSWERS", "LAST CHECK OUTPUT", "RELEVANT FILES"]
+    ORDER = ["PROJECT GOAL", "AGREED DECISIONS", "MODE NOTES", "LESSONS", "REPO MAP", "SPECIFICATION", "TASK", "ACCEPTANCE CHECK", "PREVIOUS ATTEMPTS", "HUMAN ANSWERS", "LAST CHECK OUTPUT", "RELEVANT FILES"]
     rank = lambda n: next((i for i, k in enumerate(ORDER) if n.startswith(k)), len(ORDER))
     render = lambda: "\n\n".join(f"## {n}\n{t}" for n, t, _ in sorted(secs, key=lambda s: rank(s[0])) if t)
     text = render()

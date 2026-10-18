@@ -2,7 +2,7 @@
 import json, os, re, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama, A
-from codebot import engine, worker, packer, tokens, thermal, ollama, tasks as T, audit
+from codebot import engine, worker, packer, specdoc, tokens, thermal, ollama, tasks as T, audit
 
 REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 PLAN = """
@@ -103,6 +103,45 @@ class TestCachedPrefix(Base):
         task = T.TaskStore(self.proj()).load()["tasks"][0]
         t1, _ = packer.pack(self.proj(), task, "AssertionError: add is wrong"); t2, _ = packer.pack(self.proj(), task, "NameError: name 'add' is not defined")
         common = os.path.commonprefix([t1, t2]); self.assertGreater(len(common), t1.index("## LAST CHECK OUTPUT") - 5)
+
+SPEC = """# Tiny calculator
+Use the standard library only. All code is in calc.py.
+
+## Requirements
+
+1. `add(a, b)` returns the sum. UNIQUE-ONE
+2. `sub(a, b)` returns the difference: `sub(5, 3)` is `2`. UNIQUE-TWO
+3. `mul(a, b)` returns the product. UNIQUE-THREE
+"""
+
+class TestSpecInContext(Base):
+    """2026-10-17 design review: SPEC.md lives in the state dir, which the worker may not read, so it never saw the spec; its picture of the project
+    was the task title, the frozen checks and the code. Now the harness packs the spec's introduction and the task's own requirement."""
+    def setUp(self):
+        super().setUp()
+        with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write(SPEC)
+    def pack(self, task=None, **kw):
+        task = task or T.TaskStore(self.proj()).load()["tasks"][0]; return packer.pack(self.proj(), task, "", **kw)
+    def test_the_task_sees_the_introduction_and_its_own_requirement_only(self):
+        specdoc.save_map(self.proj(), {"T1": 2})
+        text, man = self.pack()
+        self.assertIn("standard library only", text); self.assertIn("requirement 2 of 3", text); self.assertIn("UNIQUE-TWO", text)
+        self.assertNotIn("UNIQUE-ONE", text); self.assertNotIn("UNIQUE-THREE", text)
+        self.assertIn("SPECIFICATION", [n for n, _ in man["sections"]])
+    def test_a_subtask_and_a_task_added_during_its_root_see_the_roots_requirement(self):
+        specdoc.save_map(self.proj(), {"T1": 3})
+        for t in ({"id": "T1.2", "title": "part"}, {"id": "T9", "title": "added", "budget_root": "T1"}):
+            text, _ = self.pack(t); self.assertIn("UNIQUE-THREE", text, t["id"]); self.assertNotIn("UNIQUE-TWO", text)
+    def test_without_a_recorded_requirement_a_short_spec_is_shown_whole(self):
+        text, _ = self.pack(); self.assertIn("UNIQUE-ONE", text); self.assertIn("UNIQUE-THREE", text)
+    def test_without_a_spec_nothing_changes(self):
+        os.remove(os.path.join(self.state, "SPEC.md")); _, man = self.pack(); self.assertNotIn("SPECIFICATION", [n for n, _ in man["sections"]])
+    def test_the_spec_comes_after_the_stable_sections_and_before_the_task(self):
+        specdoc.save_map(self.proj(), {"T1": 1}); text, _ = self.pack()
+        self.assertLess(text.index("## REPO MAP"), text.index("## SPECIFICATION")); self.assertLess(text.index("## SPECIFICATION"), text.index("## TASK"))
+    def test_the_spec_survives_a_tight_budget_before_the_repo_map_does(self):
+        specdoc.save_map(self.proj(), {"T1": 2}); _, man = self.pack(budget_tokens=500)
+        names = [n for n, _ in man["sections"]]; self.assertIn("SPECIFICATION", names)
 
 class TestStatsAndThermal(Base):
     def test_timing_stats_reach_the_trace_and_the_audit_log(self):

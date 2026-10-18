@@ -4,7 +4,7 @@ rejected tasks only, asks the model for corrected assertions with the exact reas
 interpreter or a file, so the mistakes the free-form opencode planner made (wrong paths, backticks, <placeholders>, scripts run with the wrong
 interpreter, implementation written instead of tests) cannot occur. The interactive `codebot plan` (a human in the loop) is unchanged."""
 import json, os, re, subprocess, sys, time
-from . import assertions as A, checkspec as K, guard, ollama, packer, planparse, roles
+from . import assertions as A, checkspec as K, guard, ollama, packer, planparse, roles, specdoc
 from .config import Project, now, append_jsonl
 
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
@@ -54,22 +54,8 @@ def _chat(proj, system, user, schema, left, num_predict=5000):
     try: return json.loads(raw), None, raw
     except ValueError: return None, ("the reply was not valid JSON (cut off by the token limit?)" if r.get("done_reason") == "length" else "the reply was not valid JSON"), raw
 
-def spec_items(spec):
-    """Number of numbered items ('1. ...' or '2) ...') at the start of a line in the specification."""
-    return len(re.findall(r"^\s*\d+[.)]\s", spec, re.M))
-
-def item_texts(spec):
-    """The text of each numbered item, in order (an item runs to the next numbered line or the next heading)."""
-    lines = spec.splitlines(); out, cur = [], None
-    for ln in lines:
-        if re.match(r"^\s*\d+[.)]\s", ln):
-            if cur is not None: out.append("\n".join(cur).strip())
-            cur = [ln]
-        elif cur is not None:
-            if re.match(r"^\s*#", ln): out.append("\n".join(cur).strip()); cur = None
-            else: cur.append(ln)
-    if cur is not None: out.append("\n".join(cur).strip())
-    return out
+spec_items = specdoc.count_items           # number of numbered items ('1. ...' or '2) ...') at the start of a line
+item_texts = specdoc.item_texts            # the text of each numbered item, in order
 
 def _frame(spec):
     """goal / context / done for PLAN.md, taken from the spec itself (no model call): the first heading, the text before the first numbered item."""
@@ -116,6 +102,7 @@ def _write(proj, plan, spec="", actor="planner"):
         deps = [d for d in (t.get("deps") or []) if isinstance(d, int) and 1 <= d < i]
         tasks.append({"id": i, "title": t.get("title") or f"task {i}", "files": [f for f in (t.get("files") or []) if isinstance(f, str) and f.strip()], "size": t.get("size") or "S", "deps": deps})
     with open(proj.p("PLAN.md"), "w") as f: f.write(K.render_plan(plan.get("goal") or "", plan.get("context") or "", plan.get("done") or "", tasks))
+    specdoc.save_map(proj, {f"T{i}": t["item"] for i, t in enumerate(plan["tasks"], 1) if isinstance(t.get("item"), int)})
     if notes: append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "assertions_salvaged", "ok": True, "reason": f"{len(notes)} repair(s)/drop(s) by {actor}", "notes": notes[:40]})
     return bad
 
@@ -143,8 +130,8 @@ def _per_item(proj, spec, repo, sizing, left, num_predict, log):
             if task is not None: break
         if task is None: errors.append(f"item {n}: {err}"); log(f"planner item {n}: no usable reply ({err}); left out"); continue
         task["deps"] = [d for d in (task.get("deps") or []) if isinstance(d, int) and 1 <= d < n]
-        task["_item"] = n; tasks.append(task)
-    nums = {t.pop("_item"): i for i, t in enumerate(tasks, 1)}               # deps are item numbers; a left-out item shifts the task numbers
+        task["item"] = n; tasks.append(task)                                   # the requirement it implements: the worker is shown that part of the spec
+    nums = {t["item"]: i for i, t in enumerate(tasks, 1)}                      # deps are item numbers; a left-out item shifts the task numbers
     for t in tasks: t["deps"] = [nums[d] for d in t["deps"] if d in nums]
     return ({**_frame(spec), "tasks": tasks} if tasks else None), errors, raws
 

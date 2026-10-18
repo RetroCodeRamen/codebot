@@ -178,6 +178,7 @@ class TestPlanner(Sandboxed):
         _, tasks = planparse.parse_plan(self.read("PLAN.md")); self.assertEqual([t["title"] for t in tasks], ["Add slugify", "Add title"]); self.assertEqual(tasks[1]["deps"], ["T1"])
         self.assertIn("# Goal\nText utils", self.read("PLAN.md"))
         self.assertTrue(os.path.exists(os.path.join(self.state, "plan.reply.1.item2.2.json")))
+        self.assertEqual(json.loads(self.read("spec_items.json")), {"T1": 1, "T2": 3})        # the requirement each task implements (item 2 was left out), for the worker's context
     def test_after_the_last_round_the_good_tasks_are_kept(self):
         good = {"title": "Add slugify", "files": ["textutil.py"], "size": "S", "deps": [], "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["A B"], "expect": "a-b"}]}
         holds = {"title": "Keep README", "files": ["README.md"], "size": "S", "deps": [1], "asserts": [{"type": "file_exists", "path": "README.md"}]}    # already holds: rejected every round
@@ -188,6 +189,7 @@ class TestPlanner(Sandboxed):
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None)
         self.assertTrue(info["ok"], info); self.assertEqual(info["dropped_tasks"], ["Keep README"]); self.assertEqual(len(info["rounds"]), 3)
         _, tasks = planparse.parse_plan(self.read("PLAN.md")); self.assertEqual([t["title"] for t in tasks], ["Add slugify", "Add title"]); self.assertEqual(tasks[1]["deps"], [])
+        self.assertEqual(json.loads(self.read("spec_items.json")), {"T1": 1, "T2": 3})        # renumbered with the plan
         self.assertFalse(os.path.exists(os.path.join(self.state, "checks", "T3.spec.json")))
         self.assertTrue(any(json.loads(l).get("op") == "plan_salvaged" for l in open(os.path.join(self.state, "plan.log"))))
     def test_a_bad_assertion_costs_only_itself_not_its_task(self):

@@ -2,7 +2,7 @@
 Like the planner, the model emits declarative ASSERTIONS (assertions.py), never a shell command: the harness writes each child's spec file (a locked
 fixture) and builds its check command, so a split child can never get a check that cannot fail, cannot pass, or points at a path that does not exist."""
 import json, os, sys
-from . import assertions as A, checkspec as K, checks as C, ollama, packer, roles
+from . import assertions as A, checkspec as K, checks as C, ollama, packer, roles, specdoc
 from .config import Project, now, append_jsonl
 
 SCHEMA = {"type": "object", "properties": {"subtasks": {"type": "array", "minItems": 2, "maxItems": 4, "items": {     # asked for 2-4; a split survives with 1 usable child
@@ -45,11 +45,13 @@ def main():
     rm, _ = packer.repo_map(proj.rundir, 2500)
     spec = K.read_spec(proj, task["id"]) if K.is_runner_check(task.get("check")) else None
     final = f"ASSERTIONS OF THE FINAL CHECK (kept as the last gate): {json.dumps(spec)[:1500]}" if spec else f"FINAL CHECK (kept as the last gate): {task.get('check')}"
+    req = specdoc.for_task(proj, task, cap=2500)       # without it the splitter invented steps the spec never asks for (2026-10-17: a Power method for a calculator)
+    req = f"SPECIFICATION (the part of the project this task belongs to; every step stays inside it):\n{req}\n\n" if req else ""
     prompt = (f"A task keeps failing and must be split into 2-4 smaller steps done in order. Each step needs its own ASSERTIONS (data, evaluated by a trusted runner in the code directory) "
               f"that FAIL right now and hold once that step is done. Steps must be small (one function, one file or one behaviour); together they must lead to the final check passing. "
               f"Assertion types: call {{\"type\":\"call\",\"module\":\"m\",\"func\":\"f\",\"args\":[..],\"expect\":value or \"raises\":\"ValueError\"}}; "
               f"run {{\"type\":\"run\",\"argv\":[\"python3\",\"tool.py\",..],\"stdout\":\"..\"}} (also exit, stdout_contains, stdout_json); file_exists/file_contains/file_not_contains with path (+ text). "
-              f"Use plain relative file names, never absolute paths.\n\nTASK: {task['title']}\n{final}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
+              f"Use plain relative file names, never absolute paths.\n\n{req}TASK: {task['title']}\n{final}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
     raw, why, notes = None, "", []
     try:
         r = ollama.chat(proj, [{"role": "system", "content": "You decompose coding tasks. Reply with JSON only."}, {"role": "user", "content": prompt}],
