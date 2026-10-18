@@ -113,6 +113,12 @@ class TestEngineBudgets(Sandboxed):
         self.assertGreaterEqual(TC.used(self.proj(), "T1"), 2.8); self.assertEqual(self.status()["T1"], "timeout")
         self.assertNotEqual(self.status()["T1"], "blocked")
 
+    def test_a_timed_out_attempt_is_set_aside_as_a_patch(self):
+        self.set_env(WORKER_CMD=self.worker("import time\nopen('half.txt', 'w').write('half done\\n'); time.sleep(300)"))
+        e = engine.step(self.proj()); self.assertEqual(e["event"], "task_timeout")
+        self.assertFalse(os.path.exists(os.path.join(self.code, "half.txt")))                               # the code went back, as before
+        t = self.data()["tasks"][0]; self.assertEqual(e["patch"], t["unverified_patch"]); self.assertIn("+half done", open(e["patch"]).read())
+
     def test_split_children_and_the_parent_gate_share_the_original_budget(self):
         s = self.proj(); r = planops.apply(s, {"op": "split_task", "task": "T1", "reason": "test", "subtasks": [
             {"title": "half a", "check": "grep -qx hi a.txt", "size": "S"}, {"title": "half b", "check": "grep -qx hi a.txt", "size": "S"}]})

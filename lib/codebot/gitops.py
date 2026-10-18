@@ -50,6 +50,20 @@ def checkpoint(proj, task):
     cp = load(proj); cp["list"].append({"task": task["id"], "sha": sha, "tag": tag, "ts": now()}); _save(proj, cp)
     return sha
 
+def shelve(proj, path):
+    """Before a reset that ends a task's work: write the code dir's changes since the last verified checkpoint (changed and new files; ignored ones,
+    such as a built program or a build cache, are not in it) to path as a patch `git apply` restores. Returns the number of files in it (0: nothing
+    was written)."""
+    base = last_good(proj)
+    if not base: return 0
+    git(proj.rundir, "add", "-A")                    # new files too; the reset that follows clears the index again
+    names = [n for n in git(proj.rundir, "diff", "--cached", "--name-only", "-z", base).stdout.split("\0") if n]
+    if not names: return 0
+    r = subprocess.run(["git", "-C", proj.rundir, *_ID, "diff", "--cached", "--binary", base], capture_output=True)    # bytes: any file encoding
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f: f.write(r.stdout)
+    return len(names)
+
 def reset_to_last_good(proj):
     """Hard-reset tracked files and remove untracked, non-ignored files created since. Never goes below baseline."""
     sha = last_good(proj)

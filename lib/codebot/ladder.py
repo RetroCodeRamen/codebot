@@ -49,8 +49,9 @@ def log_escalation(proj, task, old, new, why):
                  "reason": f"{task['id']}: rung {old} ({NAMES.get(old)}) -> {new} ({NAMES.get(new)}): {why}",
                  "before": [(task["id"], old)], "after": [(task["id"], new)]})
 
-def question(proj, task, last_error):
+def question(proj, task, last_error, patch=None):
     tried = ", ".join(NAMES[i] for i in range(1, 6) if i != 5 or has_big_model(proj))
     return (f"{task['id']} \"{task['title']}\" failed through the whole ladder ({tried}). "
             f"Last error: {last_error[-300:].strip()}  "
-            f"What should I do? Reply with: codebot answer {proj.name} \"{task['id']}: <your guidance>\"").replace("\n", " ")
+            + (f"The code is back at the last verified checkpoint; the last attempt's changes are in {patch} (`git apply` it in the code directory to see them).  " if patch else "")
+            + f"What should I do? Reply with: codebot answer {proj.name} \"{task['id']}: <your guidance>\"").replace("\n", " ")

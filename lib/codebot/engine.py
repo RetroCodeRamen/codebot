@@ -97,11 +97,22 @@ def _rederive(proj, tid, out, clk):
         append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "check_rederived", "ok": False, "task": tid, "reason": f"error: {type(e).__name__}: {str(e)[:200]}"})
         return {"changed": False, "avoid": []}
 
+def _shelve(proj, task):
+    """A task's work ends unverified (blocked, or out of time): its changes since the last verified checkpoint are saved as a patch in the state
+    directory (unverified/<task>.attempt<N>.patch) and the code goes back to that checkpoint, so later tasks, and the code as the run leaves it,
+    hold only verified work. Returns the patch path, or None when there was nothing to save."""
+    path = proj.p("unverified", f"{task['id']}.attempt{task['attempts']}.patch")
+    n = G.shelve(proj, path); G.reset_to_last_good(proj)
+    if n: task["unverified_patch"] = path
+    return path if n else None
+
 def _block(proj, task, why_text, res):
-    task["status"] = "blocked"; task["blocked_question"] = L.question(proj, task, why_text)
+    """2026-10-17 calc3: the blocked T7 left a half-done main.go in the tree, so the program as left was not the one the checks had verified."""
+    patch = _shelve(proj, task)
+    task["status"] = "blocked"; task["blocked_question"] = L.question(proj, task, why_text, patch)
     Z.record(proj, task, "blocked")
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "block", "ok": True,
-                 "reason": task["blocked_question"][:400], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")]})
+                 "reason": task["blocked_question"][:400], "before": [(task["id"], "pending")], "after": [(task["id"], "blocked")], **({"patch": patch} if patch else {})})
 
 def block_terminal(proj): return str(proj.get("BLOCK_TERMINAL", "0")).lower() in ("1", "true", "yes")
 
@@ -117,17 +128,19 @@ def _expire_exhausted(proj, data):
 
 def _time_out(proj, store, data, task, clk, why):
     """The root task's budget ran out: every unfinished task of that root ends as `timeout`, dependents become `skipped`, and the code goes back
-    to the last verified checkpoint so later tasks (and the final reference check) see a consistent tree. Caller holds the store lock."""
+    to the last verified checkpoint so later tasks (and the final reference check) see a consistent tree; the unverified attempt is kept as a
+    patch (_shelve). Caller holds the store lock."""
     root = TC.root_of(task); fam = [t for t in data["tasks"] if TC.root_of(t) == root and t["status"] in ("pending", "running")]
     for t in fam: t["status"] = "timeout"; t["timeout_reason"] = why
     skipped = T.resolve_skips(data, block_terminal(proj))
-    G.reset_to_last_good(proj); store.save(data)
+    patch = _shelve(proj, task); store.save(data)
     used = round(clk.used(), 1) if clk else None
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "timeout", "ok": True, "reason": f"{root}: {why}",
-                 "before": [(t["id"], "pending") for t in fam], "after": [(t["id"], "timeout") for t in fam]})
-    append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "timeout", "task": task["id"], "root": root, "used_s": used, "skipped": skipped})
+                 "before": [(t["id"], "pending") for t in fam], "after": [(t["id"], "timeout") for t in fam], **({"patch": patch} if patch else {})})
+    append_jsonl(proj.p("attempts.jsonl"), {"ts": now(), "event": "timeout", "task": task["id"], "root": root, "used_s": used, "skipped": skipped, **({"patch": patch} if patch else {})})
     TC.mark(proj, root, "timeout", clk.remaining() if clk else None)
-    return {"event": "task_timeout", "task": task["id"], "root": root, "used_s": used, "limit_s": TC.limit_s(proj), "unfinished": [t["id"] for t in fam], "skipped": skipped}
+    return {"event": "task_timeout", "task": task["id"], "root": root, "used_s": used, "limit_s": TC.limit_s(proj), "unfinished": [t["id"] for t in fam], "skipped": skipped,
+            **({"patch": patch} if patch else {})}
 
 def step(proj, fresh=False):
     """One attempt at the next task (see _step). The task's budget interval is always closed, even when the step raises."""

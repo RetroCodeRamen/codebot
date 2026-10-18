@@ -1,5 +1,5 @@
 """F4: retry-with-error -> reset+fresh -> split -> alternate prompt -> (larger model) -> blocked. Blocked never stops the run."""
-import json, os, re, unittest
+import json, os, re, subprocess, unittest
 from helpers import Sandboxed
 from codebot import engine, tasks as T
 
@@ -96,6 +96,16 @@ class TestBlocked(Base):
         e = self.block_t1(); q = e["question"]
         self.assertIn("T1", q); self.assertIn("make a.txt say hi", q); self.assertIn("codebot answer t1", q); self.assertIn("ladder", q)
         self.assertEqual(self.task("T1")["blocked_question"], q)
+
+    def test_a_blocked_tasks_unverified_work_is_set_aside_as_a_patch(self):
+        # 2026-10-17 calc3: the blocked T7 left a half-done main.go in the tree, so the program as left was not the verified one
+        self.cfg(**QUIET, WORKER_CMD=self.worker("open('a.txt', 'w').write('hello\\n'); open('notes.txt', 'w').write('half done\\n')"))
+        e = self.run_until(lambda e: e["event"] == "task_blocked")[-1]; t = self.task("T1")
+        self.assertEqual([f for f in ("a.txt", "notes.txt") if os.path.exists(os.path.join(self.code, f))], [])    # back at the last verified checkpoint
+        self.assertEqual(t["unverified_patch"], self.proj().p("unverified", f"T1.attempt{t['attempts']}.patch")); self.assertIn(t["unverified_patch"], e["question"])
+        self.assertEqual([l.get("patch") for l in self.plan_log() if l["op"] == "block"], [t["unverified_patch"]])
+        subprocess.run(["git", "-C", self.code, "apply", t["unverified_patch"]], check=True)                       # the attempt comes back as it was
+        self.assertEqual(open(os.path.join(self.code, "a.txt")).read(), "hello\n"); self.assertEqual(open(os.path.join(self.code, "notes.txt")).read(), "half done\n")
 
     def test_run_continues_to_next_unblocked_task(self):
         self.block_t1(); e = engine.step(self.proj()); self.assertEqual((e["event"], e["task"]), ("task_done", "T2"))
