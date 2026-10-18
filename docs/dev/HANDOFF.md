@@ -175,7 +175,36 @@ Fixes, in the order they landed:
    stays), the task starts again at rung 1, and the step returns `task_failed` with `check_rederived`. At most `REDERIVE_MAX` times per task
    (default 1, 0 = off); the call is paid from the task's own budget and is skipped when less than 2 minutes of it are left. Every outcome is
    logged (plan.log op `check_rederived`, the reply in `rederive.reply.<task>.json`). When nothing changes, the split goes ahead and no child gets
-   a persistent failure. Not yet run with the real model.
+   a persistent failure. First real run (calc3, 2026-10-17): it removed T1's impossible `go build ... -v` check and kept T3's correct ones, but
+   judged all 12 of T7's impossible one-argument checks required (item 7 below now drops those before anything is frozen).
+
+### Fixes after the first build on the fixed harness (2026-10-18)
+
+The control model on the fixed harness (calc3, 2026-10-17): 20/32 hidden tests as left (16/32 counting only verified code) and 11/20 hand inputs,
+against 16/32 and 13/32 for the two earlier control builds; 44 of 57 frozen assertions sound. What still went wrong, and the fixes:
+
+6. **`go run` checks run the built program** (`grounding.via_built`). Dropping the checks that expect exit status 2 through `go run` (which reports
+   every failure as 1) left the calculator's exit statuses untested, and it exited 1 for every error. When the spec says how to build the program
+   with Go, a `go run . ARGS` / `go run main.go ARGS` assertion becomes `./calc ARGS` (after the build step), unless it expects status 1, which
+   through `go run` means "failed" with any status. On the corpus 6 impossible checks become sound and none of the 42 rewritten sound ones breaks;
+   one (`calc 3 + 3` expecting status 2) becomes a wrong check that is kept instead of dropped.
+7. **One word per argument** (`grounding._joined`). All 12 checks of calc3's standard-input task passed the expression as ONE argument
+   (`go run . "2 + 3"`, meaning standard input), so the task could never pass. A command expected to succeed that packs into one argument words the
+   spec passes as separate arguments (`calc 2 + 3`) is dropped, with a reason that points at the stdin field. Only when every command line of the
+   spec gives the program one word per argument and some give it several; a spec that quotes an argument with spaces itself (pyutils) is exempt.
+   Corpus (rebuilt with calc3 and the two planning probes: 788 assertions, 410 impossible): drops all 17 such checks and no correct one.
+8. **The worker implements the requirement, not the check** (`modes/code/worker.md`). The rule was "make the smallest change that makes the
+   ACCEPTANCE CHECK pass", and calc3's code handled exactly the argument counts its checks used (1 or 3 tokens). The rule now asks for general
+   code for what the TASK and the SPECIFICATION section ask, never special-casing the check's inputs; the check still decides. Prompt only: the
+   next real build measures it.
+9. **A blocked or timed-out task leaves only verified code** (`engine._shelve`, `gitops.shelve`). calc3's blocked T7 left a half-done `main.go`
+   in the tree, so the program as left was not the verified one. The attempt's changes since the last checkpoint are saved as
+   `unverified/<task>.attempt<N>.patch` in the state directory (`git apply` restores them; ignored files such as the built program are not in
+   it), the code goes back to the last verified checkpoint, and the blocked question names the patch. A timeout, which already reset the code, now
+   saves the patch too. Bench scores "as left" now equal verified-only scores: compare a new build with calc3's 16/32, not 20/32.
+
+Found, not fixed yet: the split children of calc3's precedence task checked the program with `python3 -c "subprocess.run([...], input='2 + 3',
+capture_output=True)"`, which raises TypeError on every run (a str input without `text=True`), so they could never pass.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

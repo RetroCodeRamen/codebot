@@ -1,1 +1,1 @@
-Coding rules: make the smallest change that makes the ACCEPTANCE CHECK pass; run the check yourself with `run`; keep the existing style; do not add dependencies.
+Coding rules: implement what the TASK and the SPECIFICATION section ask for, as general code that handles every input that part of the specification describes, not only the inputs the ACCEPTANCE CHECK tries (never special-case the check's inputs); the ACCEPTANCE CHECK must pass, so run it yourself with `run`; keep what earlier tasks built working; keep the existing style; do not add dependencies.
