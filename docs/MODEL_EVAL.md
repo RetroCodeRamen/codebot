@@ -166,6 +166,25 @@ attempt 4 started from scratch; attempts 4 and 5 wrote parsers that never stop (
 example); T1 was saved by the spec's own examples. The fixes worked as built; the run failed on other defects (`docs/dev/HANDOFF.md`, "Found in
 the calc4 build").
 
+**Control after fixes 10-15 (`calc5-control`, 2026-10-18, 37614e6)** [V]: 13/32 hidden tests and 9/20 own inputs, as left and verified-only
+alike (the code is T6's checkpoint; `T3.attempt4.patch`, `T7.attempt5.patch` and `T7.near.patch` saved), in 2 h 47 min. By requirement,
+calc4 -> calc5: formatting 4/4 -> 2/4 (T5's 8 checks held before any work with `fmt.Println`, so `99999 * 99999` prints `9.999800001e+09`
+again), the rest unchanged (R1 4/4, R2 3/3, precedence 0/4, R4 3/4, errors 1/7, stdin 0/6). 52 of the 60 checks in force hold on the reference
+(87%); the 8 that do not are T7's exact error text and seven T1 checks that run `./calc cwd` with an expression on standard input, an argument
+the spec never mentions, so the worker built a `cwd` mode to pass them. What each fix did: T7 got six stdin checks, five sound (the first plan
+with any), and the program-name rule dropped one more; the re-check ran once and removed T1's `go build -o /dev/null . cwd`; the repair went to
+the rejected task, T6, but was twelve copies of the guide's new error example (`go run . ""`, exit 2), which became T6's whole check. T6 was
+rejected because the planner wrote each error input as a pair (`"stdout": "", "exit": 2` and `"stdout_contains": ["error:"]` with the default
+exit 0): the plan-wide clash rule drops both of a tied pair, which removed all ten, five sound exit-status checks among them, and what was left
+(`go run . 10 / 0` exits 1) holds on the seed, which does not compile. The near-success restart (fix 11) hurt: T7's first attempt rewrote
+`main.go` as a stdin-only program, attempt 2 passed T7's checks and broke T1, T2, T4, T5 and T6, and attempts 3-5 started from it, saw T7's
+check pass and finished without a change (attempt 4 in one action), so T7 ended blocked. No task was split. The worker spent 79 of T3's 87
+model minutes writing the whole of `main.go`: 15 writes, 8 of them repeating the size of the write before (37 min), and 3 replies cut off at
+the token limit (12 min); attempt 3 was five identical writes and nothing else, and the worker's own `./calc 2 + 3 * 4` ran through a shell
+that expanded `*` to the file names. Same-size rewrites took 46% of the model's time in calc3 and 27% in calc5. Every hidden error test checks
+that standard error starts with `error:`, and the code writes `Error:`, which no check can see. One build is one plan: the plans of calc3,
+calc4 and calc5 differ in every task, so the total moves with the plan; the per-fix effects above are what the logs show.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

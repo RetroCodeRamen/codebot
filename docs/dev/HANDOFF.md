@@ -245,6 +245,29 @@ Still open: standard error cannot be checked at all, so the spec's `error:` pref
 exited 1 as the spec says and still failed the hidden test); a program that never stops costs 60 s per assertion (8 minutes per check run, 16 of T3's 90
 minutes); the planner narrowed requirement 1 to "a single-number or two-token expression" in T1's title, and the worker built exactly that.
 
+### Found in the calc5 build (2026-10-18)
+
+calc5 (fixes 10-15) scored 13/32 hidden and 9/20 hand inputs (calc4: 15/32, 10/20); details in `docs/MODEL_EVAL.md`. Not fixed yet:
+
+- **Fix 15 backfired.** T7's attempt 2 passed T7's checks by rewriting `main.go` as a stdin-only program and broke five done tasks; attempts
+  3-5 started from that patch, ran T7's check (it passes), and finished without a change. The worker's rules say to finish when its check
+  passes, and the regression output in its context did not outweigh that. A near-success should be one that broke little (calc4's broke one
+  check of one task), and the worker should see a done task's failing check as a failure of its own check.
+- **The worker rewrites whole files, often identically.** `write_file` writes even when nothing changes and answers "wrote main.go (3383
+  chars)"; the repeat warning comes at the third copy and is ignored. Same-size rewrites took 46% of the model's time in calc3 and 27% in calc5
+  (79 of T3's 87 model minutes were whole-file writes and replies cut off at the token limit).
+- **Standard error cannot be checked** (still open from calc4): all 6 failing hidden error tests check that stderr starts with `error:`.
+- **Error checks were lost before freezing.** The planner wrote each error input as a pair (`"stdout": "", "exit": 2` and
+  `"stdout_contains": ["error:"]`, whose exit defaults to 0); the plan-wide clash rule drops both of a tie, which removed all five inputs. The
+  `go run . 10 / 0` exit-1 checks that were left hold on code that does not compile (via_built keeps exit-1 `go run` checks), so the guard
+  rejected T6, and the repair copied the guide's new example `["python3","greet.py",""]` twelve times.
+- **Shell globbing in the worker's own commands**: `./calc 2 + 3 * 4` passed the file names instead of `*`, and the worker debugged an error
+  its code did not have.
+- An argument the spec never mentions passed with stdin (`./calc cwd`, 7 of T1's checks) is not screened; a task whose check holds before any
+  work (T5, `weak_check`) is accepted even when its title names behaviour the code lacks (`strconv.FormatFloat`).
+- Flaky test: `test_v_capbench ... test_oracles_accept_the_reference_solution_and_reject_the_bare_seed` failed once in 12 full-suite runs on
+  level_08's `test_r07_too_large_a_body` (a 1.1 MB body the server answers with 413); it passed 3 of 3 on its own. Rerun before suspecting a change.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.
