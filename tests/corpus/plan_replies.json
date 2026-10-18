@@ -1206,6 +1206,100 @@
   "task": "T7"
  },
  {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement Go calculator that builds with go build and evaluates single-number or two-token expressions\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\"type\":\"run\",\"argv\":[\"go\",\"build\",\"-o\",\"calc\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"./calc\",\"2\",\"+\",\"3\"],\"stdout\":\"5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"./calc\",\"7\"],\"stdout\":\"7\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"./calc\",\"-2.5\",\"+\",\"1\"],\"stdout\":\"-1.5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"./calc\",\"-3\",\"*\",\"-3\"],\"stdout\":\"9\\n\",\"exit\":0}\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 1,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement the main.go file with the calculator core logic supporting +, -, *, /, and x operators\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"6\", \"x\", \"7\"],\n      \"stdout\": \"42\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"10\", \"-\", \"4\"],\n      \"stdout\": \"6\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"9\", \"/\", \"3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"file_exists\",\n      \"path\": \"main.go\"\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 2,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement operator precedence so multiplication and division are evaluated before addition and subtraction, with left-to-right associativity for same-kind operators\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\", \"*\", \"4\"],\n      \"stdout\": \"14\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"10\", \"-\", \"4\", \"-\", \"3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"8\", \"/\", \"4\", \"/\", \"2\"],\n      \"stdout\": \"1\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"*\", \"3\", \"+\", \"4\", \"*\", \"5\"],\n      \"stdout\": \"26\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 3,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Parse float64 tokens from CLI args and format results with strconv.FormatFloat\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"-2.5\", \"+\", \"1\"],\n      \"stdout\": \"-1.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"0.1\", \"+\", \"0.2\"],\n      \"stdout\": \"0.30000000000000004\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"-3\", \"*\", \"-3\"],\n      \"stdout\": \"9\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"7\", \"/\", \"2\"],\n      \"stdout\": \"3.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"1\", \"/\", \"3\"],\n      \"stdout\": \"0.3333333333333333\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2.5\", \"*\", \"2\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"-\", \"4\"],\n      \"stdout\": \"6\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"9\", \"/\", \"3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 4,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Format the calculator result using strconv.FormatFloat with 'f' format, precision -1, base 64, and handle negative zero\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\"],\n      \"stdout\": \"3.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\"],\n      \"stdout\": \"0.3333333333333333\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\"],\n      \"stdout\": \"0\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\"],\n      \"stdout\": \"-1.5\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 5,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement error handling for division by zero and malformed expressions\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\",\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout_contains\": [\"error: division by zero\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"abc\"],\n      \"stdout_contains\": [\"error:\"],\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2\", \"abc\", \"3\"],\n      \"stdout_contains\": [\"error:\"],\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2\", \"+\", \"3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"7\"],\n      \"stdout\": \"7\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 6,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement stdin mode: when no args, read lines from stdin, evaluate each, print result or error, skip empty lines, exit 0\",\n  \"files\": [\"main.go\"],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3\"],\"stdout\":\"5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"10 - 4\"],\"stdout\":\"6\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"9 / 3\"],\"stdout\":\"3\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3 * 4\"],\"stdout\":\"14\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"-2.5 + 1\"],\"stdout\":\"-1.5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"6 x 7\"],\"stdout\":\"42\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2.5 * 2\"],\"stdout\":\"5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"1 / 3\"],\"stdout\":\"0.3333333333333333\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3\\n4 - 1\\n\"],\"stdout\":\"5\\n3\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3\\n\\n4 - 1\\n\"],\"stdout\":\"5\\n3\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3\\n\"],\"stdout\":\"5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go run .\",\"2 + 3\\n\\n\"],\"stdout\":\"5\\n\",\"exit\":0}\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 7,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"subtasks\": [\n    {\n      \"title\": \"Implement main.go with +, -, *, /, x operators and correct parsing\",\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"6\", \"x\", \"7\"],\n          \"stdout\": \"42\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"10\", \"-\", \"4\"],\n          \"stdout\": \"6\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"9\", \"/\", \"3\"],\n          \"stdout\": \"3\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"6\", \"x\", \"7\"],\n          \"stdout\": \"42\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"10\", \"-\", \"4\"],\n          \"stdout\": \"6\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"9\", \"/\", \"3\"],\n          \"stdout\": \"3\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"2\", \"+\", \"3\"],\n          \"stdout\": \"5\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"file_exists\",\n          \"path\": \"main.go\"\n        }\n      ]\n    },\n    {\n      \"title\": \"Restore T1: ensure negative number multiplication works (e.g. -3 * -3 = 9)\",\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"-3\", \"*\", \"-3\"],\n          \"stdout\": \"9\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"-3\", \"x\", \"-3\"],\n          \"stdout\": \"9\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"-3\", \"+\", \"3\"],\n          \"stdout\": \"0\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"3\", \"+\", \"-3\"],\n          \"stdout\": \"0\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"-3\", \"-\", \"3\"],\n          \"stdout\": \"-6\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"3\", \"-\", \"-3\"],\n          \"stdout\": \"6\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"-3\", \"/\", \"3\"],\n          \"stdout\": \"-1\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"./calc\", \"3\", \"/\", \"-3\"],\n          \"stdout\": \"-1\"\n        }\n      ]\n    }\n  ]\n}",
+  "kind": "split",
+  "task": "T2"
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"subtasks\": [\n    {\n      \"title\": \"Implement a tokenizer that splits input into numbers and operators\",\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"5\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"6\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"2\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"6\"\n        },\n        {\n          \"type\": \"file_exists\",\n          \"path\": \"main.go\"\n        }\n      ]\n    },\n    {\n      \"title\": \"Implement the precedence-aware evaluator using two-pass approach\",\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3 * 4',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"14\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4 - 3',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"3\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4 / 2',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"1\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3 + 4 * 5',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"26\"\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"python3\", \"-c\", \"import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3 * 4',capture_output=True); print(r.stdout.decode())\"],\n          \"stdout\": \"14\"\n        }\n      ]\n    }\n  ]\n}",
+  "kind": "split",
+  "task": "T3"
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+  "model": "ornith",
+  "raw": "{\n  \"subtasks\": [\n    {\n      \"title\": \"Implement evalExpr to parse and evaluate arithmetic expressions with +, -, *, / operators and negative numbers\",\n      \"asserts\": [\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3\"],\n          \"expect\": 5.0\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"10 - 4\"],\n          \"expect\": 6.0\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"9 / 3\"],\n          \"expect\": 3.0\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3 * 4\"],\n          \"expect\": 14.0\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"-2.5 + 1\"],\n          \"expect\": -1.5\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"6 x 7\"],\n          \"raises\": \"ValueError\"\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2.5 * 2\"],\n          \"expect\": 5.0\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"1 / 3\"],\n          \"expect\": 0.3333333333333333\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3\\n4 - 1\"],\n          \"raises\": \"ValueError\"\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3\\n\\n4 - 1\"],\n          \"raises\": \"ValueError\"\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3\\n\"],\n          \"raises\": \"ValueError\"\n        },\n        {\n          \"type\": \"call\",\n          \"module\": \"main\",\n          \"func\": \"evalExpr\",\n          \"args\": [\"2 + 3\\n\\n\"],\n          \"raises\": \"ValueError\"\n        }\n      ]\n    },\n    {\n      \"title\": \"Implement main to read stdin line by line, skip empty lines, evaluate each, print result or error, exit 0\",\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3\"],\n          \"stdout\": \"5\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"10 - 4\"],\n          \"stdout\": \"6\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"9 / 3\"],\n          \"stdout\": \"3\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3 * 4\"],\n          \"stdout\": \"14\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"-2.5 + 1\"],\n          \"stdout\": \"-1.5\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"6 x 7\"],\n          \"stdout\": \"42\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2.5 * 2\"],\n          \"stdout\": \"5\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"1 / 3\"],\n          \"stdout\": \"0.3333333333333333\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n4 - 1\\n\"],\n          \"stdout\": \"5\\n3\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n\\n4 - 1\\n\"],\n          \"stdout\": \"5\\n3\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n\"],\n          \"stdout\": \"5\\n\",\n          \"exit\": 0\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n\\n\"],\n          \"stdout\": \"5\\n\",\n          \"exit\": 0\n        }\n      ]\n    }\n  ]\n}",
+  "kind": "split",
+  "task": "T7"
+ },
+ {
   "suite": "level_01",
   "project": "cap-eval-20261016-123644-c0-vs-c1-01-1",
   "model": "ornith",
@@ -3563,6 +3657,154 @@
   "kind": "item",
   "round": 1,
   "item": 8,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement the Go calculator program that builds with go build and evaluates arithmetic expressions from command-line arguments\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"7\"],\n      \"stdout\": \"7\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2.5\", \"*\", \"2\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"7\", \"/\", \"2\"],\n      \"stdout\": \"3.5\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 1,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement the Go calculator to support +, -, *, / and x as multiplication\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\"type\":\"run\",\"argv\":[\"go\",\"build\",\"-o\",\"calc\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"-v\"],\"stdout_contains\":[\"main.go\"],\"exit\":0}\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 2,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement operator precedence so multiplication and division bind tighter than addition and subtraction, with left-to-right evaluation for same-kind operators\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\", \"*\", \"4\"],\n      \"stdout\": \"14\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"10\", \"-\", \"4\", \"-\", \"3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"8\", \"/\", \"4\", \"/\", \"2\"],\n      \"stdout\": \"1\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"*\", \"3\", \"+\", \"4\", \"*\", \"5\"],\n      \"stdout\": \"26\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 3,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement number parsing and result formatting for the calculator\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"-2.5\", \"+\", \"1\"],\n      \"stdout\": \"-1.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"0.1\", \"+\", \"0.2\"],\n      \"stdout\": \"0.30000000000000004\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"-3\", \"*\", \"-3\"],\n      \"stdout\": \"9\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2.5\", \"*\", \"2\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"7\", \"/\", \"2\"],\n      \"stdout\": \"3.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"1\", \"/\", \"3\"],\n      \"stdout\": \"0.3333333333333333\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 4,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement float64 result formatting with strconv.FormatFloat and handle negative zero\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\"],\"stdout\":\"5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"stdout\":\"3.5\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"stdout\":\"0.3333333333333333\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"stdout\":\"0\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"stdout\":\"-0\\n\",\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"stdout\":\"-1.5\\n\",\"exit\":0}\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 5,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement error handling for division by zero and malformed expressions\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error: division by zero\"],\n      \"stdout_json\": null\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout_contains\": [\"error: division by zero\"],\n      \"stdout_json\": null\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\"\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\"\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\"\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\"\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"stdout\": \"\"\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 6,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement stdin mode: when no args, read lines from stdin, evaluate each non-empty line, print result or error message, exit 0\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2+3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2 + 3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10 - 4 - 3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n10 - 4 - 3\\n\"],\n      \"stdout\": \"5\\n3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2 + 3\\n\\n10 - 4 - 3\\n\"],\n      \"stdout\": \"5\\n3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"1 / 0\"],\n      \"stdout\": \"error: division by zero\\n\",\n      \"exit\": 1\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"+ 3\"],\n      \"stdout\": \"error: malformed expression\\n\",\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3 +\"],\n      \"stdout\": \"error: malformed expression\\n\",\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3 + +\"],\n      \"stdout\": \"error: malformed expression\\n\",\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3 4\"],\n      \"stdout\": \"error: malformed expression\\n\",\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3 + 4 +\"],\n      \"stdout\": \"error: malformed expression\\n\",\n      \"exit\": 2\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3 + 4 + 5\"],\n      \"stdout\": \"12\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 7,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-1",
+  "model": "ornith",
+  "raw": "{\n  \"tasks\": [\n    {\n      \"id\": 6,\n      \"asserts\": [\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n          \"stdout_contains\": [\"error: division by zero\"],\n          \"exit\": 1\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"abc\"],\n          \"stdout_contains\": [\"error: malformed expression\"],\n          \"exit\": 1\n        },\n        {\n          \"type\": \"run\",\n          \"argv\": [\"go\", \"run\", \".\", \"10\", \"+\", \"20\"],\n          \"stdout_contains\": [\"30\"],\n          \"exit\": 0\n        }\n      ]\n    }\n  ]\n}",
+  "kind": "plan",
+  "round": 2
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement the Go calculator program that builds with go build and evaluates a single-number or two-token arithmetic expression from command-line arguments\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"7\"],\n      \"stdout\": \"7\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"file_exists\",\n      \"path\": \"main.go\"\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 1,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement the Go calculator to support +, -, *, / and x as multiplication\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"6\", \"x\", \"7\"],\n      \"stdout\": \"42\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"10\", \"-\", \"4\"],\n      \"stdout\": \"6\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"9\", \"/\", \"3\"],\n      \"stdout\": \"3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"2\", \"+\", \"3\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 2,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement operator precedence so multiplication and division bind tighter than addition and subtraction, applying same-kind operators left to right\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"exit\":0},\n    {\"type\":\"run\",\"argv\":[\"go\",\"run\",\".\",\"\" ],\"exit\":0}\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 3,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement number parsing and output formatting for the Go calculator\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"build\", \"-o\", \"calc\", \".\"],\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"-2.5\", \"+\", \"1\"],\n      \"stdout\": \"-1.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"0.1\", \"+\", \"0.2\"],\n      \"stdout\": \"0.30000000000000004\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"./calc\", \"-3\", \"*\", \"-3\"],\n      \"stdout\": \"9\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"call\",\n      \"module\": \"strconv\",\n      \"func\": \"ParseFloat\",\n      \"args\": [\"-2.5\", 64],\n      \"expect\": -2.5\n    },\n    {\n      \"type\": \"call\",\n      \"module\": \"strconv\",\n      \"func\": \"ParseFloat\",\n      \"args\": [\"0.1\", 64],\n      \"expect\": 0.1\n    },\n    {\n      \"type\": \"call\",\n      \"module\": \"strconv\",\n      \"func\": \"ParseFloat\",\n      \"args\": [\"-3\", 64],\n      \"expect\": -3\n    },\n    {\n      \"type\": \"file_contains\",\n      \"path\": \"main.go\",\n      \"text\": \"strconv.ParseFloat\"\n    },\n    {\n      \"type\": \"file_contains\",\n      \"path\": \"main.go\",\n      \"text\": \"FormatFloat\"\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 4,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Format the calculator's output using strconv.FormatFloat with 'f' format, precision -1, base 64, and handle negative zero as 0\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2.5\", \"*\", \"2\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"7\", \"/\", \"2\"],\n      \"stdout\": \"3.5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"1\", \"/\", \"3\"],\n      \"stdout\": \"0.3333333333333333\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"-0\"],\n      \"stdout\": \"0\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2.5\", \"*\", \"2\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 5,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement error handling for division by zero and malformed expressions in the Go calculator\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"10\", \"/\", \"0\"],\n      \"exit\": 1,\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error: division by zero\"]\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"abc\"],\n      \"exit\": 2,\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error:\"]\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"+\", \"3\"],\n      \"exit\": 2,\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error:\"]\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3\", \"+\"],\n      \"exit\": 2,\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error:\"]\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"3\", \"3\"],\n      \"exit\": 2,\n      \"stdout\": \"\",\n      \"stdout_contains\": [\"error:\"]\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2\", \"x\", \"3\"],\n      \"exit\": 0,\n      \"stdout\": \"6\\n\"\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"go\", \"run\", \".\", \"2\", \"+\", \"3\"],\n      \"exit\": 0,\n      \"stdout\": \"5\\n\"\n    }\n  ]\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 6,
+  "try": 1
+ },
+ {
+  "suite": "calc_go",
+  "project": "cap-probe-20261017-2109-calc-2",
+  "model": "ornith",
+  "raw": "{\n  \"title\": \"Implement stdin mode: when no args, read lines from stdin, evaluate each, print result or error, skip empty lines, exit 0\",\n  \"files\": [\n    \"main.go\"\n  ],\n  \"size\": \"S\",\n  \"asserts\": [\n    {\n      \"type\": \"run\",\n      \"argv\": [\"bash\", \"-c\", \"echo '2 + 3' | go run . 2>&1\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"bash\", \"-c\", \"printf '2 + 3\\\\n10 - 4\\\\n\\\\n9 / 3\\\\n' | go run . 2>&1\"],\n      \"stdout\": \"5\\n6\\n3\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"bash\", \"-c\", \"printf '2 + 3\\\\nerror: division by zero\\\\n' | go run . 2>&1\"],\n      \"stdout\": \"5\\nerror: division by zero\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"bash\", \"-c\", \"printf '2 + 3\\\\n' | go run . 2>&1\"],\n      \"stdout\": \"5\\n\",\n      \"exit\": 0\n    },\n    {\n      \"type\": \"run\",\n      \"argv\": [\"bash\", \"-c\", \"printf '2 + 3\\\\n\\\\n10 - 4\\\\n' | go run . 2>&1\"],\n      \"stdout\": \"5\\n6\\n\",\n      \"exit\": 0\n    }\n  ],\n  \"deps\": []\n}",
+  "kind": "item",
+  "round": 1,
+  "item": 7,
   "try": 1
  }
 ]

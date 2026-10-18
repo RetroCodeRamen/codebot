@@ -23,8 +23,8 @@ def load(name):
 def leaked(a): return a["type"] == "call" and any(isinstance(v, str) and v in A.LEAKED for v in a.get("args") or [])
 
 # Ratchets (2026-10-16). Unsound = fails on the reference solution, so no correct code can ever pass it.
-UNSOUND_ACCEPTED_MAX = {"level_01": 104, "pyutils": 78, "calc_go": 186}      # unsound assertions that clean()+validate() leave unchanged and accept, per suite
-                                    # (2026-10-17 rebuild: 381 unsound of 718; the plan-level screen, grounding.screen, catches far more: see TestScreenCorpus)
+UNSOUND_ACCEPTED_MAX = {"level_01": 104, "pyutils": 78, "calc_go": 215}      # unsound assertions that clean()+validate() leave unchanged and accept, per suite
+                                    # (2026-10-18 rebuild with the calc3 run: 410 unsound of 788; the plan-level screen, grounding.screen, catches far more: see TestScreenCorpus)
 COLLAPSED_PLANS = 3                 # raw first-round replies with fewer tasks than the spec has items (all three before minItems = spec items)
 
 def pipeline(rows):
@@ -80,7 +80,8 @@ def judge(asserts, dirs, suite=None):
 
 def screened(rows):
     """Every corpus assertion through grounding.screen the way the harness applies it: each project's planned tasks as one plan (against every spec
-    example), then its split children with the screened plan as context. Returns {(suite, project, task, assertion key): kept?}."""
+    example), then its split children with the screened plan as context. Returns {(suite, project, task, assertion key): the assertion the harness
+    keeps for it (as cleaned, repaired and possibly rewritten to run the built program), or None when it is dropped}."""
     plans = collections.defaultdict(lambda: collections.defaultdict(list))
     for r in rows:
         for s in r["sources"]: plans[(r["suite"], s["project"])][s["task"]].append(r["assert"])
@@ -95,21 +96,37 @@ def screened(rows):
         for ts, outs in ((top, o1), (kids, o2)):
             for t, g in zip(ts, outs):
                 keep = {K.akey(a) for a in g}
-                for orig, a in zip(tasks[t], fixed[t]): out[(suite, project, t, K.akey(orig))] = K.akey(a) in keep
+                for orig, a in zip(tasks[t], fixed[t]):
+                    b = G.via_built(a, spec); out[(suite, project, t, K.akey(orig))] = b if K.akey(b) in keep else None
     return out
 
 # Ratchets for grounding.screen (2026-10-17), counted per use of an assertion. A correct assertion (holds on the reference) is dropped only where
 # its own task contradicts it and nothing breaks the tie (level_01: is_prime(True), is_prime(3.5) and clamp(10, 10, 10) asserted both to return a value
 # and to raise; pyutils: parse_kv the same), and in calc_go four `python3 calc.py ...` checks that "hold" only because Python cannot open the missing
 # file. Impossible assertions the screen lets through are mostly wrong expected values no spec example covers (the re-derivation handles those).
+# 2026-10-18: a kept assertion the harness changed (repaired, or rewritten from `go run` to the built program) is judged again as it is now, which
+# lowered level_01 and pyutils (their repaired assertions hold). The rebuild added the calc3 run and the two planning probes of 2026-10-17; _joined
+# drops the 17 of their checks that pass a whole expression as one argument, and via_built makes 6 malformed-input checks (exit status 2) sound.
 SCREEN_SOUND_DROPPED = {"level_01": 3, "pyutils": 1, "calc_go": 4}
-SCREEN_UNSOUND_KEPT = {"level_01": 177, "pyutils": 106, "calc_go": 31}     # may only go down
+SCREEN_UNSOUND_KEPT = {"level_01": 153, "pyutils": 100, "calc_go": 46}     # may only go down
 
 class TestScreenCorpus(unittest.TestCase):
     @classmethod
-    def setUpClass(cls): cls.rows = load("assertions.json"); cls.kept = screened(cls.rows)
+    def setUpClass(cls):
+        cls.rows = load("assertions.json"); cls.kept = screened(cls.rows); cls.verdict = {}
+        changed = collections.defaultdict(dict)          # a kept assertion the harness changed (repaired, or rewritten to run the built program) is judged again as it is now
+        for r in cls.rows:
+            for s in r["sources"]:
+                b = cls.kept[(r["suite"], s["project"], s["task"], K.akey(r["assert"]))]
+                if b is not None and K.akey(b) != K.akey(r["assert"]): changed[r["suite"]][K.akey(b)] = b
+        for suite, forms in changed.items():
+            cls.verdict.update({(suite, k): "fails" if m else "holds" for k, m in zip(forms, judge(list(forms.values()), REF[suite], suite))})
+    def outcome(self, r, s):
+        """(kept?, verdict on the reference of what is kept: the corpus verdict, or the new one of a changed assertion)."""
+        b = self.kept[(r["suite"], s["project"], s["task"], K.akey(r["assert"]))]
+        return (False, r["reference"]) if b is None else (True, self.verdict.get((r["suite"], K.akey(b)), r["reference"]))
     def count(self, suite, verdict, kept):
-        return sum(1 for r in self.rows if r["suite"] == suite and r["reference"] == verdict for s in r["sources"] if self.kept[(suite, s["project"], s["task"], K.akey(r["assert"]))] == kept)
+        return sum(1 for r in self.rows if r["suite"] == suite for s in r["sources"] if self.outcome(r, s) == (kept, verdict))
     def test_correct_assertions_are_kept(self):
         for suite, n in SCREEN_SOUND_DROPPED.items(): self.assertLessEqual(self.count(suite, "holds", False), n, f"{suite}: the screen drops correct assertions")
     def test_ratchet_impossible_assertions_let_through(self):
@@ -121,8 +138,22 @@ class TestScreenCorpus(unittest.TestCase):
         p = "cap-20261017-131051-calc2-control-rerun-calc-go-r1"
         rows = [(r, s) for r in self.rows if r["suite"] == "calc_go" for s in r["sources"] if s["project"] == p]
         self.assertGreater(len(rows), 100)
-        bad = [r for r, s in rows if r["reference"] == "fails"]; dropped = [r for r, s in rows if r["reference"] == "fails" and not self.kept[("calc_go", p, s["task"], K.akey(r["assert"]))]]
-        self.assertGreater(len(dropped), 0.9 * len(bad)); self.assertEqual([r["assert"] for r, s in rows if r["reference"] == "holds" and not self.kept[("calc_go", p, s["task"], K.akey(r["assert"]))]], [])
+        bad = [r for r, s in rows if r["reference"] == "fails"]; dropped = [r for r, s in rows if self.outcome(r, s) != (True, "fails") and r["reference"] == "fails"]
+        self.assertGreater(len(dropped), 0.9 * len(bad)); self.assertEqual([r["assert"] for r, s in rows if r["reference"] == "holds" and self.outcome(r, s) != (True, "holds")], [])
+    def test_go_run_checks_rewritten_to_the_built_program_stay_correct_and_recover_the_exit_statuses(self):
+        # 2026-10-18: `go run . abc` expecting exit status 2 can never hold (go run reports 1); `./calc abc` after the build step can
+        moved = []
+        for r in self.rows:
+            for s in r["sources"]:
+                b = self.kept[(r["suite"], s["project"], s["task"], K.akey(r["assert"]))]
+                if r["suite"] == "calc_go" and b is not None and b.get("argv") != r["assert"].get("argv"): moved.append((r["reference"], self.outcome(r, s)[1]))
+        self.assertGreater(len(moved), 40); self.assertNotIn(("holds", "fails"), moved)          # a rewrite never breaks a correct check
+        self.assertGreaterEqual(moved.count(("fails", "holds")), 6)
+    def test_the_standard_input_task_of_the_calc3_run_is_screened_out(self):
+        # 2026-10-17 calc3 T7: all 12 checks passed the expression as ONE argument ("2 + 3", meaning standard input), so T7 could never pass and blocked
+        p = "cap-20261017-215705-calc3-control-calc-go-r1"
+        t7 = [r["assert"] for r in self.rows if r["suite"] == "calc_go" for s in r["sources"] if s["project"] == p and s["task"] == "T7"]
+        self.assertEqual(len(t7), 12); self.assertEqual([a for a in t7 if self.kept[("calc_go", p, "T7", K.akey(a))] is not None], [])
 
 class TestPlanReplyReplay(Sandboxed):
     """Each raw planner reply goes through the harness's post-processing exactly as plan_auto would (no model), on the level-1 seed."""

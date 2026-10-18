@@ -376,7 +376,35 @@ class TestGrounding(Sandboxed):
         named = {"type": "run", "argv": ["go", "run", ".", "calc", "2.5"], "stdout": "2.5\n", "exit": 0}  # 2026-10-16 control: the program's name as an argument
         build = {"type": "run", "argv": ["go", "build", "-o", "calc", "."], "exit": 0}; fmt = {"type": "run", "argv": ["gofmt", "-l", "."], "stdout": ""}
         own = {"type": "run", "argv": ["python3", "-c", "import main; print(main.f())"], "stdout": "1"}; std = {"type": "run", "argv": ["python3", "-c", "import json; print(1)"], "stdout": "1"}
-        out, _, why = self.screen([[two, named, build, fmt, own, std]]); self.assertEqual(out, [[build, fmt, std]]); self.assertEqual(len(why[0]), 3)
+        out, _, why = self.screen([[named, build, fmt, own, std]]); self.assertEqual(out, [[build, fmt, std]]); self.assertEqual(len(why[0]), 2)
+        go_run_only = CALC_SPEC.replace("`go build -o calc .` must produce the program `calc`", "it is run with `go run .`")   # no built program to run instead
+        out, _, why = self.screen([[two, std]], go_run_only); self.assertEqual(out, [[std]]); self.assertIn("exit status 2 can never be seen", why[0][0])
+    def test_go_run_is_rewritten_to_run_the_built_program_unless_it_expects_exit_status_1(self):
+        # 2026-10-17 calc3: dropping the malformed-input checks (exit 2 through `go run`) left the exit statuses untested; the program exited 1 for every error
+        two = {"type": "run", "argv": ["go", "run", ".", "+", "3"], "stdout": "", "exit": 2}; ok = {"type": "run", "argv": ["go", "run", "main.go", "4"], "stdout": "4"}
+        one = {"type": "run", "argv": ["go", "run", ".", "1", "/", "0"], "exit": 1}                       # through go run, 1 means 'failed', with any status
+        self.assertEqual(G.via_built(two, CALC_SPEC), {"type": "run", "argv": ["./calc", "+", "3"], "stdout": "", "exit": 2})
+        self.assertEqual(G.via_built(ok, CALC_SPEC)["argv"], ["./calc", "4"]); self.assertIs(G.via_built(one, CALC_SPEC), one)
+        self.assertIs(G.via_built(two, PY_SPEC), two); self.assertIs(G.via_built(two, "Build it with `gcc -o calc main.c`."), two)      # nothing to build with Go
+        out, notes, why = self.screen([[two, ok, one]])
+        self.assertEqual(out, [[BUILD, G.via_built(two, CALC_SPEC), G.via_built(ok, CALC_SPEC), one]]); self.assertEqual(dict(why), {})
+        self.assertTrue(any(n.startswith("rewrote 2 `go run` assertion(s)") for n in notes))
+        wrong = {"type": "run", "argv": ["go", "run", ".", "6", "x", "7"], "stdout": "41", "exit": 0}
+        self.assertEqual(self.screen([[wrong]])[0], [[]])                                                # rewritten, it still contradicts `calc 6 x 7` prints `42`
+    def test_words_the_spec_passes_as_separate_arguments_are_not_accepted_in_one_argument(self):
+        joined = {"type": "run", "argv": ["go", "run", ".", "2 + 3"], "stdout": "5\n", "exit": 0}         # 2026-10-17 calc3 T7: all 12 checks were like this
+        lines = {"type": "run", "argv": ["go", "run", ".", "2 + 3\n6 x 7\n"], "stdout": "5\n42\n", "exit": 0}   # standard input, meant
+        numbers = {"type": "run", "argv": ["./calc", "12 + 30"], "stdout": "42"}                         # other numbers: the spec passes numbers as arguments
+        err = {"type": "run", "argv": ["./calc", "2 + 3"], "exit": 2}                                     # expected to fail, as it does for a program following the spec
+        text = {"type": "run", "argv": ["./calc", "hello world"], "stdout": "x"}                          # words the spec never passes: no evidence either way
+        stdin = {"type": "run", "argv": ["./calc"], "stdin": "2 + 3\n", "stdout": "5"}
+        out, _, why = self.screen([[joined, lines, numbers, err, text, stdin]])
+        self.assertEqual(out, [[BUILD, err, text, stdin]]); self.assertEqual(len(why[0]), 3)
+        self.assertIn("`calc 2 + 3`", why[0][0]); self.assertIn("stdin field", why[0][0])
+        quoted = {"type": "run", "argv": ["python3", "cli.py", "slug", "Hello World"], "stdout": "hello-world"}      # pyutils: the spec quotes one itself
+        spec = PY_SPEC + '\n3. `python3 cli.py slug "Hello World"` prints `hello-world`; `python3 cli.py kv a=1 b=2` prints `{"a": 1, "b": 2}`.\n'
+        self.assertEqual(G.screen([[quoted]], spec, "python")[0], [[quoted]])
+        self.assertEqual(G.spec_commands(spec)[-2:], [(["slug", "Hello World"], 'python3 cli.py slug "Hello World"'), (["kv", "a=1", "b=2"], "python3 cli.py kv a=1 b=2")])
     def test_the_planner_writes_the_specs_examples_first_and_screens_the_models_assertions(self):
         with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write(CALC_SPEC)
         x9 = {"type": "run", "argv": ["./calc", "3", "x", "3"], "stdout": "9"}
@@ -384,13 +412,15 @@ class TestGrounding(Sandboxed):
             {"title": "args", "files": [], "size": "S", "item": 1, "asserts": [{"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "6"},
                                                                          {"type": "call", "module": "main", "func": "Add", "args": [2, 3], "expect": 5}]},
             {"title": "x", "files": [], "size": "S", "item": 2, "asserts": [x9]},
-            {"title": "errors", "files": [], "size": "S", "item": 3, "asserts": [{"type": "run", "argv": ["go", "run", ".", "2", "+"], "exit": 2}]}]}
+            {"title": "errors", "files": [], "size": "S", "item": 3, "asserts": [{"type": "run", "argv": ["go", "run", ".", *e], "stdout_contains": ["error:"], "exit": 2} for e in (["2", "+"], ["+", "2"])]}]}
         bad = planner._write(self.proj(), plan, CALC_SPEC); items = specdoc.item_texts(CALC_SPEC)
         self.assertEqual(K.read_spec(self.proj(), "T1"), G.examples(CALC_SPEC, items[0]))            # the model's two were impossible; the examples remain
         self.assertEqual(K.read_spec(self.proj(), "T2"), G.examples(CALC_SPEC, items[1]) + [x9])
-        self.assertEqual(list(bad), [3]); self.assertIn("go run", bad[3])                            # nothing usable left: the repair round is told why
+        self.assertEqual(list(bad), [3]); self.assertIn("standard error", bad[3])                    # nothing usable left: the repair round is told why, once
+        self.assertEqual(bad[3].count("standard error"), 1)
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "assertions_salvaged" in l][-1]["notes"]
         self.assertTrue(any("own example" in n for n in log)); self.assertTrue(any("not written in Python" in n for n in log)); self.assertTrue(any("examples" in n for n in log))
+        self.assertTrue(any(n.startswith("rewrote 2 `go run`") for n in log))
     def test_standard_error_text_expected_on_standard_output_is_dropped_except_with_stdin_or_merged_streams(self):
         spec = CALC_SPEC + "4. Division by zero prints `error: division by zero` to standard error.\n"
         out = {"type": "run", "argv": ["./calc", "1", "/", "0"], "stdout_contains": ["error: division by zero"], "exit": 1}       # 2026-10-17 probe, T6

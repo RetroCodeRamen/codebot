@@ -8,7 +8,8 @@
    a ./path, or a program the spec says how to build ("`go build -o calc .`"), in which case the build command runs first as its own assertion.
 2. screen(): model-written assertions are dropped when they cannot hold for a program that follows the spec: they contradict a spec example or another
    assertion of the plan (same call or command line, different expected result), pass a flag or shell syntax the spec never mentions to a command that
-   is expected to succeed, or run Python code in a project that is not Python."""
+   is expected to succeed, pack words the spec passes as separate arguments into one, or run Python code in a project that is not Python. A `go run`
+   command of a program the spec says how to build is rewritten to run the built program (via_built), so an exit status `go run` hides is testable."""
 import ast, collections, json, os, re, shlex, sys
 
 SPAN = re.compile(r"`([^`\n]+)`")
@@ -187,13 +188,35 @@ def spec_tokens(spec):
         out.add(t); out.add(t.strip("`'\"()[],.;:!?"))
     return out
 
+def go_run_args(argv):
+    """The program's arguments when argv runs the Go program of the code directory (`go run . ARGS`, `go run main.go calc.go ARGS`), else None."""
+    if argv[:2] != ["go", "run"]: return None
+    if argv[2:3] in (["."], ["./"]): return argv[3:]
+    i = 2
+    while i < len(argv) and argv[i].endswith(".go") and "/" not in argv[i]: i += 1
+    return argv[i:] if i > 2 else None
+
 def _program_args(argv, prog=None):
     """The arguments the program under test receives (`go run . ARGS`, `./calc ARGS`, `python3 tool.py ARGS`), or None when the command runs some
     other tool (`go build -o calc .`, `gofmt -l .`, `python3 -c ...`), whose options the spec has no reason to mention."""
-    if argv[:3] == ["go", "run", "."]: return argv[3:]
+    g = go_run_args(argv)
+    if g is not None: return g
     if (prog and argv[0] in (prog, "./" + prog)) or argv[0].startswith("./"): return argv[1:]
     if argv[0] in PY and len(argv) > 1 and argv[1].endswith(".py"): return argv[2:]
     return None
+
+def via_built(a, spec):
+    """`go run . ARGS` -> `./calc ARGS` when the spec says how the program is built with Go (`go build -o calc .`), unless the assertion expects exit
+    status 1. `go run` reports every failing exit status as 1 (verified with Go 1.24), so a malformed-input check expecting status 2 can only ever hold
+    against the built program (2026-10-17: dropping those instead left the calculator's exit statuses untested, and it exited 1 for every error); a
+    success through `go run` is a success of the built program, and one form keeps the checks of one input comparable. Status 1 through `go run`
+    means 'the program failed', with any status, so it is left as it is. Returns a (the same object) when nothing changes."""
+    if not isinstance(a, dict) or a.get("type") != "run" or a.get("exit", 0) == 1 or not isinstance(a.get("argv"), list): return a
+    args = go_run_args(a["argv"])
+    if args is None: return a
+    build, prog = build_step(spec)
+    if not build or build[0] != "go": return a
+    return {**a, "argv": ["./" + prog, *args]}
 
 def _ungrounded(a, toks, prog=None):
     """Why a command expected to SUCCEED passes its program something no program following the spec accepts: an option or shell syntax the spec
@@ -206,9 +229,41 @@ def _ungrounded(a, toks, prog=None):
         if t in SHELL_WORDS: return f"{t!r} is shell syntax or a shell command, but argv goes to the program as it is, without a shell (standard input is the stdin field)"
     return None
 
+NUMBER = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
+
+def spec_commands(spec, prog=None):
+    """[(arguments, command line as written)] for every command line of the program under test the spec shows (`calc 2 + 3` -> ["2", "+", "3"])."""
+    out = []
+    for code, _ in spans(spec):
+        try: argv = shlex.split(code)
+        except ValueError: continue
+        args = _program_args(argv, prog) if argv else None
+        if args is not None: out.append((args, code.strip()))
+    return out
+
+def _joined(a, cmds, prog=None):
+    """Why a command expected to SUCCEED packs into one argument several words that the spec passes as separate arguments (`go run . "2 + 3"` where
+    the spec writes `calc 2 + 3`): when every command line of the spec gives the program one word per argument and some give it several, a program
+    that follows the spec reads "2 + 3" as one word, which it does not accept. 2026-10-17: all 12 checks of the calculator's standard-input task were
+    like that (the model meant standard input), so the task could never pass. Every word must be one the spec passes as an argument (or a number,
+    when the spec passes numbers). Not for a spec that quotes an argument with spaces itself (pyutils: `python3 cli.py slug "Hello World"`); a spec
+    whose program joins its arguments and never quotes one would lose a sound check here, and no spec of the corpus is like that."""
+    if a.get("type") != "run" or a.get("exit", 0) != 0 or not a.get("argv"): return None
+    args = _program_args(a["argv"], prog)
+    if not args or not any(len(c) >= 2 for c, _ in cmds) or any(not t.strip() or re.search(r"\s", t) for c, _ in cmds for t in c): return None
+    seen = {t for c, _ in cmds for t in c}; nums = any(NUMBER.match(t) for t in seen)
+    for t in args:
+        words = t.split()
+        if len(words) >= 2 and all(w in seen or (nums and NUMBER.match(w)) for w in words):
+            shown = next(code for c, code in cmds if len(c) >= 2)
+            return (f"its argument {t!r} holds several words, but the specification passes each such word as an argument of its own (`{shown}`), so a program "
+                    f"that follows it reads {t!r} as one word; pass one word per argument, and put input the program reads from standard input in the stdin field")
+    return None
+
 def _unobservable(a):
     """Why the expected result can never be seen, whatever the program does. `go run` reports every failing exit status as 1 (verified with Go 1.24:
-    a program that exits 2 makes `go run .` exit 1), so an exit status other than 0 or 1 through it is impossible."""
+    a program that exits 2 makes `go run .` exit 1), so an exit status other than 0 or 1 through it is impossible. (screen() first rewrites such a
+    command to run the built program when the spec says how to build it, see via_built; this drops the rest.)"""
     av = a.get("argv") or []
     if a.get("type") == "run" and av[:2] == ["go", "run"] and a.get("exit", 0) not in (0, 1):
         return f"`go run` exits with status 1 whenever the program fails, so exit status {a.get('exit')} can never be seen (run the built program instead)"
@@ -269,7 +324,7 @@ def invocation(a, prog=None):
     if t == "call": return ("call", a.get("module"), a.get("func"), json.dumps(a.get("args", []), sort_keys=True), json.dumps(a.get("kwargs", {}), sort_keys=True))
     av = a.get("argv")
     if t != "run" or not isinstance(av, list) or not av: return None
-    if av[:3] == ["go", "run", "."]: key = ("<go run>", *av[3:])
+    if go_run_args(av) is not None: key = ("<go run>", *go_run_args(av))
     elif prog and av[0] in (prog, "./" + prog): key = ("<program>", *av[1:])
     else: key = tuple(av)
     return ("run", key, a.get("stdin") or "")
@@ -312,29 +367,34 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
     groups: one assertion list per task, after repair and salvage. prepend: per task, the spec-example assertions the harness adds (first in the
     task, never dropped). spec_examples: every example of the spec (none may be contradicted). context: assertions already in force elsewhere (a
     split's parent, finished tasks), which a group may not contradict either; they are never dropped here. label: how notes name a group.
-    Rules: an exact duplicate is merged; Python code in a project that is not Python is dropped; a command expected to succeed that passes an option
-    or shell syntax the spec never mentions, or the program's own name, is dropped; an exit status `go run` can never report is dropped; text the
-    spec sends to standard error expected on standard output is dropped; an assertion that contradicts a spec example or the context is dropped;
-    assertions of the groups that exercise the same call or command line with results that cannot all hold are dropped, except those that agree
-    with a strict majority of them (a tie drops every assertion in the clash: at least one of them is wrong and nothing says which). A group that
-    runs the program the spec says how to build starts with that build step (with_build)."""
-    prepend = prepend or [[] for _ in groups]; _, prog = build_step(spec); toks = spec_tokens(spec); err_only = stderr_only(spec)
+    Rules: a `go run` command of a program the spec says how to build with Go is first rewritten to run the built program (via_built); an exact
+    duplicate is merged; Python code in a project that is not Python is dropped; a command expected to succeed that passes an option or shell syntax
+    the spec never mentions, or the program's own name, or packs words the spec passes as separate arguments into one argument, is dropped; an exit
+    status `go run` can never report is dropped; text the spec sends to standard error expected on standard output is dropped; an assertion that
+    contradicts a spec example or the context is dropped; assertions of the groups that exercise the same call or command line with results that
+    cannot all hold are dropped, except those that agree with a strict majority of them (a tie drops every assertion in the clash: at least one of
+    them is wrong and nothing says which). A group that runs the program the spec says how to build starts with that build step (with_build)."""
+    prepend = prepend or [[] for _ in groups]; _, prog = build_step(spec); toks = spec_tokens(spec); err_only = stderr_only(spec); cmds = spec_commands(spec, prog)
     notes, why, gone = [], collections.defaultdict(list), {}
-    stage = []
+    stage = []; rewritten = 0
     for gi, (g, ex) in enumerate(zip(groups, prepend)):
         keys = {json.dumps(e, sort_keys=True) for e in ex}; kept = []
         for a in g if isinstance(g, list) else []:
             if not isinstance(a, dict): kept.append(a); continue
+            b = via_built(a, spec)
+            if b is not a: rewritten += 1; a = b
             k = json.dumps(a, sort_keys=True)
             if k in keys: continue
             keys.add(k)
-            r = (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
+            r = (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _joined(a, cmds, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
             if r: notes.append(f"{label}{gi + 1}: dropped {_short(a)}: {r}"); why[gi].append(r); continue
             kept.append(a)
         stage.append(kept)
+    if rewritten: notes.append(f"rewrote {rewritten} `go run` assertion(s) to run the built program ./{prog}: `go run` reports every failing exit status as 1")
     authority = collections.defaultdict(list)
     for src, items in (("the specification's own example", [*spec_examples, *(e for ex in prepend for e in ex)]), ("an assertion already in force", context)):
         for e in items:
+            e = via_built(e, spec)
             inv = invocation(e, prog) if isinstance(e, dict) else None
             if not inv: continue
             authority[inv].append((src, e))

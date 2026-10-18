@@ -110,7 +110,7 @@ def _write(proj, plan, spec="", actor="planner"):
     for i, t in enumerate(plan["tasks"], 1):
         asserts = staged[i - 1]
         err = A.validate(asserts)
-        if err: bad[i] = err + (f" (every assertion was dropped: {'; '.join(why[i - 1])})"[:600] if why.get(i - 1) else "")
+        if err: bad[i] = err + (f" (every assertion was dropped: {'; '.join(dict.fromkeys(why[i - 1]))})"[:600] if why.get(i - 1) else "")
         else: K.write_spec(proj, f"T{i}", asserts)
         deps = [d for d in (t.get("deps") or []) if isinstance(d, int) and 1 <= d < i]
         tasks.append({"id": i, "title": t.get("title") or f"task {i}", "files": [f for f in (t.get("files") or []) if isinstance(f, str) and f.strip()], "size": t.get("size") or "S", "deps": deps})

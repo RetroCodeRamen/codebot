@@ -65,6 +65,12 @@
     "task": "T3",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "fails",
@@ -95,6 +101,18 @@
    },
    {
     "project": "cap-20261016-172708-calc2-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
     "task": "T5",
     "model": "ornith",
     "actor": "planner"
@@ -130,6 +148,18 @@
     "task": "T5",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -159,6 +189,18 @@
    },
    {
     "project": "cap-20261016-172708-calc2-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
     "task": "T5",
     "model": "ornith",
     "actor": "planner"
@@ -252,6 +294,12 @@
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -276,6 +324,12 @@
    {
     "project": "cap-20261016-170454-calc-control-calc-go-r1",
     "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
     "model": "ornith",
     "actor": "planner"
    }
@@ -305,6 +359,12 @@
    {
     "project": "cap-20261016-170454-calc-control-calc-go-r1",
     "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T6",
     "model": "ornith",
     "actor": "planner"
    }
@@ -361,6 +421,12 @@
    },
    {
     "project": "cap-20261017-131051-calc2-control-rerun-calc-go-r1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
     "task": "T6",
     "model": "ornith",
     "actor": "planner"
@@ -671,6 +737,108 @@
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -713,6 +881,42 @@
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -747,6 +951,30 @@
     "task": "T1",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -773,6 +1001,24 @@
    },
    {
     "project": "cap-20261017-131051-calc2-control-rerun-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
     "task": "T1",
     "model": "ornith",
     "actor": "planner"
@@ -812,6 +1058,18 @@
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -842,6 +1100,18 @@
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -869,6 +1139,18 @@
    },
    {
     "project": "cap-20261017-131051-calc2-control-rerun-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
     "task": "T2",
     "model": "ornith",
     "actor": "planner"
@@ -916,6 +1198,18 @@
     "task": "T3",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -957,6 +1251,18 @@
    },
    {
     "project": "cap-20261016-172708-calc2-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
     "task": "T3",
     "model": "ornith",
     "actor": "planner"
@@ -1004,6 +1310,18 @@
     "task": "T3",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "holds",
@@ -1047,6 +1365,18 @@
    },
    {
     "project": "cap-20261016-172708-calc2-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
     "task": "T3",
     "model": "ornith",
     "actor": "planner"
@@ -1328,6 +1658,12 @@
     "task": "T6",
     "model": "ornith",
     "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
    }
   ],
   "reference": "fails",
@@ -1437,6 +1773,18 @@
   "sources": [
    {
     "project": "cap-20261016-172708-calc2-control-calc-go-r1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
     "task": "T6",
     "model": "ornith",
     "actor": "planner"
@@ -3040,7 +3388,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 tool.py main.go formatResult 2.5 2 5 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/tool.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 tool.py main.go formatResult 2.5 2 5 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/tool.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -3935,7 +4283,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 main.py --tokenize 1+2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/main.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 main.py --tokenize 1+2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/main.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -3959,7 +4307,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 main.py --tokenize 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/main.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 main.py --tokenize 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/main.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -3983,7 +4331,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 main.py --tokenize 1+2*3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/main.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 main.py --tokenize 1+2*3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/main.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4007,7 +4355,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 main.py --tokenize 10/2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/main.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 main.py --tokenize 10/2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/main.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4243,7 +4591,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 tool.py go run main.go 2 + 3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/tool.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 tool.py go run main.go 2 + 3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/tool.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4269,7 +4617,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 tool.py go run main.go 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/tool.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 tool.py go run main.go 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/tool.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4342,7 +4690,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 6 x 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 6 x 7 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4367,7 +4715,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 10 - 4 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 10 - 4 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4392,7 +4740,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 9 / 3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 9 / 3 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4590,7 +4938,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 1 / 0 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 1 / 0 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4692,7 +5040,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 1 / 0 2 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 1 / 0 2 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4724,7 +5072,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 main.py 1 + 2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/main.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 main.py 1 + 2 exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/main.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -4982,7 +5330,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py 0 / 0 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py 0 / 0 exited 2, expected 1 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -5004,7 +5352,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -5026,7 +5374,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -5048,7 +5396,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -5070,7 +5418,7 @@
   ],
   "reference": "fails",
   "seed": "fails",
-  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpw1z5cja2/calc.py': [Errno 2] No such file or directory)"
+  "reference_msg": "python3 calc.py exited 2, expected 0 (stderr: /usr/bin/python3: can't open file '/tmp/tmpci5ngdsi/calc.py': [Errno 2] No such file or directory)"
  },
  {
   "suite": "calc_go",
@@ -8386,6 +8734,1950 @@
   "reference": "fails",
   "seed": "fails",
   "reference_msg": "go run . echo 2 + 3  10 - 4 exited 1, expected 0 (stderr: error: malformed expression: \"echo 2 + 3  10 - 4\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "2",
+    "+",
+    "3"
+   ],
+   "stdout": "5"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "7"
+   ],
+   "stdout": "7"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-2.5",
+    "+",
+    "1"
+   ],
+   "stdout": "-1.5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "*",
+    "-3"
+   ],
+   "stdout": "9\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1.r1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "build",
+    "-o",
+    "calc",
+    ".",
+    "-v"
+   ],
+   "stdout_contains": [
+    "main.go"
+   ],
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go build -o calc . -v exited 1, expected 0 (stderr: malformed import path \"-v\": leading dash)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "*",
+    "-3"
+   ],
+   "stdout": "9"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   },
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "x",
+    "-3"
+   ],
+   "stdout": "9"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "+",
+    "3"
+   ],
+   "stdout": "0"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "3",
+    "+",
+    "-3"
+   ],
+   "stdout": "0"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "-",
+    "3"
+   ],
+   "stdout": "-6"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "3",
+    "-",
+    "-3"
+   ],
+   "stdout": "6"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-3",
+    "/",
+    "3"
+   ],
+   "stdout": "-1"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "3",
+    "/",
+    "-3"
+   ],
+   "stdout": "-1"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "6",
+    "x",
+    "7"
+   ],
+   "stdout": "42"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "10",
+    "-",
+    "4"
+   ],
+   "stdout": "6"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "9",
+    "/",
+    "3"
+   ],
+   "stdout": "3"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T2",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "5"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._input)\n "
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "6"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._input)\n"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "2"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._input)\n "
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "6"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.1",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._input)\n "
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3 * 4',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "14"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.2",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='2 + 3 * 4',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._inpu"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4 - 3',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "3"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.2",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='10 - 4 - 3',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._inp"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4 / 2',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "1"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.2",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='8 / 4 / 2',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._inpu"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "python3",
+    "-c",
+    "import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3 + 4 * 5',capture_output=True); print(r.stdout.decode())"
+   ],
+   "stdout": "26"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3.2",
+    "model": "ornith",
+    "actor": "splitter"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "python3 -c import subprocess; r=subprocess.run(['go','run','.'],input='2 * 3 + 4 * 5',capture_output=True); print(r.stdout.decode()) exited 1, expected 0 (stderr: te\n    input_view = memoryview(self._"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "2",
+    "+",
+    "3",
+    "*",
+    "4"
+   ],
+   "stdout": "14"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "10",
+    "-",
+    "4",
+    "-",
+    "3"
+   ],
+   "stdout": "3"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "8",
+    "/",
+    "4",
+    "/",
+    "2"
+   ],
+   "stdout": "1"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "2",
+    "*",
+    "3",
+    "+",
+    "4",
+    "*",
+    "5"
+   ],
+   "stdout": "26"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T3",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "-2.5",
+    "+",
+    "1"
+   ],
+   "stdout": "-1.5"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "0.1",
+    "+",
+    "0.2"
+   ],
+   "stdout": "0.30000000000000004"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "-2.5",
+    "+",
+    "1"
+   ],
+   "stdout": "-1.5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "0.1",
+    "+",
+    "0.2"
+   ],
+   "stdout": "0.30000000000000004\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "-3",
+    "*",
+    "-3"
+   ],
+   "stdout": "9\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "2.5",
+    "*",
+    "2"
+   ],
+   "stdout": "5"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "7",
+    "/",
+    "2"
+   ],
+   "stdout": "3.5"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "1",
+    "/",
+    "3"
+   ],
+   "stdout": "0.3333333333333333"
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "7"
+   ],
+   "stdout": "7\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3 exited 1, expected 0 (stderr: error: not a number: \"2 + 3\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "10 - 4"
+   ],
+   "stdout": "6\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 10 - 4 exited 1, expected 0 (stderr: error: not a number: \"10 - 4\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "9 / 3"
+   ],
+   "stdout": "3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 9 / 3 exited 1, expected 0 (stderr: error: not a number: \"9 / 3\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3 * 4"
+   ],
+   "stdout": "14\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3 * 4 exited 1, expected 0 (stderr: error: not a number: \"2 + 3 * 4\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "-2.5 + 1"
+   ],
+   "stdout": "-1.5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . -2.5 + 1 exited 1, expected 0 (stderr: error: not a number: \"-2.5 + 1\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "6 x 7"
+   ],
+   "stdout": "42\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 6 x 7 exited 1, expected 0 (stderr: error: not a number: \"6 x 7\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2.5 * 2"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2.5 * 2 exited 1, expected 0 (stderr: error: not a number: \"2.5 * 2\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "1 / 3"
+   ],
+   "stdout": "0.3333333333333333\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 1 / 3 exited 1, expected 0 (stderr: error: not a number: \"1 / 3\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n4 - 1\n"
+   ],
+   "stdout": "5\n3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n4 - 1\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n4 - 1\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n\n4 - 1\n"
+   ],
+   "stdout": "5\n3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n\n4 - 1\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n\\n4 - 1\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n\n"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-20261017-215705-calc3-control-calc-go-r1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "2.5",
+    "*",
+    "2"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "7",
+    "/",
+    "2"
+   ],
+   "stdout": "3.5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T1",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "0.1",
+    "+",
+    "0.2"
+   ],
+   "stdout": "0.30000000000000004\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   },
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "./calc",
+    "1",
+    "/",
+    "3"
+   ],
+   "stdout": "0.3333333333333333\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "abc"
+   ],
+   "stdout_contains": [
+    "error: malformed expression"
+   ],
+   "exit": 1
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . abc output does not contain 'error: malformed expression' (got '')"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "10",
+    "+",
+    "20"
+   ],
+   "stdout_contains": [
+    "30"
+   ],
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2+3"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2+3 exited 1, expected 0 (stderr: error: not a number: \"2+3\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "10 - 4 - 3"
+   ],
+   "stdout": "3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 10 - 4 - 3 exited 1, expected 0 (stderr: error: not a number: \"10 - 4 - 3\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n10 - 4 - 3\n"
+   ],
+   "stdout": "5\n3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n10 - 4 - 3\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n10 - 4 - 3\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2 + 3\n\n10 - 4 - 3\n"
+   ],
+   "stdout": "5\n3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 2 + 3\n\n10 - 4 - 3\n exited 1, expected 0 (stderr: error: not a number: \"2 + 3\\n\\n10 - 4 - 3\\n\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "1 / 0"
+   ],
+   "stdout": "error: division by zero\n",
+   "exit": 1
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 1 / 0 printed '', expected 'error: division by zero'"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "3 + 4 + 5"
+   ],
+   "stdout": "12\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-1",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "go run . 3 + 4 + 5 exited 1, expected 0 (stderr: error: not a number: \"3 + 4 + 5\"\nexit status 2)"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "file_contains",
+   "path": "main.go",
+   "text": "strconv.ParseFloat"
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "file_contains",
+   "path": "main.go",
+   "text": "FormatFloat"
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T4",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "-0"
+   ],
+   "stdout": "0\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T5",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "go",
+    "run",
+    ".",
+    "2",
+    "x",
+    "3"
+   ],
+   "exit": 0,
+   "stdout": "6\n"
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T6",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "bash",
+    "-c",
+    "echo '2 + 3' | go run . 2>&1"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "bash",
+    "-c",
+    "printf '2 + 3\\n10 - 4\\n\\n9 / 3\\n' | go run . 2>&1"
+   ],
+   "stdout": "5\n6\n3\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "bash",
+    "-c",
+    "printf '2 + 3\\nerror: division by zero\\n' | go run . 2>&1"
+   ],
+   "stdout": "5\nerror: division by zero\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "fails",
+  "seed": "fails",
+  "reference_msg": "bash -c printf '2 + 3\\nerror: division by zero\\n' | go run . 2>&1 printed '5\\nerror: malformed expression: \"error: division by zero\"', expected '5\\nerror: division by zero'"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "bash",
+    "-c",
+    "printf '2 + 3\\n' | go run . 2>&1"
+   ],
+   "stdout": "5\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
+ },
+ {
+  "suite": "calc_go",
+  "assert": {
+   "type": "run",
+   "argv": [
+    "bash",
+    "-c",
+    "printf '2 + 3\\n\\n10 - 4\\n' | go run . 2>&1"
+   ],
+   "stdout": "5\n6\n",
+   "exit": 0
+  },
+  "sources": [
+   {
+    "project": "cap-probe-20261017-2109-calc-2",
+    "task": "T7",
+    "model": "ornith",
+    "actor": "planner"
+   }
+  ],
+  "reference": "holds",
+  "seed": "fails"
  },
  {
   "suite": "level_01",
