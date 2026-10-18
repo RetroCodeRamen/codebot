@@ -206,6 +206,23 @@ against 16/32 and 13/32 for the two earlier control builds; 44 of 57 frozen asse
 Found, not fixed yet: the split children of calc3's precedence task checked the program with `python3 -c "subprocess.run([...], input='2 + 3',
 capture_output=True)"`, which raises TypeError on every run (a str input without `text=True`), so they could never pass.
 
+Found in the calc4 build (2026-10-18: 15/32 and 10/20, calc3's verified code 16/32 and 10/20), not fixed yet, by the score they cost:
+
+- **The planner is never told about the `stdin` field.** `planner.GUIDE` lists stdout, stdout_contains, stdout_json and exit; the schema allows
+  `stdin`, but the model wrote `./calc echo "2 + 3"` in all three rounds and the stdin task was dropped from the plan (6 of the 32 hidden tests).
+- **Rung 2 resets the code before every attempt, so it throws away a near-success.** T3's attempt 3 passed all 9 of its own checks and broke only
+  T2's `6 x 7`; the worker was told "keep the new work", but attempt 4 began on a reset tree and the task timed out (4 hidden tests). An attempt
+  whose own check passed and that only broke earlier tasks should be continued, not reset.
+- **Assertions that contradict themselves pass the screen**: `"stdout": ""` with `"stdout_contains": ["error:"]` can hold for no program (the
+  runner compares stdout stripped, and a stripped contained text must lie inside the stripped stdout). 4 of T6's 6 checks; in the corpus 23 uses
+  in calc_go and 14 in level_01. The wrong-stream rule missed them because spec item 7 sends `error:` to stdout in stdin mode.
+- **A repair reply is applied to whatever task number it names.** The planner answered T7's rejection with `"id": 1` twice; T1's assertions were
+  replaced (the second time by the guide's `shapes.area` example). Only rejected tasks should take a repair; a lone reply to a lone rejection maps
+  to it.
+- **A split child whose only assertion is the build step counts as verified** (T6.1): it tests nothing.
+- The re-derivation kept 5 of 5 wrong checks (`calc 2 3` "is a valid expression that should produce 5").
+- A program that never stops costs 60 s per assertion: 8 minutes per check run, 16 of T3's 90 minutes.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.

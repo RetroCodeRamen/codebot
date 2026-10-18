@@ -151,6 +151,21 @@ error and prints with `fmt.Println` although the spec names `strconv.FormatFloat
 exit-2 checks went through `go run` and were dropped instead of rewritten, and the spec's prose rules have no examples), and the worker does the
 minimum that passes them.
 
+**Control after fixes 6-9 (`calc4-control`, 2026-10-18, e9ee6ea)** [V]: 15/32 hidden tests and 10/20 own inputs, as left and verified-only
+alike (the code went back to the last verified checkpoint twice, with `T3.attempt5.patch` and `T6.attempt8.patch` saved), in 2 h 46 min; calc3's
+verified code scores 16/32 and 10/20. By requirement, calc3 verified -> calc4: formatting 2/4 -> 4/4 (T5 used `strconv.FormatFloat`, which its
+title named, so `99999 * 99999` no longer prints `9.999800001e+09`), errors 4/7 -> 1/7 (T6 blocked, and T1 wrote every message as `Error:` with
+status 1 for a bad token), the rest unchanged (R1 4/4, R2 3/3, precedence 0/4, R4 3/4, stdin 0/6). 43 of the 48 frozen checks hold on the
+reference (90%; calc3 77%), but the 5 that do not are 5 of T6's 6, so T6 could never pass: four expect `"stdout": ""` and
+`"stdout_contains": ["error:"]` at once, one expects `calc 2 3` to print 5, and the re-derivation judged all five required by the spec. The
+`go run` rewrite (fix 6) turned 15-39 planner assertions per round into `./calc` ones. The argument rule (fix 7) never fired: the planner wrote
+its stdin checks as `./calc echo "2 + 3"`, because its guide never mentions the `stdin` field, and T7 was dropped from the plan after three
+rounds. Precedence: attempt 3 passed all 9 of T3's checks and broke only `6 x 7` (T2), but rung 2 resets the code before every attempt, so
+attempt 4 started from scratch; attempts 4 and 5 wrote parsers that never stop (`break` inside `switch`), and each check run then waited
+8 x 60 s. The planner's repair replies named task 1 instead of 7, twice, and were applied to T1 (the second time the guide's `shapes.area`
+example); T1 was saved by the spec's own examples. The fixes worked as built; the run failed on other defects (`docs/dev/HANDOFF.md`, "Found in
+the calc4 build").
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).
