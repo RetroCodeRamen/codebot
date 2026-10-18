@@ -40,7 +40,7 @@ def mechanical_split(task):
                              for i, p in enumerate(parts, 1)]}
     return None
 
-def propose(proj, task, last_error="", timeout=1800):
+def propose(proj, task, last_error="", timeout=1800, avoid=None):
     """SPLIT_CMD (a hook: reads CODEBOT_TASK_FILE, prints JSON {"subtasks":[...],"fixtures":{...}}); with WORKER=native the
     model-driven splitter is the default hook and the mechanical splitter is the fallback."""
     cmd = proj.get("SPLIT_CMD")
@@ -48,7 +48,7 @@ def propose(proj, task, last_error="", timeout=1800):
         cmd = f"{sys.executable} -m codebot.splitter"
     if cmd:
         tfile = proj.p(".split_task.json")
-        with open(tfile, "w") as f: json.dump({"task": task, "error": last_error}, f)
+        with open(tfile, "w") as f: json.dump({"task": task, "error": last_error, "avoid": avoid or []}, f)
         try:
             rc, out, _, timed_out = run_group(cmd, timeout, cwd=proj.rundir,
                                env=dict(os.environ, CODEBOT_TASK_FILE=tfile, CODEBOT_TASK_ID=task["id"], CODEBOT_STATE=proj.state, CODEBOT_RUNDIR=proj.rundir,
@@ -60,12 +60,17 @@ def propose(proj, task, last_error="", timeout=1800):
         if proj.get("SPLIT_CMD"): return None             # an explicit hook that fails means "no split", not "guess"
     return mechanical_split(task)
 
-def auto_split(proj, tid, last_error="", actor="harness", timeout=1800):
-    """Split one task into subtasks with their own frozen checks. Returns {"ok":..., "children":[...]} (ok False = no split)."""
+def split_depth(tid): return str(tid).count(".")          # T4 = 0, T4.1 = 1, T4.1.2 = 2
+
+def auto_split(proj, tid, last_error="", actor="harness", timeout=1800, avoid=None):
+    """Split one task into subtasks with their own frozen checks. Returns {"ok":..., "children":[...]} (ok False = no split).
+    avoid: assertions that failed in every attempt at this task; the splitter never gives them to a child."""
     store = T.TaskStore(proj); data = store.load(); task = T.get(data, tid)
     if task is None: return {"ok": False, "error": f"unknown task {tid}"}
     if task.get("split_into"): return {"ok": False, "error": "already split"}
-    prop = propose(proj, task, last_error, timeout)
+    limit = proj.get("SPLIT_MAX_DEPTH", 1, int)        # all real runs to 2026-10-17: subtasks one level down passed 8 of 83 attempts, deeper ones mostly by copying an impossible check
+    if split_depth(tid) >= limit: return {"ok": False, "error": f"split depth limit: {tid} is already {split_depth(tid)} level(s) down (SPLIT_MAX_DEPTH={limit})"}
+    prop = propose(proj, task, last_error, timeout, avoid)
     if not prop: return {"ok": False, "error": "no split available"}
     subs = [s for s in prop["subtasks"] if (s.get("check") or "").strip() != (task.get("check") or "").strip()]
     if len(subs) < 1: return {"ok": False, "error": "split would not simplify the task"}       # one narrower child + the parent's check as the final gate is still a split

@@ -62,12 +62,12 @@ def signals(proj, task):
             out.append(("same_failure", f"the same check failure {n} times in a row"))
     if L["TASK_MAX_ATTEMPTS"] and used >= L["TASK_MAX_ATTEMPTS"]:
         out.append(("task_budget", f"{used} attempts used (cap {L['TASK_MAX_ATTEMPTS']})"))
-    nop = 0
-    for a in reversed(allatts):
+    nop = 0                    # THIS task's failures in a row: counted across tasks, one bad task made every later task escalate after a single attempt
+    for a in reversed(mine):   # (2026-10-17 calc_go control rerun: 23 of 38 escalations, so every task fell straight through to splitting)
         if a["passed"]: break
         nop += 1
     if L["STUCK_NO_PROGRESS"] and nop >= L["STUCK_NO_PROGRESS"]:
-        out.append(("no_progress", f"{nop} attempts in a row without any task completing"))
+        out.append(("no_progress", f"{nop} attempts in a row at this task without passing"))
     win = mine[-L["PINGPONG_WINDOW"]:] if L["PINGPONG_WINDOW"] else []
     files = {f for a in win for f in (a.get("files") or {})}
     for f in sorted(files):

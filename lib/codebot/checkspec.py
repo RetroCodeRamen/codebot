@@ -14,6 +14,7 @@ def ensure_runner(proj):
     return dst
 
 def command_for(tid): return f"python3 $CODEBOT_CHECKS/{RUNNER} $CODEBOT_CHECKS/{tid}.spec.json"
+def akey(a): return json.dumps(a, sort_keys=True)          # one assertion's identity: two assertions are the same test when their JSON is equal
 def is_runner_check(check): return RUNNER in (check or "")
 def spec_name(tid): return f"{tid}.spec.json"
 

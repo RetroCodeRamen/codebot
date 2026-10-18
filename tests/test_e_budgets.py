@@ -98,6 +98,17 @@ class TestProjectBudgets(Base):
         self.assertTrue(B._flipped(["a", "b", "a"])); self.assertFalse(B._flipped(["a", "b", "c"]))
         self.assertFalse(B._flipped(["a", "a", "a"])); self.assertTrue(B._flipped(["a", "b", "b", "a"]))
 
+class TestNoProgressIsPerTask(Sandboxed):
+    def write(self, rows):
+        with open(os.path.join(self.state, "attempts.jsonl"), "w") as f:
+            for task, n in rows: f.write(json.dumps({"ts": "t", "task": task, "attempt": n, "passed": False, "sig": f"{task}{n}", "files": {}}) + "\n")
+    def test_a_new_task_does_not_inherit_the_failures_of_the_task_before_it(self):
+        # 2026-10-17 calc_go control rerun: the streak of failures was counted across tasks, so after one bad task every later task escalated after its
+        # first failed attempt (23 of 38 escalations) and fell straight through to splitting
+        self.set_env(STUCK_NO_PROGRESS="6"); self.write([("T5", n) for n in range(1, 7)] + [("T6", 1)])
+        self.assertNotIn("no_progress", [n for n, _ in B.signals(self.proj(), {"id": "T6", "attempts": 1})])
+        self.assertIn("no_progress", [n for n, _ in B.signals(self.proj(), {"id": "T5", "attempts": 6})])
+
 class TestCutAttempts(Sandboxed):
     def test_an_attempt_cut_by_the_budget_does_not_crash_stuck_detection(self):
         # 2026-10-16 calc_go control build: after T3's attempt was cut by its 90-min budget (a record with "attempt" but no "passed"),

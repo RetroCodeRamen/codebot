@@ -9,19 +9,31 @@ SCHEMA = {"type": "object", "properties": {"subtasks": {"type": "array", "minIte
     "type": "object", "properties": {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "asserts": K.assert_schema()},
     "required": ["title", "asserts"], "additionalProperties": False}}}, "required": ["subtasks"], "additionalProperties": False}
 
-def build(proj, tid, subs, parent_files=None, parent_asserts=None, notes=None):
+def build(proj, tid, subs, parent_files=None, parent_asserts=None, notes=None, avoid=None):
     """Model output -> (subtasks for planops.split_task, fixtures). Assertions are repaired with the parent's as context (the splitter froze 12 of 21
     impossible assertions on level 1, mostly the expected value copied into args); unusable assertions are dropped one by one, and a child with
-    none left is dropped. notes (a list) collects what was repaired or dropped."""
+    none left is dropped. A child that tests everything its parent tests (or the same as an earlier child) is dropped: it is not a smaller step
+    (2026-10-17: T4 -> T4.1 -> T4.1.1 -> T4.1.1.1 -> T4.1.1.1.1 all carried the parent's six assertions). avoid: assertions that failed in every
+    attempt at the parent; no child gets one. notes (a list) collects what was repaired or dropped."""
     from .planner import salvage
-    out, fx = [], {}; notes = notes if notes is not None else []
+    out, fx, seen = [], {}, set(); notes = notes if notes is not None else []
+    parent_key = frozenset(K.akey(a) for a in parent_asserts or [] if isinstance(a, dict)); avoid_keys = {K.akey(a) for a in avoid or []}
     groups, rep = K.repair_plan([K.prepare(s.get("asserts")) for s in subs], [parent_asserts or []]); notes += rep
     for s, asserts in zip(subs, groups):
         asserts, dropped = salvage(asserts); notes += [f"dropped an assertion: {e}" for e in dropped]
-        if not (s.get("title") or "").strip() or A.validate(asserts): notes.append(f"dropped child {s.get('title', '')[:60]!r}: no usable assertion"); continue
+        title = (s.get("title") or "").strip()
+        if isinstance(asserts, list) and avoid_keys:
+            kept = [a for a in asserts if K.akey(a) not in avoid_keys]
+            if len(kept) < len(asserts): notes.append(f"child {title[:60]!r}: left out {len(asserts) - len(kept)} assertion(s) that failed in every attempt at {tid}")
+            asserts = kept
+        if not title or A.validate(asserts): notes.append(f"dropped child {title[:60]!r}: no usable assertion"); continue
+        ck = frozenset(K.akey(a) for a in asserts)
+        if parent_key and ck >= parent_key: notes.append(f"dropped child {title[:60]!r}: it tests everything {tid} tests, so it is not a smaller step"); continue
+        if ck in seen: notes.append(f"dropped child {title[:60]!r}: the same assertions as an earlier child"); continue
+        seen.add(ck)
         cid = f"{tid}.{len(out) + 1}"
         fx[K.spec_name(cid)] = json.dumps({"asserts": asserts}, indent=1)
-        out.append({"title": s["title"].strip(), "check": K.command_for(cid), "files": s.get("files") or list(parent_files or []), "size": "S"})
+        out.append({"title": title, "check": K.command_for(cid), "files": s.get("files") or list(parent_files or []), "size": "S"})
     if out and not os.path.isfile(os.path.join(C.checks_dir(proj), K.RUNNER)):          # a project frozen before declarative checks existed
         with open(A.__file__) as f: fx[K.RUNNER] = f.read()
     return out, fx
@@ -47,7 +59,7 @@ def main():
     except Exception as e: subs = None; why = f"no usable reply: {type(e).__name__}: {str(e)[:200]}"
     if raw is not None:                                    # kept for the replay corpus (tests/corpus/build_corpus.py)
         with open(proj.p(f"split.reply.{task['id']}.json"), "w") as f: f.write(raw)
-    kids, fx = build(proj, task["id"], subs, task.get("files"), spec, notes) if subs else ([], {})
+    kids, fx = build(proj, task["id"], subs, task.get("files"), spec, notes, d.get("avoid")) if subs else ([], {})
     if subs and not kids: why = "every proposed child was unusable"
     append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "splitter", "op": "split_proposal", "ok": bool(kids), "task": task["id"], "reason": why or f"{len(kids)} usable child(ren)", "notes": notes[:20]})
     if 1 <= len(kids) <= 4: print(json.dumps({"subtasks": kids, "fixtures": fx}))

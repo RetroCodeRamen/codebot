@@ -232,6 +232,23 @@ class TestSplitter(Sandboxed):
         r = planops.apply(self.proj(), {"op": "split_task", "task": "T1", "subtasks": kids, "fixtures": fx, "reason": "r"}, "harness")
         self.assertFalse(r["ok"]); self.assertIn("no subtask", r["error"]); self.assertFalse([n for n in os.listdir(os.path.join(self.state, "checks")) if n.startswith("T1.") and n.endswith(".spec.json")])
 
+    def test_a_child_that_repeats_its_parent_or_an_earlier_child_is_not_a_smaller_step(self):
+        # 2026-10-17 calc_go control rerun: T4 -> T4.1 -> T4.1.1 -> T4.1.1.1 -> T4.1.1.1.1 each carried T4's six (impossible) assertions, and siblings
+        # with the same assertions as the one that passed were then counted as verified without any work
+        parent = self.SUBS[1]["asserts"] + self.SUBS[0]["asserts"]
+        same = {"title": "same as the parent", "asserts": list(reversed(parent))}
+        more = {"title": "parent plus one", "asserts": parent + [{"type": "file_exists", "path": "x.py"}]}
+        twin = {"title": "twin", "asserts": self.SUBS[0]["asserts"]}
+        K.ensure_runner(self.proj()); notes = []; kids, fx = splitter.build(self.proj(), "T1", [same, more, self.SUBS[0], twin], [], parent, notes)
+        self.assertEqual([k["title"] for k in kids], ["slugify"]); self.assertEqual(sorted(fx), ["T1.1.spec.json"])
+        self.assertEqual(sum("not a smaller step" in n for n in notes), 2); self.assertTrue(any("earlier child" in n for n in notes))
+    def test_no_child_gets_an_assertion_that_failed_in_every_attempt(self):
+        stuck = self.SUBS[1]["asserts"][0]
+        kid = {"title": "both", "asserts": [stuck, self.SUBS[0]["asserts"][0]]}; only = {"title": "only the stuck one", "asserts": [stuck]}
+        K.ensure_runner(self.proj()); notes = []; kids, fx = splitter.build(self.proj(), "T1", [kid, only], [], None, notes, avoid=[stuck])
+        self.assertEqual([k["title"] for k in kids], ["both"]); self.assertEqual(json.loads(fx["T1.1.spec.json"])["asserts"], self.SUBS[0]["asserts"])
+        self.assertTrue(any("failed in every attempt" in n for n in notes))
+
     def test_build_repairs_with_the_parent_as_context_and_keeps_a_single_usable_child(self):
         parent = [{"type": "call", "module": "textutil", "func": "slugify", "args": [x], "expect": x.lower()} for x in ("A", "B", "C")]
         kids_in = [{"title": "empty input", "asserts": [{"type": "call", "module": "textutil", "func": "slugify", "args": ["", ""], "expect": ""}]},       # repaired via the parent's arity

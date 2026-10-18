@@ -39,6 +39,15 @@ class TestSplit(Base):
     def test_cannot_split_twice(self):
         Z.auto_split(self.proj(), "T1"); self.assertFalse(Z.auto_split(self.proj(), "T1")["ok"])
 
+    def test_a_subtask_is_not_split_again_by_default(self):
+        # 2026-10-17 calc_go control rerun: splits went five levels deep (T4.1.1.1.1), each level carrying the same impossible check
+        self.assertTrue(Z.auto_split(self.proj(), "T1")["ok"])
+        r = Z.auto_split(self.proj(), "T1.1"); self.assertFalse(r["ok"]); self.assertIn("split depth limit", r["error"])
+        self.assertFalse(any(t["id"].startswith("T1.1.") for t in self.data()["tasks"]))
+    def test_split_depth_is_a_setting(self):
+        self.set_env(SPLIT_MAX_DEPTH="2"); self.assertTrue(Z.auto_split(self.proj(), "T1")["ok"])
+        self.assertNotIn("depth", Z.auto_split(self.proj(), "T1.1").get("error") or "")
+
     def test_split_cmd_plugin(self):
         self.set_env(SPLIT_CMD=self.worker("import json; print(json.dumps({'subtasks':[{'title':'one','check':'test -f x'},{'title':'two','check':'test -f y'}]}))"))
         r = Z.auto_split(self.proj(), "T1"); self.assertTrue(r["ok"], r); self.assertEqual(self.task("T1.2")["check"], "test -f y")

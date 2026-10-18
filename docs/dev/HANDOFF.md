@@ -130,6 +130,19 @@ MIT `LICENSE`, `install.sh` (pinned Ollama 0.40.3 with sha256, `ornith:9b` -> `c
 
 Method, scores, candidates and commands: `docs/MODEL_EVAL.md`. 10 candidates pulled into `models/` (the control `ornith:9b` is never updated in place). Per-role settings in `lib/codebot/roles.py`; scorer, mutants, gate and planner probe in `lib/codebot/evalkit/`; `codebot eval ...`. First finding: the control is Ornith 1.0 (Qwen3.5-9B + agentic-coding RL) and codebot runs every call with thinking off; its plans have better coverage than the hand-written reference plan but 1 in 3 tasks carries an impossible assertion.
 
+### Design review fixes (2026-10-17)
+
+The Go calculator builds (`calc_go`, 6 setups + a control rerun) showed the harness, not the model, was the bottleneck: only 3 of the control rerun's
+41 frozen checks hold on the reference solution, the worker never saw the spec, and the ladder copied impossible checks into ever deeper splits.
+Fixes, in the order they landed:
+
+1. **Recovery ladder.** The `no_progress` stuck signal counts only the task's own failures in a row (it counted across tasks, so after one bad task
+   every later task escalated after one attempt: 23 of 38 escalations in the rerun). A split child that tests everything its parent tests, or the same
+   as an earlier child, is dropped (`splitter.build` compares assertion content; the old check compared command strings, which always differ for
+   declarative checks). Splitting stops at `SPLIT_MAX_DEPTH` levels (default 1: a subtask goes to the next rung instead of splitting again; in all real
+   runs to date subtasks passed 8 of 83 attempts one level down). The splitter never gives a child an assertion that failed in every attempt at the
+   parent (`avoid`).
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.
