@@ -206,22 +206,44 @@ against 16/32 and 13/32 for the two earlier control builds; 44 of 57 frozen asse
 Found, not fixed yet: the split children of calc3's precedence task checked the program with `python3 -c "subprocess.run([...], input='2 + 3',
 capture_output=True)"`, which raises TypeError on every run (a str input without `text=True`), so they could never pass.
 
-Found in the calc4 build (2026-10-18: 15/32 and 10/20, calc3's verified code 16/32 and 10/20), not fixed yet, by the score they cost:
+### Fixes after the calc4 build (2026-10-18)
 
-- **The planner is never told about the `stdin` field.** `planner.GUIDE` lists stdout, stdout_contains, stdout_json and exit; the schema allows
-  `stdin`, but the model wrote `./calc echo "2 + 3"` in all three rounds and the stdin task was dropped from the plan (6 of the 32 hidden tests).
-- **Rung 2 resets the code before every attempt, so it throws away a near-success.** T3's attempt 3 passed all 9 of its own checks and broke only
-  T2's `6 x 7`; the worker was told "keep the new work", but attempt 4 began on a reset tree and the task timed out (4 hidden tests). An attempt
-  whose own check passed and that only broke earlier tasks should be continued, not reset.
-- **Assertions that contradict themselves pass the screen**: `"stdout": ""` with `"stdout_contains": ["error:"]` can hold for no program (the
-  runner compares stdout stripped, and a stripped contained text must lie inside the stripped stdout). 4 of T6's 6 checks; in the corpus 23 uses
-  in calc_go and 14 in level_01. The wrong-stream rule missed them because spec item 7 sends `error:` to stdout in stdin mode.
-- **A repair reply is applied to whatever task number it names.** The planner answered T7's rejection with `"id": 1` twice; T1's assertions were
-  replaced (the second time by the guide's `shapes.area` example). Only rejected tasks should take a repair; a lone reply to a lone rejection maps
-  to it.
-- **A split child whose only assertion is the build step counts as verified** (T6.1): it tests nothing.
-- The re-derivation kept 5 of 5 wrong checks (`calc 2 3` "is a valid expression that should produce 5").
-- A program that never stops costs 60 s per assertion: 8 minutes per check run, 16 of T3's 90 minutes.
+The calc4 build (15/32 hidden, 10/20 hand inputs; calc3's verified code 16/32 and 10/20) showed fixes 6-9 working as built and failed on the
+defects below (details in `docs/MODEL_EVAL.md`). The user approved fixing them and one more build to measure them.
+
+10. **A repair reply goes only to a rejected task** (`planner.route_repairs`). The planner answered T7's rejection with `"id": 1`, twice, and the
+    replies replaced T1's assertions (the second time with the guide's own `shapes.area` example). A reply now applies only to a rejected task; a
+    lone reply to a lone rejection is for that task whatever number it gives; others are logged (`repair_ignored`). The prompt names the numbers.
+11. **The planner and the splitter are told how to give standard input, and that standard error is not compared** (`planner.GUIDE`,
+    `splitter.TYPES`). The guide listed only the output fields, so the planner wrote `./calc echo "2 + 3"` in all three rounds and the stdin task
+    (6 of the 32 hidden tests) was dropped from the plan; it also put the `error:` text the spec sends to standard error in stdout_contains.
+    A planning probe with the new guide still had no input: the planner wrote `./calc` expecting "5", without `stdin`. Constrained decoding writes
+    required fields before optional ones, so the optional `stdin` could only follow the expected output (`checkspec.assert_schema`); run variants
+    with `stdin` required now offer it right after `argv`. The next probe gave the stdin task five stdin checks (3 hold on the reference), but also
+    gave the precedence task four with the whole command line as input (`calc 2 + 3 * 4`); a stdin line that starts with the program's own name is
+    now dropped (`grounding._named_in_stdin`), as its own name in argv already was.
+12. **An assertion that contradicts itself is dropped** (`grounding._contradictory`): exact stdout S plus a stdout_contains text not inside S can
+    hold for no program (the runner strips stdout), so the rule is sound by construction. 4 of T6's 6 checks were `"stdout": ""` with
+    `"stdout_contains": ["error:"]`. Corpus rebuilt with calc4 (797 assertions): 17 distinct assertions (41 uses) contradict themselves, all
+    impossible; the screen now lets through 47 impossible calc_go checks (51 before) and 139 in level_01 (153).
+13. **The re-derivation judges a run of the program blind** (`rederive.blind`, `rederive.verdicts`). Shown `calc 2 3` expected to print 5, the
+    judge agreed ("a valid expression"); it agreed with all five wrong checks of T6. A persistently failing run of the program is now listed by its
+    input only; the judge names the exit status the spec requires, checking the spec's error rules first, and the harness removes a run whose
+    expected status differs. Real model, replaying past re-derivations: calc4's `calc 2 3` removed 3/3 (1/2 without the error-rule sentence),
+    calc3's correct precedence checks kept 5/5, calc3's `go build -o calc . -v` removed 2/2; calc3 T7's one-argument checks still kept (0/2;
+    the screen drops those since fix 7).
+14. **A split starts from the last verified checkpoint** (`engine._from_checkpoint`). T6 was split while its last attempt had left a syntax error,
+    so a child whose only assertion was the build step failed on that tree, was accepted, and was "verified" by fixing the error (T6.1). After the
+    re-derivation, the last attempt is saved as a patch (plan.log `shelve`) and the code reset, so the guard judges children on verified code.
+15. **An attempt that passed its own check is where the next one starts** (`engine._keep_near`, `_from_near`). T3's attempt 3 passed all 9 of its
+    checks and broke only T2's `6 x 7`; the worker was told "keep the new work", but rung 2 resets the code before every attempt, attempts 4 and 5
+    started from scratch (and wrote parsers that never stop), and T3 timed out. Such an attempt is now kept as `unverified/<task>.near.patch`
+    (plan.log `near_success`); every later attempt starts from it unless a later one breaks fewer tasks; the split rung is skipped (what is left is
+    what it broke); a blocked question names it.
+
+Still open: standard error cannot be checked at all, so the spec's `error:` prefix is untestable (calc4 printed `Error:`: its `calc 5 / 0`
+exited 1 as the spec says and still failed the hidden test); a program that never stops costs 60 s per assertion (8 minutes per check run, 16 of T3's 90
+minutes); the planner narrowed requirement 1 to "a single-number or two-token expression" in T1's title, and the worker built exactly that.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 
