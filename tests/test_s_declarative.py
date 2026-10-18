@@ -475,6 +475,14 @@ Python 3, standard library only.
 1. `m.py` provides `f(x)`, which doubles a number: `f(2)` is `4`.
 """
 
+ADDER = """# Adder
+A shell program.
+
+## Requirements
+
+1. The program `./calc` adds two numbers: `./calc 2 + 3` prints `5`. Two numbers in a row are an error: the program exits with status 2.
+"""
+
 class TestRederive(Sandboxed):
     """2026-10-17 design review: the ladder assumed a failing check means wrong code, so a task whose check could never pass climbed to the split rung
     and the splitter copied the check into smaller tasks (38 of the 41 checks the calc_go control rerun froze could not pass for a correct program).
@@ -534,6 +542,26 @@ class TestRederive(Sandboxed):
         ev = self.steps(4); self.assertEqual(ev[3]["check_rederived"], {"removed": 1, "added": 1})
         self.assertEqual(K.read_task_spec(self.proj(), self.task()), [self.EXAMPLE, good])
 
+    CALC = "import os\nopen('calc', 'w').write('#!/bin/sh\\n[ \"$2\" = + ] && [ $# = 3 ] && echo $(($1 + $3)) && exit 0\\nexit 2\\n')\nos.chmod('calc', 0o755)\n"
+    OK = {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5"}; TWO = {"type": "run", "argv": ["./calc", "2", "3"], "stdout": "5"}
+    def cli(self, reply):
+        with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write(ADDER)
+        self.start([self.OK, self.TWO], worker=self.CALC, replies=[reply]); return self.steps(4)
+    def test_a_run_of_the_program_is_judged_blind_by_the_exit_status_the_spec_requires(self):
+        # 2026-10-18 calc4: shown `calc 2 3` expected to print 5, the judge agreed ("a valid expression"); the spec says two numbers in a row exit with status 2
+        ev = self.cli({"verdicts": [{"n": 2, "why": "two numbers in a row exit with status 2", "exit": 2, "required_by_spec": True}], "replacements": []})
+        self.assertEqual(ev[3]["check_rederived"], {"removed": 1, "added": 0})
+        p = self.fake.requests[0]["messages"][1]["content"]
+        self.assertIn('2. run ["./calc", "2", "3"]  (expected result hidden)', p); self.assertNotIn("expected 0", p); self.assertIn("1. " + json.dumps(self.OK), p)
+        self.assertEqual(K.read_task_spec(self.proj(), self.task()), [self.OK])
+        self.assertIn("requires exit status 2", self.log("check_rederived")[-1]["removed"][0]["why"])
+    def test_a_blind_verdict_that_agrees_or_cannot_say_keeps_the_assertion(self):
+        for v in ({"exit": 0, "required_by_spec": True}, {"exit": None, "required_by_spec": False}):
+            self.assertEqual(RD.verdicts([self.OK, self.TWO], [2], {"verdicts": [{"n": 2, "why": "w", **v}]}), {})
+        call = {"type": "call", "module": "m", "func": "f", "args": [3], "expect": 10}; build = {"type": "run", "argv": ["go", "build", "-o", "calc", ".", "-v"], "exit": 0}
+        self.assertEqual(sorted(RD.verdicts([call, build], [1, 2], {"verdicts": [{"n": 1, "why": "f doubles", "exit": None, "required_by_spec": False},
+                                                                                 {"n": 2, "why": "-v is no package", "exit": 1, "required_by_spec": True}]})), [1, 2])   # shown in full: either says wrong
+        self.assertFalse(RD.blind(build, "calc")); self.assertTrue(RD.blind({"type": "run", "argv": ["go", "run", ".", "1"], "exit": 0}, "calc"))
     def test_failing_numbers_and_persistent_failures(self):
         self.assertEqual(RD.failing_numbers("FAIL: x\nfailing assertions: 2, 5\n2 of 5 assertions failed\n"), [2, 5]); self.assertIsNone(RD.failing_numbers("all 3 assertions hold"))
         h = lambda n, f: {"attempt": n, "failing": f}

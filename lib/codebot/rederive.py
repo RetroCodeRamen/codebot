@@ -1,7 +1,10 @@
 """Before a failing task is split, ask whether its check is wrong. The ladder used to assume a failing check means wrong code; in the calc_go control
 rerun (2026-10-17) 38 of 41 frozen checks could not pass for ANY correct program, and splitting copied them into ever smaller tasks. Here, when
 some assertions failed in every attempt at a task, one model call (the planner's model) judges each of those assertions against the spec text
-and may propose replacements. The harness then decides:
+and may propose replacements. A run of the program under test is judged blind: the judge sees its input only and names the exit status the spec
+requires (shown the expected result, it agreed with all five wrong checks of calc4's T6). The harness then decides:
+  - a run whose exit status differs from the one the judge names goes, and so does an assertion shown in full that the judge says the spec does
+    not require (verdicts);
   - only assertions that failed in EVERY attempt may go; the spec's own examples (grounding.py) never go; assertions that ever passed stay;
   - replacements are screened like any planned assertion (grounding.screen, assertions.validate) and must not repeat a removed one;
   - the new check may not be broken; it replaces the task's check as a new frozen spec file (the old one stays on disk and in the log);
@@ -31,28 +34,58 @@ def persistent(task, min_attempts=2):
 
 def schema():
     return {"type": "object", "properties": {
-        "verdicts": {"type": "array", "items": {"type": "object", "properties": {"n": {"type": "integer"}, "required_by_spec": {"type": "boolean"},
-                                                                               "why": {"type": "string", "maxLength": 240}},
-                                                 "required": ["n", "required_by_spec", "why"], "additionalProperties": False}},
+        "verdicts": {"type": "array", "items": {"type": "object", "properties": {"n": {"type": "integer"}, "why": {"type": "string", "maxLength": 240},
+                                                                               "exit": {"anyOf": [{"type": "integer"}, {"type": "null"}]}, "required_by_spec": {"type": "boolean"}},
+                                                 "required": ["n", "why", "exit", "required_by_spec"], "additionalProperties": False}},
         "replacements": {"type": "array", "maxItems": 8, "items": K.assert_schema()["items"]}},
         "required": ["verdicts", "replacements"], "additionalProperties": False}
 
 SYSTEM = "You check acceptance tests against a specification. You never write code. Reply with JSON only."
 
-def prompt(spec_text, task, asserts, stuck, last_out, attempts):
-    listing = "\n".join(f"{i}. {json.dumps(a)}" for i, a in enumerate(asserts, 1))
-    fails = "\n".join(l for l in (last_out or "").splitlines() if l.startswith("FAIL: "))[-1500:]
-    nums = ", ".join(map(str, stuck))
+def blind(a, prog=None):
+    """A persistently failing assertion that runs the program under test is judged blind: the judge sees only its input (argv and standard input),
+    says which exit status the spec requires, and the harness compares. 2026-10-18 calc4: shown `calc 2 3` expected to print 5, the judge agreed
+    ("a valid expression"), though the spec says two numbers in a row exit with status 2; it agreed with all five wrong checks of T6."""
+    return a.get("type") == "run" and isinstance(a.get("argv"), list) and bool(a["argv"]) and G._program_args(a["argv"], prog) is not None
+
+def _hidden(a): return f"run {json.dumps(a['argv'])}" + (f" with standard input {json.dumps(a['stdin'])}" if "stdin" in a else "") + "  (expected result hidden)"
+
+def prompt(spec_text, task, asserts, stuck, last_out, attempts, prog=None):
+    hidden = [n for n in stuck if blind(asserts[n - 1], prog)]; shown = [n for n in stuck if n not in hidden]
+    listing = "\n".join(f"{i}. {_hidden(a) if i in hidden else json.dumps(a)}" for i, a in enumerate(asserts, 1))
+    lines, nums = [l for l in (last_out or "").splitlines() if l.startswith("FAIL: ")], failing_numbers(last_out) or []
+    fails = "\n".join(l for l, n in zip(lines, nums) if n in shown) if len(lines) == len(nums) else ("" if hidden else "\n".join(lines))   # a hidden result stays hidden
+    seq = lambda ns: ", ".join(map(str, ns))
     return (f"SPECIFICATION (the part this task implements):\n{spec_text}\n\nTASK: {task['title']}\n\n"
             "The task's acceptance test is this list of assertions. A trusted runner evaluates them in the code directory: `call` imports a Python module and "
             "calls a function; `run` starts a program with exactly the given argv (no shell: no pipes, no echo, no redirection), feeds `stdin` to its standard "
             "input, and compares its exit status (0 unless `exit` is given) and its standard output; standard error is not compared.\n"
-            f"{listing}\n\nThe worker failed assertion(s) {nums} in every one of its {attempts} attempts. The last failures were:\n{fails or '(no detail)'}\n\n"
-            f"For each of the assertions {nums}, decide: does the SPECIFICATION require exactly this result for exactly this input? Answer false when the "
+            f"{listing}\n\nThe worker failed assertion(s) {seq(stuck)} in every one of its {attempts} attempts."
+            + (f" The last failures of {seq(shown)} were:\n{fails[-1500:] or '(no detail)'}" if shown else "") + "\n\n"
+            f"Give one verdict for each of the assertions {seq(stuck)}. why: the rule of the SPECIFICATION that decides it, in one sentence. exit: the exit "
+            "status the SPECIFICATION requires when the program is run with exactly that input (null for a call or a file assertion, or when the "
+            "specification does not say). "
+            + (f"The expected results of {seq(hidden)} are hidden on purpose: work out what the program must do from the SPECIFICATION alone, checking "
+               "the input against every rule of the SPECIFICATION that makes an input an error first (only an input that breaks none of them succeeds). " if hidden else "")
+            + "required_by_spec: for an assertion shown in full, does the SPECIFICATION require exactly this result for exactly this input? Answer false when the "
             "specification states a different result, does not define this input, or when no program that follows the specification could pass it (for "
             "example an option or command the specification never mentions, standard output the specification sends to standard error, a Python call in a "
-            "project that is not written in Python). The program may simply be wrong: answer true whenever the specification does require it. Then give "
-            "replacements: assertions that test the same requirement correctly, using only inputs and results the specification states (or an empty list).")
+            "project that is not written in Python). The program may simply be wrong: answer true whenever the specification does require it. "
+            + ("For an assertion whose result is hidden, answer true. " if hidden else "")
+            + "Then give replacements: assertions that test the same requirement correctly, using only inputs and results the specification states (or an empty list).")
+
+def verdicts(asserts, judged, reply, prog=None):
+    """{assertion number: why} for the judged assertions the reply shows to be wrong: a run whose exit status differs from the one the judge says the
+    spec requires (hidden or shown), or an assertion shown in full that the judge says the spec does not require. A hidden one is never removed on
+    required_by_spec alone (the judge did not see what it expects), nor when the judge cannot say (exit null): no evidence, it stays."""
+    wrong = {}
+    for v in (reply or {}).get("verdicts") or []:
+        if not isinstance(v, dict) or v.get("n") not in judged: continue
+        n = v["n"]; a = asserts[n - 1]; e = v.get("exit"); why = str(v.get("why") or "")[:240]
+        if a.get("type") == "run" and type(e) is int and e != a.get("exit", 0):
+            wrong[n] = f"the specification requires exit status {e} for this input, the assertion expects {a.get('exit', 0)}: {why}"
+        elif not blind(a, prog) and v.get("required_by_spec") is False: wrong[n] = why
+    return wrong
 
 def run(proj, tid, last_out="", timeout=900):
     """Re-derive the check of task tid when assertions failed in every attempt. Returns {"changed": bool, "avoid": [assertions], ...}."""
@@ -62,7 +95,7 @@ def run(proj, tid, last_out="", timeout=900):
     avoid = [asserts[n - 1] for n in stuck]
     if not stuck: return {"changed": False, "avoid": [], "why": "no assertion failed in every attempt"}
     if task.get("rederived", 0) >= proj.get("REDERIVE_MAX", 1, int): return {"changed": False, "avoid": avoid, "why": "re-derivation limit reached (REDERIVE_MAX)"}
-    spec = specdoc.load(proj)
+    spec = specdoc.load(proj); prog = G.build_step(spec)[1] if spec else None
     protected = {K.akey(e) for e in G.all_examples(spec)} if spec else set()          # the spec's own examples are never in question
     judged = [n for n in stuck if K.akey(asserts[n - 1]) not in protected]
     if not judged: return {"changed": False, "avoid": avoid, "why": "the persistent failures are the specification's own examples"}
@@ -72,7 +105,7 @@ def run(proj, tid, last_out="", timeout=900):
         append_jsonl(proj.p("plan.log"), {**log, "ok": False, "reason": f"only {int(timeout)} s left in the task's budget"})
         return {"changed": False, "avoid": avoid, "why": "too little time left"}
     try:
-        r = ollama.chat(proj, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt(specdoc.for_task(proj, task), task, asserts, judged, last_out, attempts)}],
+        r = ollama.chat(proj, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt(specdoc.for_task(proj, task), task, asserts, judged, last_out, attempts, prog)}],
                         schema=schema(), temperature=0.2, num_predict=2500, timeout=int(timeout), retries=1,
                         model=roles.model(proj, "planner"), think=roles.think(proj, "planner"), role="planner")
         reply = json.loads(r.get("content") or "")
@@ -80,7 +113,7 @@ def run(proj, tid, last_out="", timeout=900):
         append_jsonl(proj.p("plan.log"), {**log, "ok": False, "reason": f"no usable reply: {type(e).__name__}: {str(e)[:200]}"})
         return {"changed": False, "avoid": avoid, "why": "no usable reply"}
     with open(proj.p(f"rederive.reply.{tid}.json"), "w") as f: json.dump(reply, f, indent=1)
-    wrong = {v["n"]: v.get("why", "") for v in reply.get("verdicts") or [] if isinstance(v, dict) and v.get("n") in judged and v.get("required_by_spec") is False}
+    wrong = verdicts(asserts, judged, reply, prog)
     if not wrong:
         append_jsonl(proj.p("plan.log"), {**log, "ok": False, "reason": "every assertion that kept failing was judged to be required by the specification"})
         return {"changed": False, "avoid": avoid, "why": "judged required"}
