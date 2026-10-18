@@ -141,6 +141,16 @@ T7 passed `echo` as an argument instead of stdin), the worker never saw the spec
 The scores above mostly measure that, not the models. The fixes are in `docs/dev/HANDOFF.md` ("Design review fixes"); the models should be compared
 again on the fixed harness.
 
+**Control on the fixed harness (`calc3-control`, 2026-10-17/18, fb457e7)** [V]: 20/32 hidden tests and 11/20 own inputs for the program as left,
+16/32 counting only verified work (a blocked task's last attempt is not reset, and T7's unverified stdin code earns 4 of the 20), in 3 h 58 min
+(the old rerun: 13/32 in 6 h 46 min). 77% of the frozen checks hold on the reference (old builds: 27-51%); nothing was marked done on a check that
+fails on the reference. The re-derivation removed T1's impossible `go build -o calc . -v` check in its first real use (T1 done in 6 minutes) and
+kept T3's correct precedence checks, but judged T7's twelve impossible checks (`go run . "2 + 3"`: the whole expression in one argument)
+required by the spec. Precedence (T3) and stdin mode (T7) ended blocked. The program still handles one number or `a op b` only, exits 1 on every
+error and prints with `fmt.Println` although the spec names `strconv.FormatFloat(v, 'f', -1, 64)`: the checks hold but are thin (the planner's
+exit-2 checks went through `go run` and were dropped instead of rewritten, and the spec's prose rules have no examples), and the worker does the
+minimum that passes them.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).
