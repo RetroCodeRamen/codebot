@@ -10,7 +10,17 @@ OUT = os.path.dirname(os.path.realpath(__file__))
 SUITES = {  # spec file -> (suite name, dirs copied into the workspace for the 'reference' verdict, dirs for the 'seed' verdict)
     "bench/suite/pyutils/spec.md": ("pyutils", ["bench/suite/pyutils/seed", "bench/suite/pyutils/reference"], ["bench/suite/pyutils/seed"]),
     "bench/ladder/catalog/level_01/SPEC.md": ("level_01", ["bench/ladder/catalog/level_01/seed", "bench/ladder/catalog/level_01/reference_solution"], ["bench/ladder/catalog/level_01/seed"]),
+    "bench/ladder/catalog/calc_go/SPEC.md": ("calc_go", ["bench/ladder/catalog/calc_go/seed", "bench/ladder/catalog/calc_go/reference_solution"], ["bench/ladder/catalog/calc_go/seed"]),
 }
+GO_ENV = {"PATH": "/usr/local/go/bin:" + os.environ.get("PATH", ""), "GOTOOLCHAIN": "local", "GOFLAGS": "-mod=mod", "CGO_ENABLED": "0"}
+PREP = {"calc_go": (GO_ENV, ["go", "build", "-o", "calc", "."])}     # suite -> (environment, build command run once before judging: ./calc must exist on the reference)
+
+def prepared_env(suite, d):
+    """The environment to judge a suite's assertions in, after building its program in d (Go needs its toolchain and a writable build cache)."""
+    if suite not in PREP: return None
+    env, build = PREP[suite]; env = dict(os.environ, GOCACHE=os.path.join(d, ".gocache"), GOPATH=os.path.join(d, ".gopath"), **env)
+    subprocess.run(build, cwd=d, env=env, capture_output=True, timeout=300)
+    return env
 
 def _md5(path):
     with open(path, "rb") as f: return hashlib.md5(f.read()).hexdigest()
@@ -21,19 +31,20 @@ def suite_of(project_dir):
     h = _md5(spec)
     return next((v for k, v in SUITES.items() if _md5(os.path.join(HOME, k)) == h), None)
 
-def model_of(name): return "qwen" if "qwen" in name else "ornith"
+def model_of(name): return next((m for k, m in (("qwen", "qwen"), ("granite", "granite"), ("o15", "ornith-1.5")) if k in name), "ornith")
 
-def judge(asserts, dirs):
-    """[fail message or None] per assertion, each evaluated on its own in a fresh copy of dirs."""
+def judge(asserts, dirs, suite=None):
+    """[fail message or None] per assertion, each evaluated on its own in a copy of dirs (with the suite's program built first, see PREP)."""
     with tempfile.TemporaryDirectory() as d:
         for src in dirs: shutil.copytree(os.path.join(HOME, src), d, dirs_exist_ok=True)
+        env = prepared_env(suite, d)
         spec = os.path.join(d, "_corpus_asserts.json")
         with open(spec, "w") as f: json.dump(asserts, f)
         code = ("import json, sys; sys.path.insert(0, %r); from codebot import assertions as A\n"
                 "out = []\nfor a in json.load(open('_corpus_asserts.json')):\n"
                 "    try: m = A.check([a])\n    except BaseException as e: m = [f'harness error: {type(e).__name__}: {e}']\n"
                 "    out.append(m[0] if m else None)\nprint(json.dumps(out))\n") % os.path.join(HOME, "lib")
-        p = subprocess.run([sys.executable, "-c", code], cwd=d, capture_output=True, text=True, timeout=600)
+        p = subprocess.run([sys.executable, "-c", code], cwd=d, capture_output=True, text=True, timeout=3600, env=env, stdin=subprocess.DEVNULL)
         return json.loads(p.stdout.strip().splitlines()[-1])
 
 def collect_assertions():
@@ -56,7 +67,7 @@ def collect_assertions():
     out = []
     for s, rs in sorted(by_suite.items()):
         _, ref_dirs, seed_dirs = next(v for v in SUITES.values() if v[0] == s)
-        ref = judge([r["assert"] for r in rs], ref_dirs); seed = judge([r["assert"] for r in rs], seed_dirs)
+        ref = judge([r["assert"] for r in rs], ref_dirs, s); seed = judge([r["assert"] for r in rs], seed_dirs, s)
         for r, m, sm in zip(rs, ref, seed):
             r["reference"] = "holds" if m is None else "fails"; r["seed"] = "holds" if sm is None else "fails"
             if m: r["reference_msg"] = m[:200]

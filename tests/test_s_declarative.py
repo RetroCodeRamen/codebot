@@ -3,7 +3,9 @@ the guard's strict exit-status rule, the native planner (with the scripted fake 
 import json, os, subprocess, sys, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama
-from codebot import assertions as A, checkspec as K, checks as C, engine, guard, planner, planops, planparse, splitter, tasks as T
+from codebot import assertions as A, checkspec as K, checks as C, engine, grounding as G, guard, planner, planops, planparse, specdoc, splitter, tasks as T
+
+REPO = os.path.realpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 RUNNER = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "modes", "code", "verifiers", "assert_runner.py")
 
@@ -276,5 +278,113 @@ class TestAudit(Sandboxed):
         self.assertIn("returned 1, expected 2", r["tasks"]["T2"]["why"][0])
     def test_no_reference_means_no_audit(self):
         self.assertIsNone(planner.audit_against_reference(self.home, self.name, "nosuite"))
+
+CALC_SPEC = """# Command-line calculator in Go
+
+Build a command-line calculator in Go. All code is in package `main`; `go build -o calc .` must produce the program `calc`.
+
+## Requirements
+
+1. The program `calc` takes an expression as its arguments: `calc 2 + 3` prints `5`. A single number is valid: `calc 7` prints `7`.
+
+2. The letter `x` is another way to write `*`: `calc 6 x 7` prints `42`.
+
+3. Errors print a message starting with `error:` to standard error and exit with status 2.
+"""
+PY_SPEC = """# Utilities
+Python 3, standard library only.
+
+## Requirements
+
+1. `textutil.py` provides `slugify(text)`: `slugify("Hello World")` is `"hello-world"`, and `slugify("")` is `""`. If `len(text) > 100` it is cut.
+
+2. `numutil.py` provides `is_prime(n)`: `is_prime(2)` and `is_prime(97)` are `True`; `is_prime(1)`, `is_prime(0)` and `is_prime(-7)` are `False`. `is_prime("7")` raises `TypeError`.
+"""
+BUILD = {"type": "run", "argv": ["go", "build", "-o", "calc", "."], "exit": 0}
+
+class TestGrounding(Sandboxed):
+    """2026-10-17 design review: the planner's checks are the only judge of the work, and only 3 of the 41 checks the control rerun froze for the Go
+    calculator hold on the reference solution. The spec's own worked examples become checks the harness writes itself (sound by construction), and
+    model assertions that cannot hold for a program following the spec are dropped before anything is frozen."""
+    def test_cli_examples_become_runs_of_the_built_program_after_the_build_step(self):
+        items = specdoc.item_texts(CALC_SPEC)
+        self.assertEqual(G.examples(CALC_SPEC, items[0]), [BUILD, {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5"}, {"type": "run", "argv": ["./calc", "7"], "stdout": "7"}])
+        self.assertEqual(G.examples(CALC_SPEC, items[1])[1:], [{"type": "run", "argv": ["./calc", "6", "x", "7"], "stdout": "42"}])
+        self.assertEqual(G.examples(CALC_SPEC, items[2]), [])                       # prose rules are left to the planner
+    def test_call_examples_need_a_module_and_a_declared_function(self):
+        items = specdoc.item_texts(PY_SPEC)
+        self.assertEqual(G.examples(PY_SPEC, items[0]), [{"type": "call", "module": "textutil", "func": "slugify", "args": ["Hello World"], "expect": "hello-world"},
+                                                         {"type": "call", "module": "textutil", "func": "slugify", "args": [""], "expect": ""}])   # `len(text) > 100` is prose
+        ex = G.examples(PY_SPEC, items[1])
+        self.assertEqual([(a["args"], a.get("expect", a.get("raises"))) for a in ex], [([2], True), ([97], True), ([1], False), ([0], False), ([-7], False), (["7"], "TypeError")])
+        self.assertEqual({a["module"] for a in ex}, {"numutil"})
+    def test_the_examples_of_every_catalog_spec_hold_on_its_reference_solution(self):
+        # the property that makes them safe to freeze without asking the model; level_01, level_03 and calc_go have examples in these phrasings
+        from test_w_corpus import judge, REF
+        spec = open(os.path.join(REPO, "bench/ladder/catalog/level_01/SPEC.md")).read()
+        ex = [a for ex in G.by_item(spec) for a in ex]; self.assertGreater(len(ex), 25)
+        self.assertEqual([m for m in judge(ex, REF["level_01"]) if m], [])
+    def test_project_kind(self):
+        self.assertEqual(G.project_kind(PY_SPEC), "python"); self.assertEqual(G.project_kind(CALC_SPEC), "other")
+        self.write_code("go.mod", "module calc\n"); self.assertEqual(G.project_kind("Build a calculator.", self.code), "other")
+        self.write_code("tool.py", ""); self.assertEqual(G.project_kind("Build a calculator.", self.code), "python")
+    def screen(self, groups, spec=CALC_SPEC, kind="other", prepend=None):
+        return G.screen(groups, spec, kind, prepend, [a for ex in G.by_item(spec) for a in ex])
+    def test_python_in_a_project_that_is_not_python_is_dropped(self):
+        call = {"type": "call", "module": "main", "func": "Add", "args": [1, 2], "expect": 3}; py = {"type": "run", "argv": ["python3", "calc.py", "1"], "stdout": "1"}
+        tool = {"type": "run", "argv": ["python3", "-c", "import json; json.load(open('out.json'))"], "exit": 0}; ok = {"type": "run", "argv": ["./calc", "9"], "stdout": "9"}
+        out, notes, why = self.screen([[call, py, tool, ok]]); self.assertEqual(out, [[tool, ok]]); self.assertEqual(len(why[0]), 2)
+        self.assertEqual(self.screen([[call]], PY_SPEC, "python")[0], [[call]])                       # in a Python project a call is the normal test
+    def test_options_and_shell_syntax_the_spec_never_mentions_are_dropped_only_from_commands_expected_to_succeed(self):
+        flag = {"type": "run", "argv": ["go", "run", ".", "-e", "calc", "-2.5", "+", "1"], "stdout_contains": ["-1.5"]}       # control rerun T4
+        echo = {"type": "run", "argv": ["go", "run", ".", "echo", "2 + 3"], "stdout": "5\n", "exit": 0}                       # control rerun T7: stdin through argv
+        bad_input = {"type": "run", "argv": ["./calc", "2", "|", "3"], "exit": 2}; neg = {"type": "run", "argv": ["./calc", "-3", "x", "-3"], "stdout": "9"}
+        out, _, why = self.screen([[flag, echo, bad_input, neg]]); self.assertEqual(out, [[bad_input, neg]])
+        self.assertTrue(any("'-e'" in w for w in why[0])); self.assertTrue(any("'echo'" in w and "stdin" in w for w in why[0]))
+    def test_an_assertion_that_contradicts_a_spec_example_is_dropped(self):
+        wrong = {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "6"}; via_go_run = {"type": "run", "argv": ["go", "run", ".", "6", "x", "7"], "stdout": "40"}
+        same = {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5\n", "exit": 0}
+        out, _, why = self.screen([[wrong, same], [via_go_run]]); self.assertEqual(out, [[same], []])
+        self.assertTrue(all("own example" in w for w in why[0] + why[1]))
+    def test_assertions_that_cannot_all_hold_are_dropped_unless_a_majority_agrees(self):
+        five = [{"type": "run", "argv": ["go", "run", "."], "stdout": s, "exit": 0} for s in ("5\n", "3.5\n", "0.3333333333333333\n", "0\n", "-1.5\n")]   # control rerun T5
+        out, _, why = self.screen([five]); self.assertEqual(out, [[]]); self.assertEqual(len(why[0]), 5)
+        err = {"type": "run", "argv": ["go", "run", ".", "10", "/", "0"], "stdout": "", "exit": 1}
+        on_stdout = {"type": "run", "argv": ["go", "run", ".", "10", "/", "0"], "stdout_contains": ["error: division by zero"], "exit": 1}       # control rerun T6
+        self.assertEqual(self.screen([[err, on_stdout]])[0], [[err]])               # a tie, broken by the spec: it sends `error:` text to standard error
+        plain = dict(err, stdout="oops"); self.assertEqual(self.screen([[err, plain]])[0], [[]])        # a tie nothing breaks: at least one is wrong, both go
+        self.assertEqual(G.stderr_only(CALC_SPEC), {"error:"})
+        self.assertEqual(G.stderr_only("prints `error: x` to standard error. In batch mode the message (starting with `error:`) goes on standard output"), {"error: x"})
+        a3 = {"type": "call", "module": "textutil", "func": "slugify", "args": ["a  b"], "expect": "a-b"}; b = dict(a3, expect="a_b")
+        self.assertEqual(self.screen([[a3], [a3], [b]], PY_SPEC, "python")[0], [[a3], [a3], []])       # two tasks agree: the third is dropped
+        compatible = [{"type": "run", "argv": ["./calc", "8"], "stdout": "8"}, {"type": "run", "argv": ["./calc", "8"], "stdout_contains": ["8"]}]
+        self.assertEqual(self.screen([compatible])[0], [compatible])
+    def test_the_harness_examples_come_first_and_duplicates_are_merged(self):
+        items = specdoc.item_texts(CALC_SPEC); ex = G.examples(CALC_SPEC, items[0])
+        mine = {"type": "run", "argv": ["./calc", "1", "+", "1"], "stdout": "2"}
+        out, notes, _ = self.screen([[ex[1], mine, mine]], prepend=[ex]); self.assertEqual(out, [ex + [mine]]); self.assertEqual(notes, [])
+    def test_results_the_toolchain_can_never_show_and_the_programs_own_name_as_an_argument_are_dropped(self):
+        two = {"type": "run", "argv": ["go", "run", ".", "+", "3"], "stdout": "", "exit": 2}             # go run reports every failure as exit 1
+        named = {"type": "run", "argv": ["go", "run", ".", "calc", "2.5"], "stdout": "2.5\n", "exit": 0}  # 2026-10-16 control: the program's name as an argument
+        build = {"type": "run", "argv": ["go", "build", "-o", "calc", "."], "exit": 0}; fmt = {"type": "run", "argv": ["gofmt", "-l", "."], "stdout": ""}
+        own = {"type": "run", "argv": ["python3", "-c", "import main; print(main.f())"], "stdout": "1"}; std = {"type": "run", "argv": ["python3", "-c", "import json; print(1)"], "stdout": "1"}
+        out, _, why = self.screen([[two, named, build, fmt, own, std]]); self.assertEqual(out, [[build, fmt, std]]); self.assertEqual(len(why[0]), 3)
+    def test_the_planner_writes_the_specs_examples_first_and_screens_the_models_assertions(self):
+        with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write(CALC_SPEC)
+        x9 = {"type": "run", "argv": ["./calc", "3", "x", "3"], "stdout": "9"}
+        plan = {"goal": "g", "context": "c", "done": "d", "tasks": [
+            {"title": "args", "files": [], "size": "S", "item": 1, "asserts": [{"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "6"},
+                                                                         {"type": "call", "module": "main", "func": "Add", "args": [2, 3], "expect": 5}]},
+            {"title": "x", "files": [], "size": "S", "item": 2, "asserts": [x9]},
+            {"title": "errors", "files": [], "size": "S", "item": 3, "asserts": [{"type": "run", "argv": ["go", "run", ".", "2", "+"], "exit": 2}]}]}
+        bad = planner._write(self.proj(), plan, CALC_SPEC); items = specdoc.item_texts(CALC_SPEC)
+        self.assertEqual(K.read_spec(self.proj(), "T1"), G.examples(CALC_SPEC, items[0]))            # the model's two were impossible; the examples remain
+        self.assertEqual(K.read_spec(self.proj(), "T2"), G.examples(CALC_SPEC, items[1]) + [x9])
+        self.assertEqual(list(bad), [3]); self.assertIn("go run", bad[3])                            # nothing usable left: the repair round is told why
+        log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "assertions_salvaged" in l][-1]["notes"]
+        self.assertTrue(any("own example" in n for n in log)); self.assertTrue(any("not written in Python" in n for n in log)); self.assertTrue(any("examples" in n for n in log))
+    def test_context_is_authority_for_a_split(self):
+        parent = {"type": "run", "argv": ["./calc", "4", "x", "2"], "stdout": "8"}; child = dict(parent, stdout="6")
+        out, _, why = G.screen([[child]], CALC_SPEC, "other", None, [], [parent]); self.assertEqual(out, [[]]); self.assertIn("already in force", why[0][0])
 
 if __name__ == "__main__": unittest.main()

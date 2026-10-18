@@ -4,7 +4,7 @@ rejected tasks only, asks the model for corrected assertions with the exact reas
 interpreter or a file, so the mistakes the free-form opencode planner made (wrong paths, backticks, <placeholders>, scripts run with the wrong
 interpreter, implementation written instead of tests) cannot occur. The interactive `codebot plan` (a human in the loop) is unchanged."""
 import json, os, re, subprocess, sys, time
-from . import assertions as A, checkspec as K, guard, ollama, packer, planparse, roles, specdoc
+from . import assertions as A, checkspec as K, grounding as G, guard, ollama, packer, planparse, roles, specdoc
 from .config import Project, now, append_jsonl
 
 TASK_PROPS = lambda: {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "size": {"enum": ["S", "M", "L"]},
@@ -83,21 +83,34 @@ def salvage(asserts):
     return kept, dropped
 
 def _write(proj, plan, spec="", actor="planner"):
-    """Repair, salvage, validate and write every task's spec, then PLAN.md. Returns {task number: error} for tasks with no usable assertion left
-    (no spec is written for them). Every repair and dropped assertion is logged (plan.log op assertions_salvaged)."""
+    """Repair, salvage, screen, validate and write every task's spec, then PLAN.md. With a spec, a task's assertions start with the spec's own worked
+    examples for the requirement it implements (grounding.examples: written by the harness, sound by construction), and model assertions that cannot
+    hold for a program following the spec are dropped (grounding.screen). Returns {task number: error} for tasks with no usable assertion left (no
+    spec is written for them). Every repair, added example and dropped assertion is logged (plan.log op assertions_salvaged)."""
     bad, tasks = {}, []
     K.ensure_runner(proj)                                  # the trusted runner must be in checks/ before the guard runs the checks (freeze would copy it anyway)
     for f in os.listdir(K.C.checks_dir(proj)):             # specs of an earlier, longer version of this plan (a salvaged plan is renumbered)
         if re.fullmatch(r"T\d+\.spec\.json", f) and int(f[1:-len(".spec.json")]) > len(plan["tasks"]): os.remove(os.path.join(K.C.checks_dir(proj), f))
     groups = [K.prepare(t.get("asserts")) for t in plan["tasks"]]
     groups, notes = K.repair_plan(groups)
+    staged = []
     for i, t in enumerate(plan["tasks"], 1):
         asserts = groups[i - 1]
         if spec and isinstance(asserts, list): asserts, _ = ungrounded(asserts, spec)         # over-specification is dropped, not argued about: the model repeated it in every repair round
         asserts, dropped = salvage(asserts)
         if dropped: notes += [f"T{i}: dropped an assertion: {e}" for e in dropped]
+        staged.append(asserts)
+    why = {}
+    if spec:          # 2026-10-17: only 3 of the 41 checks the calc_go control rerun froze could pass for a correct program
+        per_item = G.by_item(spec)
+        prepend = [per_item[t["item"] - 1] if isinstance(t.get("item"), int) and 1 <= t["item"] <= len(per_item) else [] for t in plan["tasks"]]
+        staged, screened, why = G.screen(staged, spec, G.project_kind(spec, proj.rundir), prepend, G.all_examples(spec))
+        notes += screened
+        if any(prepend): notes.append(f"added {sum(len(p) for p in prepend)} assertion(s) from the specification's own examples to {sum(1 for p in prepend if p)} task(s)")
+    for i, t in enumerate(plan["tasks"], 1):
+        asserts = staged[i - 1]
         err = A.validate(asserts)
-        if err: bad[i] = err
+        if err: bad[i] = err + (f" (every assertion was dropped: {'; '.join(why[i - 1])})"[:600] if why.get(i - 1) else "")
         else: K.write_spec(proj, f"T{i}", asserts)
         deps = [d for d in (t.get("deps") or []) if isinstance(d, int) and 1 <= d < i]
         tasks.append({"id": i, "title": t.get("title") or f"task {i}", "files": [f for f in (t.get("files") or []) if isinstance(f, str) and f.strip()], "size": t.get("size") or "S", "deps": deps})
