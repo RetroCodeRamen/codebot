@@ -54,4 +54,6 @@ def question(proj, task, last_error, patch=None):
     return (f"{task['id']} \"{task['title']}\" failed through the whole ladder ({tried}). "
             f"Last error: {last_error[-300:].strip()}  "
             + (f"The code is back at the last verified checkpoint; the last attempt's changes are in {patch} (`git apply` it in the code directory to see them).  " if patch else "")
+            + (f"Attempt {task.get('near_attempt')} passed the task's own check but broke {', '.join(task.get('near_broke') or [])}; its changes are in {task['near_patch']}.  "
+               if task.get("near_patch") else "")
             + f"What should I do? Reply with: codebot answer {proj.name} \"{task['id']}: <your guidance>\"").replace("\n", " ")

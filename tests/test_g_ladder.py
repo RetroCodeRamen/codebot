@@ -102,6 +102,36 @@ class TestSplitFromVerifiedCode(Base):
         self.assertTrue(os.path.exists(os.path.join(self.code, "good.txt")))          # the code is back at the checkpoint
         with open(shelf[0]["patch"]) as f: self.assertIn("deleted file mode", f.read())   # and the attempt's change (good.txt removed) is in the patch
 
+class TestNearSuccess(Base):
+    """2026-10-18 calc4: T3's attempt 3 passed all 9 of its own checks and broke only T2's `6 x 7`; rung 2 reset the code before attempt 4, which
+    started from scratch, and the task ran out of time."""
+    NEAR = """
+        import json, os
+        t, n = os.environ['CODEBOT_TASK_ID'], int(os.environ['CODEBOT_ATTEMPT'])
+        with open(os.path.join(os.environ['CODEBOT_STATE'], 'seen.jsonl'), 'a') as f: f.write(json.dumps({'task': t, 'attempt': n, 'work': os.path.exists('work.txt')}) + '\\n')
+        if t == 'T1': open('a.txt', 'w').write('hi\\n')
+        elif n == 1: open('b.txt', 'w').write('yo\\n'); open('a.txt', 'w').write('oops\\n'); open('work.txt', 'w').write('kept\\n')
+        else: LATER
+    """
+    def seen(self, tid): return [json.loads(l) for l in self.read("seen.jsonl").splitlines() if json.loads(l)["task"] == tid]
+    def test_an_attempt_that_passed_its_own_check_is_where_the_next_one_starts_even_on_the_reset_rung(self):
+        self.cfg(**{**QUIET, "LADDER_TRIES": "1,2,0,2,1"}, WORKER_CMD=self.worker(self.NEAR.replace("LATER", "open('a.txt', 'w').write('hi\\n')")))
+        self.run_until(lambda e: e["event"] == "task_done" and e["task"] == "T2")
+        t = self.task("T2"); self.assertEqual((t["status"], t["attempts"]), ("done", 2))
+        self.assertEqual([(s["attempt"], s["work"]) for s in self.seen("T2")], [(1, False), (2, True)])      # attempt 2, on the reset rung, began from attempt 1
+        self.assertEqual([json.loads(l)["rung"] for l in self.read("attempts.jsonl").splitlines() if '"attempt"' in l and json.loads(l).get("task") == "T2"], [1, 2])
+        near = [l for l in self.plan_log() if l["op"] == "near_success"]; self.assertEqual(len(near), 1); self.assertIn("broke T1", near[0]["reason"])
+        with open(os.path.join(self.code, "work.txt")) as f: self.assertEqual(f.read(), "kept\n")              # the near-success is part of the verified work
+    def test_after_a_near_success_an_attempt_that_goes_backwards_is_undone_and_the_task_is_not_split(self):
+        self.cfg(**QUIET, WORKER_CMD=self.worker(self.NEAR.replace("LATER", "os.remove('b.txt')")))
+        e = self.run_until(lambda e: e["event"] == "task_blocked")[-1]; t = self.task("T2")
+        self.assertEqual((e["task"], t["attempts"]), ("T2", 6))
+        self.assertEqual([s["work"] for s in self.seen("T2")], [False] + [True] * 5)                                # every later attempt began from it
+        reasons = [l["reason"] for l in self.plan_log() if l["op"] == "escalate" and l["reason"].startswith("T2")]
+        self.assertTrue(any("rung 3 (split) -> 4" in r and "no split: attempt 1 already passed T2's own check" in r for r in reasons), reasons)
+        self.assertIn(t["near_patch"], e["question"]); self.assertIn("broke T1", e["question"])
+        self.assertFalse(os.path.exists(os.path.join(self.code, "work.txt")))                                       # blocked: back at the last checkpoint
+
 class TestBlocked(Base):
     def block_t1(self):
         self.cfg(**QUIET, WORKER_CMD=self.worker("import os\nif os.environ['CODEBOT_TASK_ID'] == 'T2': open('b.txt','w').write('yo\\n')"))

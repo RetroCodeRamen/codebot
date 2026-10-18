@@ -117,6 +117,27 @@ def _from_checkpoint(proj, tid, attempt):
                      "reason": f"{tid}: the split starts from the last verified checkpoint; attempt {attempt}'s changes are in {path}"})
     G.reset_to_last_good(proj)
 
+def _keep_near(proj, task, attempt, broke):
+    """An attempt that passed the task's own check and broke only earlier tasks is kept as a patch (unverified/<task>.near.patch), and every later
+    attempt of the task starts from it (_from_near), unless one breaks fewer tasks. 2026-10-18 calc4: T3's attempt 3 passed all 9 of its checks
+    and broke only T2's `6 x 7`; the worker was told to keep the new work, but rung 2 resets the code before every attempt, so attempt 4 started
+    from scratch, and T3 ran out of time."""
+    if task.get("near_patch") and len(broke) > len(task.get("near_broke") or []): return
+    path = proj.p("unverified", f"{task['id']}.near.patch")
+    if not G.shelve(proj, path): return
+    task.update(near_patch=path, near_broke=list(broke), near_attempt=attempt)
+    append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "near_success", "ok": True, "task": task["id"], "patch": path,
+                 "reason": f"{task['id']}: attempt {attempt} passed its own check but broke {', '.join(broke)}; later attempts start from it"})
+
+def _from_near(proj, task):
+    """The code at the last verified checkpoint plus the task's near-success (_keep_near). A patch that no longer applies is forgotten (logged)."""
+    G.reset_to_last_good(proj)
+    r = G.git(proj.rundir, "apply", "--whitespace=nowarn", task["near_patch"])
+    if r.returncode:
+        append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "near_success", "ok": False, "task": task["id"],
+                     "reason": f"{task['id']}: its near-success no longer applies ({r.stderr.strip()[:200]}); starting from the last checkpoint"})
+        for k in ("near_patch", "near_broke", "near_attempt"): task.pop(k, None)
+
 def _block(proj, task, why_text, res):
     """2026-10-17 calc3: the blocked T7 left a half-done main.go in the tree, so the program as left was not the one the checks had verified."""
     patch = _shelve(proj, task)
@@ -194,7 +215,8 @@ def _step(proj, fresh, box):
             return {"event": "error", "task": task["id"], "error": "task has no check"}
         G.ensure_baseline(proj); box["clk"] = TC.begin(proj, task); clk = box["clk"]
         do_fresh, extra_env = L.mods(proj, task)
-        if fresh or do_fresh: G.reset_to_last_good(proj)
+        if task.get("near_patch"): _from_near(proj, task)               # every attempt starts from the best one so far, even on the reset rung
+        elif fresh or do_fresh: G.reset_to_last_good(proj)
         # Run the check BEFORE the worker: if it already passes there is nothing to do (the final gate of a split task,
         # or a weak check), and if it fails its output is the freshest, most accurate error for the worker.
         ct = proj.get("CHECK_TIMEOUT", 600, int)
@@ -235,6 +257,7 @@ def _step(proj, fresh, box):
         if passed:
             reg, broke = regressions(proj, data, task, clk)
             if reg: res, passed = reg, False
+        if broke: _keep_near(proj, task, attempt, broke)
         # which of the task's own assertions failed (the runner's numbers): one that fails in EVERY attempt may be the check's fault, not the code's
         failing = ([] if own["rc"] == 0 else RD.failing_numbers(own["out"])) if K.is_runner_check(task.get("check")) and not tamper2 else None
         rec = {"ts": now(), "task": task["id"], "attempt": attempt, "rung": L.rung_of(task), "worker_rc": w.get("rc"), "worker_secs": w.get("secs"),
@@ -258,7 +281,11 @@ def _step(proj, fresh, box):
             old = L.rung_of(task)
             if action != "stay":
                 L.log_escalation(proj, task, old, new_rung, why); task["ladder"] = new_rung; task["rung_tries"] = 0
-            if new_rung == 3 and not task.get("split_into"): need_split = True
+            if new_rung == 3 and task.get("near_patch"):           # an attempt already passed this task's own check: what is left is what it broke, not a smaller step
+                new_rung = L.next_rung(proj, 3); task["ladder"] = new_rung; task["rung_tries"] = 0
+                L.log_escalation(proj, task, 3, new_rung, f"no split: attempt {task.get('near_attempt')} already passed {task['id']}'s own check")
+                if new_rung >= 6: action = "block"
+            elif new_rung == 3 and not task.get("split_into"): need_split = True
             if action == "block": _block(proj, task, err_text(task, res), res)
         if not passed and clk and clk.expired():
             return _time_out(proj, store, data, task, clk, f"the {int(clk.lim // 60)} min budget ran out while attempt {attempt} was being judged")
