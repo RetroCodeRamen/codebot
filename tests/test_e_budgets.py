@@ -98,4 +98,15 @@ class TestProjectBudgets(Base):
         self.assertTrue(B._flipped(["a", "b", "a"])); self.assertFalse(B._flipped(["a", "b", "c"]))
         self.assertFalse(B._flipped(["a", "a", "a"])); self.assertTrue(B._flipped(["a", "b", "b", "a"]))
 
+class TestCutAttempts(Sandboxed):
+    def test_an_attempt_cut_by_the_budget_does_not_crash_stuck_detection(self):
+        # 2026-10-16 calc_go control build: after T3's attempt was cut by its 90-min budget (a record with "attempt" but no "passed"),
+        # the next failing task crashed engine.step with KeyError 'passed' four times and the trial was abandoned
+        with open(os.path.join(self.state, "attempts.jsonl"), "w") as f:
+            f.write(json.dumps({"ts": "t", "task": "T3", "attempt": 4, "event": "attempt_cut_by_budget", "worker_secs": 300}) + "\n")
+            f.write(json.dumps({"ts": "t", "task": "T4", "attempt": 1, "passed": False, "sig": "abc", "files": {}}) + "\n")
+        out = B.signals(self.proj(), {"id": "T4", "attempts": 1})
+        self.assertIsInstance(out, list)
+        self.assertEqual([a["passed"] for a in B.load_attempts(self.proj())], [False, False])
+
 if __name__ == "__main__": unittest.main()

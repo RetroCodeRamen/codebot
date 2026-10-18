@@ -14,7 +14,9 @@ def load_attempts(proj):
             for ln in f:
                 try: r = json.loads(ln)
                 except ValueError: continue
-                if "attempt" in r: out.append(r)
+                if "attempt" in r:
+                    r.setdefault("passed", False); r.setdefault("sig", "")     # an attempt cut by the task budget has no verdict: it did not pass
+                    out.append(r)
     except OSError: pass
     return out
 
