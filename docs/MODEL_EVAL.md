@@ -120,6 +120,27 @@ The control is the best planner of the three on every metric. Both candidates mo
 twice as slow. codebot's repairs and salvage matter more the weaker the model is: Granite's own assertions give E 0.20, after the harness 0.47; the
 control's 0.72 becomes 0.75. Whether Q predicts working software is being tested with the Go calculator builds (`calc_go`).
 
+**Go calculator builds (`calc_go`, 2026-10-16/17)** [V]: one full build per setup (per-item planner, 90-minute budget per task), then every program
+tested in full: the 32 hidden tests, 20 inputs of my own that the hidden tests do not use, and a reading of the code.
+
+| setup | builds? | hidden tests | own inputs | what the program is |
+|---|---|---|---|---|
+| control (Ornith 1.0) | yes | 16 / 32 | 10 / 20 | one number or `a op b` only; no precedence, no stdin mode; every error exits 1 (spec: 2 for malformed input). The run crashed mid-way (a harness bug, fixed) |
+| control, rerun | yes | 13 / 32 | 9 / 20 | the same shape; its precedence task is "verified" yet 0 of 4 precedence tests pass; every error path prints `0` and exits 0; a stray `Calculator.py` |
+| control, planner thinking on | yes | 6 / 32 | 5 / 20 | prints a hard-coded `42` with no input, rounds every result to a whole number, writes errors to stdout |
+| Granite 4.2 8B, whole model | yes | 6 / 32 | 4 / 20 | `+` and `-` only, other operators ignored, never reports an error, crashes with no arguments |
+| Ornith 1.5, whole model | yes | 3 / 32 | 1 / 20 | picks the operator by looking for a `+` inside the number |
+| Ornith 1.5 as planner | no | 1 / 32 | 0 / 20 | two files in different packages; `main.go` prints three test values |
+| Granite 4.2 8B as planner | no | 1 / 32 | 0 / 20 | a tokenizer demo hard-wired to `"2+3"`, plus a Python copy |
+
+None is a working calculator. The ranking follows the planner probe's Q (control first; Ornith 1.5 and Granite as planners produced programs that
+do not build), with one inversion (Granite whole 6 vs Ornith 1.5 whole 3) that one build per setup cannot settle. The more important finding was
+in the harness: only 3 of the 41 checks the control rerun froze hold on the reference solution (T3 asserted `calc ""` exits 0; T4 invented `-e calc`
+flags; T5 expected five different outputs from the same command; T6 expected error text on stdout and exit 2 through `go run`, which reports 1;
+T7 passed `echo` as an argument instead of stdin), the worker never saw the spec, and the ladder split the impossible checks into ever deeper copies.
+The scores above mostly measure that, not the models. The fixes are in `docs/dev/HANDOFF.md` ("Design review fixes"); the models should be compared
+again on the fixed harness.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).
