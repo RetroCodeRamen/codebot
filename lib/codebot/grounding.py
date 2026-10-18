@@ -229,6 +229,14 @@ def _ungrounded(a, toks, prog=None):
         if t in SHELL_WORDS: return f"{t!r} is shell syntax or a shell command, but argv goes to the program as it is, without a shell (standard input is the stdin field)"
     return None
 
+def _named_in_stdin(a, prog=None):
+    """Why an assertion's standard input is not what it means: a line of it starts with the program's own name, as a typed command line would.
+    2026-10-18 planning probe: `./calc` with standard input `calc 2 + 3 * 4`, expecting 14 (the program reads `calc` as a token that is no number).
+    The same mistake as the program's own name in argv (_ungrounded); no earlier plan had used stdin at all."""
+    if a.get("type") != "run" or not prog or not isinstance(a.get("stdin"), str): return None
+    line = next((l.strip() for l in a["stdin"].splitlines() if l.split()[:1] in ([prog], ["./" + prog])), None)
+    return None if line is None else f"a line of its standard input starts with the program's own name ({line!r}), as a typed command line would"
+
 NUMBER = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
 
 def spec_commands(spec, prog=None):
@@ -377,7 +385,7 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
     split's parent, finished tasks), which a group may not contradict either; they are never dropped here. label: how notes name a group.
     Rules: a `go run` command of a program the spec says how to build with Go is first rewritten to run the built program (via_built); an exact
     duplicate is merged; an assertion that contradicts itself (stdout exactly S, and containing a text S does not contain) is dropped; Python code
-    in a project that is not Python is dropped; a command expected to succeed that passes an option or shell syntax
+    in a project that is not Python is dropped; so is standard input with a line that starts with the program's own name; a command expected to succeed that passes an option or shell syntax
     the spec never mentions, or the program's own name, or packs words the spec passes as separate arguments into one argument, is dropped; an exit
     status `go run` can never report is dropped; text the spec sends to standard error expected on standard output is dropped; an assertion that
     contradicts a spec example or the context is dropped; assertions of the groups that exercise the same call or command line with results that
@@ -395,7 +403,8 @@ def screen(groups, spec, kind="python", prepend=None, spec_examples=(), context=
             k = json.dumps(a, sort_keys=True)
             if k in keys: continue
             keys.add(k)
-            r = _contradictory(a) or (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _joined(a, cmds, prog) or _unobservable(a) or _on_wrong_stream(a, err_only)
+            r = (_contradictory(a) or (_python_in_other(a) if kind == "other" else None) or _ungrounded(a, toks, prog) or _named_in_stdin(a, prog)
+                 or _joined(a, cmds, prog) or _unobservable(a) or _on_wrong_stream(a, err_only))
             if r: notes.append(f"{label}{gi + 1}: dropped {_short(a)}: {r}"); why[gi].append(r); continue
             kept.append(a)
         stage.append(kept)

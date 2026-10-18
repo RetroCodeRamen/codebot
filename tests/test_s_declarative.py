@@ -59,8 +59,8 @@ class TestRunner(RunnerCase):
 
 class TestCheckspec(Sandboxed):
     def test_schema_variants_match_the_runner_contract(self):
-        vs = K.assert_schema()["items"]["anyOf"]; self.assertGreaterEqual(len(vs), 9)
-        sample = {"module": "m", "func": "f", "args": [], "expect": 1, "raises": "ValueError", "argv": ["python3", "x.py"], "exit": 0, "stdout": "o", "stdout_contains": ["o"], "stdout_json": {}, "path": "a.py", "text": "t"}
+        vs = K.assert_schema()["items"]["anyOf"]; self.assertGreaterEqual(len(vs), 13)
+        sample = {"module": "m", "func": "f", "args": [], "expect": 1, "raises": "ValueError", "argv": ["python3", "x.py"], "stdin": "2 + 3\n", "exit": 0, "stdout": "o", "stdout_contains": ["o"], "stdout_json": {}, "path": "a.py", "text": "t"}
         for v in vs:
             t = v["properties"]["type"]["enum"][0]; req, opt = A.TYPES[t]; keys = set(v["properties"]) - {"type"}
             self.assertLessEqual(keys, req | opt, v); self.assertFalse(v["additionalProperties"])
@@ -68,6 +68,8 @@ class TestCheckspec(Sandboxed):
         calls = [v for v in vs if v["properties"]["type"]["enum"] == ["call"]]; self.assertTrue(calls and all("args" in v["required"] for v in calls))       # a call can never be generated without its inputs
         runs = [v for v in vs if v["properties"]["type"]["enum"] == ["run"]]
         self.assertTrue(all(set(v["required"]) & {"exit", "stdout", "stdout_contains", "stdout_json"} for v in runs))               # a run can never be generated without an expectation
+        # constrained decoding writes required fields first: some variant must offer stdin right after argv, before the expected output
+        self.assertTrue(any(list(v["properties"])[:3] == ["type", "argv", "stdin"] and v["required"][:3] == ["type", "argv", "stdin"] for v in runs))
     def test_clean_keeps_only_the_fields_the_type_takes_and_keeps_empty_values(self):
         a = K.clean({"type": "call", "module": "m", "func": "f", "args": [1], "expect": "", "bogus": 1})
         self.assertEqual(a, {"type": "call", "module": "m", "func": "f", "args": [1], "expect": ""}); self.assertIsNone(A.validate([a]))      # "" is a real expectation
@@ -442,6 +444,14 @@ class TestGrounding(Sandboxed):
         log = [json.loads(l) for l in open(os.path.join(self.state, "plan.log")) if "assertions_salvaged" in l][-1]["notes"]
         self.assertTrue(any("own example" in n for n in log)); self.assertTrue(any("not written in Python" in n for n in log)); self.assertTrue(any("examples" in n for n in log))
         self.assertTrue(any(n.startswith("rewrote 2 `go run`") for n in log))
+    def test_standard_input_that_starts_a_line_with_the_programs_own_name_is_dropped(self):
+        # 2026-10-18 planning probe: `./calc` with standard input `calc 2 + 3 * 4` expecting 14; the program reads `calc` as a token that is no number
+        named = {"type": "run", "argv": ["./calc"], "stdin": "calc 2 + 3 * 4\n", "stdout": "14"}
+        later = {"type": "run", "argv": ["./calc"], "stdin": "2 + 3\n./calc 6 x 7\n", "stdout": "5\n42"}
+        fine = {"type": "run", "argv": ["./calc"], "stdin": "2 + 3\n\n6 x 7\n", "stdout": "5\n42"}
+        out, _, why = self.screen([[named, later, fine]]); self.assertEqual(out, [[BUILD, fine]])
+        self.assertIn("'calc 2 + 3 * 4'", why[0][0]); self.assertIn("own name", why[0][1])
+        self.assertIsNone(G._named_in_stdin(named, None))                                   # no program the spec builds: nothing to compare with
     def test_an_assertion_that_contradicts_itself_is_dropped(self):
         # 2026-10-18 calc4 T6: `./calc abc` with "stdout": "" and "stdout_contains": ["error:"] can hold for no program
         both = {"type": "run", "argv": ["./calc", "abc"], "exit": 2, "stdout": "", "stdout_contains": ["error:"]}

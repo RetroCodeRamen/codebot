@@ -43,6 +43,10 @@ def assert_schema():
         return {"type": "object", "properties": {"type": {"enum": [t]}, **{k: P[k] for k in keys if k != "type"}}, "required": ["type", *required], "additionalProperties": False}
     variants = [variant("call", ("module", "func", "args", "expect"), ("kwargs",)), variant("call", ("module", "func", "args", "raises"), ("kwargs",))]     # args is REQUIRED (use [] for none): a call without its inputs tests nothing real
     run_exp = ("exit", "stdout", "stdout_contains", "stdout_json")
+    # Constrained decoding writes required fields before optional ones, so an optional stdin could only follow the expected output, and the model
+    # had moved on by then (2026-10-18 probe: for the stdin mode the planner wrote `./calc` expecting "5", with no input). With stdin required too,
+    # a variant offers it right after argv, where the input belongs.
+    variants += [variant("run", ("argv", "stdin", e), [x for x in run_exp if x != e]) for e in run_exp]
     variants += [variant("run", ("argv", e), ("stdin", *[x for x in run_exp if x != e])) for e in run_exp]
     variants += [variant("file_exists", ("path",)), variant("file_contains", ("path", "text")), variant("file_not_contains", ("path", "text"))]
     return {"type": "array", "minItems": 1, "maxItems": 12, "items": {"anyOf": variants}}
