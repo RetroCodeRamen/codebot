@@ -34,6 +34,8 @@ and ASSERTIONS: the acceptance test, written as data. A trusted runner evaluates
   {"type":"call","module":"shapes","func":"area","args":[[]],"expect":0.0}
   {"type":"call","module":"shapes","func":"area","args":[-1,2],"raises":"ValueError"}                          the call must raise this exception class
   {"type":"run","argv":["python3","greet.py","Ada"],"stdout":"Hello, Ada!"}                                   run a command: stdout (exact), stdout_contains (list), stdout_json, exit (default 0)
+  {"type":"run","argv":["python3","greet.py"],"stdin":"Ada\\nBob\\n","stdout":"Hello, Ada!\\nHello, Bob!"}     stdin: the text the program reads on standard input (argv goes to the program as it is, with no shell: never echo, | or <)
+  {"type":"run","argv":["python3","greet.py",""],"exit":2,"stdout":""}                                         standard error is not compared: check an error by its exit status (and "stdout":"" when nothing may be printed on standard output); text the program writes to standard error never goes in stdout or stdout_contains
   {"type":"file_contains","path":"settings.py","text":"DEBUG = False"}   {"type":"file_not_contains","path":"app.py","text":"legacy_mode"}   {"type":"file_exists","path":"greet.py"}
 Assertions describe the FINISHED state: what must be true once the task is done. They fail today only because the work has not been done yet. So never assert that something the task creates is absent
 (no file_not_contains for a function you are asked to add), and never assert two things that cannot both hold. file_not_contains is only for things the task REMOVES (for example the old name in a rename).

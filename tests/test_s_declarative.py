@@ -96,6 +96,13 @@ class TestCheckspec(Sandboxed):
         self.assertIsNone(A.validate([{"type": "file_contains", "path": "a.py", "text": "def f"}, {"type": "file_not_contains", "path": "b.py", "text": "def f"}]))
     def test_the_planner_prompt_says_assertions_describe_the_finished_state(self):
         for frag in ("FINISHED state", "never assert that something the task creates is absent", "never invent a command-line interface", "never to mean 'does not work yet'"): self.assertIn(frag, planner.GUIDE)
+    def test_the_planner_and_the_splitter_are_told_about_standard_input_and_that_standard_error_is_not_compared(self):
+        # 2026-10-18 calc4: the guide listed stdout, stdout_contains, stdout_json and exit only, so the planner wrote `./calc echo "2 + 3"` in all three
+        # rounds and the stdin task was dropped; and it put the `error:` text the spec sends to standard error in stdout_contains
+        for text in (planner.GUIDE, planner.GUIDE_ITEM, splitter.TYPES):
+            self.assertIn("stdin", text); self.assertIn("no shell", text); self.assertIn("standard error is not compared", text)
+        runs = [json.loads(m) for m in __import__("re").findall(r'^  (\{"type":"run".*?\})\s{2,}', planner.GUIDE, __import__("re").M)]
+        self.assertEqual(len(runs), 3); self.assertEqual(runs[1]["stdin"], "Ada\nBob\n"); self.assertIsNone(A.validate(runs))       # the examples are valid assertions
     def test_command_has_no_path_or_shell_syntax(self):
         c = K.command_for("T3"); self.assertEqual(c, "python3 $CODEBOT_CHECKS/assert_runner.py $CODEBOT_CHECKS/T3.spec.json"); self.assertNotIn("`", c)
     def test_rendered_plan_parses_back_with_its_checks(self):

@@ -9,6 +9,10 @@ SCHEMA = {"type": "object", "properties": {"subtasks": {"type": "array", "minIte
     "type": "object", "properties": {"title": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}}, "asserts": K.assert_schema()},
     "required": ["title", "asserts"], "additionalProperties": False}}}, "required": ["subtasks"], "additionalProperties": False}
 
+TYPES = ('Assertion types: call {"type":"call","module":"m","func":"f","args":[..],"expect":value or "raises":"ValueError"}; '
+         'run {"type":"run","argv":["python3","tool.py",..],"stdout":".."} (also stdin: the text the program reads on standard input; exit, stdout_contains, stdout_json; '
+         'argv goes to the program as it is, with no shell, and standard error is not compared); file_exists/file_contains/file_not_contains with path (+ text). ')
+
 def build(proj, tid, subs, parent_files=None, parent_asserts=None, notes=None, avoid=None, context=None):
     """Model output -> (subtasks for planops.split_task, fixtures). Assertions are repaired with the parent's as context (the splitter froze 12 of 21
     impossible assertions on level 1, mostly the expected value copied into args); unusable assertions are dropped one by one, and a child with
@@ -62,9 +66,7 @@ def main():
     req = f"SPECIFICATION (the part of the project this task belongs to; every step stays inside it):\n{req}\n\n" if req else ""
     prompt = (f"A task keeps failing and must be split into 2-4 smaller steps done in order. Each step needs its own ASSERTIONS (data, evaluated by a trusted runner in the code directory) "
               f"that FAIL right now and hold once that step is done. Steps must be small (one function, one file or one behaviour); together they must lead to the final check passing. "
-              f"Assertion types: call {{\"type\":\"call\",\"module\":\"m\",\"func\":\"f\",\"args\":[..],\"expect\":value or \"raises\":\"ValueError\"}}; "
-              f"run {{\"type\":\"run\",\"argv\":[\"python3\",\"tool.py\",..],\"stdout\":\"..\"}} (also exit, stdout_contains, stdout_json); file_exists/file_contains/file_not_contains with path (+ text). "
-              f"Use plain relative file names, never absolute paths.\n\n{req}TASK: {task['title']}\n{final}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
+              f"{TYPES}Use plain relative file names, never absolute paths.\n\n{req}TASK: {task['title']}\n{final}\nLAST ERROR:\n{err[-800:]}\n\nREPO:\n{rm}\n\nReply with the JSON.")
     raw, why, notes = None, "", []
     try:
         r = ollama.chat(proj, [{"role": "system", "content": "You decompose coding tasks. Reply with JSON only."}, {"role": "user", "content": prompt}],
