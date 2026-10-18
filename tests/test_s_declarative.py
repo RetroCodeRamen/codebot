@@ -146,6 +146,20 @@ class TestPlanner(Sandboxed):
         data = engine.freeze_project(self.proj()); self.assertEqual(C.verify(self.proj(), data), [])       # the spec files and the runner are frozen and locked
         self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "T1.spec.json"))); self.assertTrue(os.path.exists(os.path.join(self.state, "checks", "assert_runner.py")))
         self.assertNotIn(self.state, json.dumps(json.load(open(os.path.join(self.state, "checks", "T1.spec.json")))))            # no absolute path anywhere the model can influence
+    def test_a_repair_reply_goes_only_to_a_rejected_task(self):
+        # 2026-10-18 calc4: the planner answered T7's rejection with "id": 1, twice, and the replies replaced T1's assertions
+        cli = [{"type": "file_exists", "path": "cli.py"}]; title = [{"type": "call", "module": "textutil", "func": "title", "args": ["a"], "expect": "A"}]
+        self.start([{**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:2]}, {"tasks": [{"id": 1, "asserts": cli}]}])          # one rejection (T2), one misnumbered reply
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info)
+        self.assertEqual(K.read_spec(self.proj(), "T2"), cli); self.assertNotIn(cli[0], K.read_spec(self.proj(), "T1"))
+        self.assertIn('"id" (2)', self.fake.requests[1]["messages"][1]["content"])
+        self.assertEqual(planner.route_repairs([{"id": 1, "asserts": cli}, {"id": 3, "asserts": title}], [2, 3]), ([(3, {"id": 3, "asserts": title})], [{"id": 1, "asserts": cli}]))
+    def test_a_repair_reply_for_a_task_that_was_not_rejected_is_ignored(self):
+        cli = [{"type": "file_exists", "path": "cli.py"}]; title = [{"type": "call", "module": "textutil", "func": "title", "args": ["a"], "expect": "A"}]
+        self.start([PLAN_REPLY, {"tasks": [{"id": 1, "asserts": cli}, {"id": 3, "asserts": title}]}, {"tasks": [{"id": 2, "asserts": cli}]}])     # T2 and T3 rejected
+        info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info); self.assertEqual(len(info["rounds"]), 3)
+        self.assertEqual((K.read_spec(self.proj(), "T2"), K.read_spec(self.proj(), "T3")), (cli, title)); self.assertNotIn(cli[0], K.read_spec(self.proj(), "T1"))
+        self.assertTrue(any(json.loads(l).get("op") == "repair_ignored" for l in open(os.path.join(self.state, "plan.log"))))
     def test_invalid_json_reply_is_retried_not_fatal(self):
         good = {**PLAN_REPLY, "tasks": PLAN_REPLY["tasks"][:1]}; self.start(["not json at all", good])
         info = planner.plan_auto(self.home, self.name, 600, log=lambda *_: None); self.assertTrue(info["ok"], info); self.assertEqual(info["rounds"][0]["ok"], False)

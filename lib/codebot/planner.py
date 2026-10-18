@@ -166,6 +166,15 @@ def _why(r):
     if r["verdict"] == "passes": return "ALL assertions already hold on the current code, so they test nothing. Assert what is DIFFERENT after the work: call or run the new behaviour or new name, and for anything the task removes or renames use file_not_contains with the OLD text (never file_contains for it)"
     return "the assertions are unusable: " + (r["out"] or "unknown error").strip().replace("\n", " ")[:300]
 
+def route_repairs(replies, ids):
+    """Which rejected task each repair reply is for: the task it names, when that task was rejected; a lone reply to a lone rejection is for that
+    task whatever number it gives. Returns ([(task number, reply)], [replies for no rejected task]). 2026-10-18 calc4: the planner answered T7's
+    rejection with "id": 1 twice, and both replies replaced T1's assertions (the second time with the guide's own `shapes.area` example)."""
+    if len(ids) == 1 and len(replies) == 1: return [(ids[0], replies[0])], []
+    routed, stray = [], []
+    for t in replies: (routed.append((t["id"], t)) if type(t.get("id")) is int and t["id"] in ids else stray.append(t))
+    return routed, stray
+
 def _sizing(home, name):
     try: return subprocess.run([sys.executable, os.path.join(home, "bin", "codebot-engine"), "sizing", name, "--home", home], capture_output=True, text=True, timeout=60).stdout.strip()
     except (OSError, subprocess.SubprocessError): return ""
@@ -198,12 +207,16 @@ def plan_auto(home, name, timeout=2700, rounds=3, log=print, max_tasks=10, num_p
                 if plan is None or not plan.get("tasks"): why_failed = err or "it had no tasks"; plan, note, rc = None, f"Your previous reply was rejected: {err or 'it had no tasks'}. Reply with the complete JSON plan.", 1
             else:
                 lines = [f"T{r['id'][1:]} \"{r['title'][:70]}\": {_why(r)}\n  current assertions: {json.dumps((K.read_spec(proj, r['id']) or plan['tasks'][int(r['id'][1:]) - 1].get('asserts')))[:700]}" for r in last]
-                user = "The harness ran your assertions against the code exactly as it is today and REJECTED these tasks:\n" + "\n".join(lines) + "\nReturn corrected assertions for ONLY these tasks (use their numbers). They must FAIL now and hold once the task is done."
+                ids = [int(r["id"][1:]) for r in last]
+                user = ("The harness ran your assertions against the code exactly as it is today and REJECTED these tasks:\n" + "\n".join(lines) +
+                        f"\nReturn corrected assertions for ONLY these tasks, each with the task's number as \"id\" ({', '.join(map(str, ids))}). They must FAIL now and hold once the task is done.")
                 fix, err, raw = _chat(proj, GUIDE, user, repair_schema(), left, 3000)
                 if fix is None: rc = 1; why_failed = "repair reply: " + (err or "unusable")
                 else:
-                    for t in fix["tasks"]:
-                        if isinstance(t.get("id"), int) and 1 <= t["id"] <= len(plan["tasks"]): plan["tasks"][t["id"] - 1]["asserts"] = t.get("asserts")
+                    routed, stray = route_repairs(fix["tasks"], ids)
+                    for n, t in routed: plan["tasks"][n - 1]["asserts"] = t.get("asserts")
+                    if stray: append_jsonl(proj.p("plan.log"), {"ts": now(), "actor": "harness", "op": "repair_ignored", "ok": True,
+                                                                "reason": f"repair replies for tasks that were not rejected: {[t.get('id') for t in stray]} (rejected: {ids})"})
         except ollama.ModelError as e: log(f"planner round {k}: model error: {e}"); rc = 1; note = ""; why_failed = f"model error: {e}"
         if plan is not None and rc == 0:
             bad = _write(proj, plan, spec); rejected = _evaluate(proj, bad)
