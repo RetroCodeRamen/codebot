@@ -147,6 +147,10 @@ Fixes, in the order they landed:
    adds a SPECIFICATION section (priority 1, between the repo map and the task): the spec's introduction plus that requirement. Split children and tasks
    added while a task runs belong to their root's requirement; without a recorded requirement a short spec (up to 3,500 characters) is shown whole.
    The splitter's prompt gets the same text, so its steps stay inside the requirement.
+3. **The worker sees its whole check.** The ACCEPTANCE CHECK section showed the check script plus every file it named under one 2,400-character
+   cap, and for a declarative check that included the trusted runner's own source next to an indented spec file: on T7 of the control rerun the
+   worker saw 1 of its 12 assertions (and spent about 30 turns trying to open the check files it may not read). A declarative check is now shown
+   as its command plus one numbered line per assertion; the runner prints `failing assertions: 2, 5` with the same numbers.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

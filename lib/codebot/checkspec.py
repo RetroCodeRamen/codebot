@@ -1,7 +1,7 @@
 """Harness side of declarative checks (see assertions.py). The model emits ASSERTIONS as JSON constrained by a schema; this module turns them into
 files the frozen-check machinery already understands: checks/<id>.spec.json plus a check line that runs the trusted runner. The model never sees a
 path, an interpreter or a shell, so a whole family of planner mistakes (wrong paths, backticks, <placeholders>, wrong interpreter) cannot happen."""
-import json, os, shutil
+import json, os, re, shutil
 from . import assertions as A, checks as C
 
 RUNNER = "assert_runner.py"
@@ -13,8 +13,22 @@ def ensure_runner(proj):
         os.makedirs(C.checks_dir(proj), exist_ok=True); shutil.copyfile(A.__file__, dst)
     return dst
 
-def command_for(tid): return f"python3 $CODEBOT_CHECKS/{RUNNER} $CODEBOT_CHECKS/{tid}.spec.json"
+def command_for_spec(name): return f"python3 $CODEBOT_CHECKS/{RUNNER} $CODEBOT_CHECKS/{name}"
+def command_for(tid): return command_for_spec(f"{tid}.spec.json")
 def akey(a): return json.dumps(a, sort_keys=True)          # one assertion's identity: two assertions are the same test when their JSON is equal
+
+def spec_file(check):
+    """The spec file a runner check evaluates (T4.spec.json, or T4.r1.spec.json after a re-derivation), or None."""
+    m = re.search(r"\$\{?CODEBOT_CHECKS\}?/([\w.\-]+\.spec\.json)", check or "")
+    return m.group(1) if m and is_runner_check(check) else None
+
+def read_task_spec(proj, task):
+    """The assertions of the check a task has NOW (follows a re-derived check to its new spec file), or None."""
+    name = spec_file(task.get("check"))
+    if not name: return None
+    try:
+        with open(os.path.join(C.checks_dir(proj), name)) as f: return json.load(f).get("asserts")
+    except (OSError, ValueError): return None
 def is_runner_check(check): return RUNNER in (check or "")
 def spec_name(tid): return f"{tid}.spec.json"
 

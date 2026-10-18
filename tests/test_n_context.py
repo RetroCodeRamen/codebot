@@ -1,5 +1,5 @@
 """Context setup verification: explicit num_ctx, keep_alive, grammar-constrained schema, window never exceeded, stable cached prefix."""
-import json, os, re, unittest
+import json, os, re, subprocess, sys, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama, A
 from codebot import engine, worker, packer, specdoc, tokens, thermal, ollama, tasks as T, audit
@@ -142,6 +142,24 @@ class TestSpecInContext(Base):
     def test_the_spec_survives_a_tight_budget_before_the_repo_map_does(self):
         specdoc.save_map(self.proj(), {"T1": 2}); _, man = self.pack(budget_tokens=500)
         names = [n for n, _ in man["sections"]]; self.assertIn("SPECIFICATION", names)
+
+class TestCheckInContext(Base):
+    def test_every_assertion_is_shown_numbered_and_the_runner_source_is_not(self):
+        # 2026-10-17 calc_go control rerun, T7: the runner's source and the indented spec shared a 2,400-character cap; the worker saw 1 of 12 assertions
+        from codebot import checkspec as K
+        K.ensure_runner(self.proj())
+        asserts = [{"type": "run", "argv": ["go", "run", ".", "echo", f"{i} + {i} with a long tail of words"], "stdout": f"{2 * i}\n", "exit": 0} for i in range(1, 13)]
+        K.write_spec(self.proj(), "T7", asserts); task = {"id": "T7", "title": "stdin", "check": K.command_for("T7")}
+        text, _ = packer.pack(self.proj(), task, "")
+        for i in range(1, 13): self.assertIn(f"\n{i}. {json.dumps(asserts[i - 1])}", text)
+        self.assertNotIn("import importlib", text); self.assertIn(K.command_for("T7"), text)
+    def test_the_runner_reports_failing_assertions_by_those_numbers(self):
+        from codebot import checkspec as K
+        K.ensure_runner(self.proj()); self.write_code("m.py", "def f(): return 1\n")
+        K.write_spec(self.proj(), "T1", [{"type": "call", "module": "m", "func": "f", "expect": 1}, {"type": "call", "module": "m", "func": "f", "expect": 2},
+                                         {"type": "file_exists", "path": "m.py"}, {"type": "file_exists", "path": "nope.py"}])
+        r = subprocess.run([sys.executable, os.path.join(self.state, "checks", K.RUNNER), os.path.join(self.state, "checks", "T1.spec.json")], cwd=self.code, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1); self.assertIn("\nfailing assertions: 2, 4\n", r.stdout)
 
 class TestStatsAndThermal(Base):
     def test_timing_stats_reach_the_trace_and_the_audit_log(self):

@@ -2,7 +2,7 @@
 check, the last error, the files the task names, a compact repo/symbol map, the agreed decisions, a few relevant lessons.
 Nothing else, within a token budget."""
 import json, os, re, subprocess
-from . import checks as C, memory, modes, specdoc, tokens
+from . import checks as C, checkspec as K, memory, modes, specdoc, tokens
 from .config import now
 
 CHARS_PER_TOKEN = 3.5
@@ -102,7 +102,16 @@ def previous_attempts(task, cap=5):
                      + (f", TAMPERED {x['tamper']}" if x.get("tamper") else "") for x in h)
 
 def fixture_text(proj, task, cap=1800):
-    """The frozen check script plus any fixture file it references: the worker must see what it has to satisfy."""
+    """What the worker has to satisfy. A declarative check is shown as its assertions, one numbered line each (the numbers the runner reports in
+    `failing assertions:`), without the trusted runner's own source. Until 2026-10-17 the runner's source and the indented spec file shared one
+    2,400-character cap, so on T7 of the calc_go control rerun the worker saw 1 of its 12 assertions. Other checks: the frozen script plus the
+    fixture files it references."""
+    asserts = K.read_task_spec(proj, task) if K.is_runner_check(task.get("check")) else None
+    if isinstance(asserts, list) and asserts:
+        lines = [f"{n}. {json.dumps(a, ensure_ascii=False)}" for n, a in enumerate(asserts, 1)]
+        text = (f"command (run it with `run` to see which assertions fail): {task['check']}\n"
+                f"{len(lines)} assertions, evaluated in the code directory; ALL must hold:\n" + "\n".join(lines))
+        return text if len(text) <= 4 * cap else text[:4 * cap] + "\n... (more assertions; run the check command to see every failure)"
     out = []
     script = os.path.join(C.checks_dir(proj), C.script_rel(task["id"]))
     try:

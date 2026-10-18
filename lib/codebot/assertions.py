@@ -126,13 +126,17 @@ def _file(a):
     if a["type"] == "file_contains": return None if has else f"{path} does not contain {_short(a['text'])}"
     return f"{path} still contains {_short(a['text'])}" if has else None
 
+def failures(asserts):
+    """Run every assertion; returns [(its 1-based number, failure message)] (empty = all hold)."""
+    sys.path.insert(0, os.getcwd()); fails = []
+    for n, a in enumerate(asserts, 1):
+        msg = _call(a) if a["type"] == "call" else _run(a) if a["type"] == "run" else _file(a)
+        if msg: fails.append((n, msg))
+    return fails
+
 def check(asserts):
     """Run every assertion; returns the list of failure messages (empty = all hold)."""
-    sys.path.insert(0, os.getcwd()); fails = []
-    for a in asserts:
-        msg = _call(a) if a["type"] == "call" else _run(a) if a["type"] == "run" else _file(a)
-        if msg: fails.append(msg)
-    return fails
+    return [m for _, m in failures(asserts)]
 
 def main(argv):
     if len(argv) != 2: print("SPEC ERROR: usage: assert_runner.py <spec.json>"); return 2
@@ -142,8 +146,9 @@ def main(argv):
     asserts = spec.get("asserts") if isinstance(spec, dict) else None
     err = validate(asserts)
     if err: print(f"SPEC ERROR: {err}"); return 2
-    fails = check(asserts)
-    for m in fails: print("FAIL: " + m)
+    fails = failures(asserts)
+    for _, m in fails: print("FAIL: " + m)
+    if fails: print("failing assertions: " + ", ".join(str(n) for n, _ in fails))      # the numbers the worker's context shows; the harness tracks them per attempt
     print(f"{len(fails)} of {len(asserts)} assertions failed" if fails else f"all {len(asserts)} assertions hold")
     return 1 if fails else 0
 
