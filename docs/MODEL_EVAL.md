@@ -214,7 +214,8 @@ version failed the same two precedence examples (`./calc 2 + 3 * 4` printed 20) 
 seed 1's and seed 3's 13/15 programs are different code with the same 22/32, test for test. Runaway replies: 5 of the 51 replies ran to the
 6000-token cap (12.5-13 min each, 64 of the 145 min), the model reasoning in code comments ("Actually, let's just evaluate directly." 18
 times) or writing code block after block; they took 38 of seed 1's 54 min and 25 of seed 2's 46, while seed 3 had none. The two 13/15
-replies were 605 and 830 tokens. Temperatures: median 89 °C, max 94 °C, one thermal pause (40 s).
+replies were 605 and 830 tokens. Temperatures: median 89 °C, max 94 °C, one thermal pause (40 s). The loops, their drivers and the
+per-run results are in `bench/baselines/`.
 
 ## Known limits
 

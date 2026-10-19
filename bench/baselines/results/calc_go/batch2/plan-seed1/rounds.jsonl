@@ -1,0 +1,7 @@
+{"round": 1, "secs": 22.0, "thermal_wait": 0, "prompt_tokens": 870, "gen_tokens": 198, "done_reason": "stop", "code": true, "chars": 502, "built": false, "examples": 0, "elapsed": 24.6}
+{"round": 2, "secs": 77.0, "thermal_wait": 0, "prompt_tokens": 1167, "gen_tokens": 697, "done_reason": "stop", "code": true, "chars": 1897, "built": true, "examples": 6, "elapsed": 102.1}
+{"round": 3, "secs": 117.1, "thermal_wait": 0, "prompt_tokens": 3284, "gen_tokens": 918, "done_reason": "stop", "code": true, "chars": 2325, "built": true, "examples": 25, "elapsed": 219.6}
+{"round": 4, "secs": 352.5, "thermal_wait": 0, "prompt_tokens": 3116, "gen_tokens": 2694, "done_reason": "stop", "code": true, "chars": 2403, "built": true, "examples": 57, "elapsed": 572.4}
+{"round": 5, "secs": 110.7, "thermal_wait": 0, "prompt_tokens": 2119, "gen_tokens": 926, "done_reason": "stop", "code": true, "chars": 2403, "built": true, "examples": 57, "elapsed": 683.4}
+{"round": 6, "secs": 106.9, "thermal_wait": 0, "prompt_tokens": 2119, "gen_tokens": 926, "done_reason": "stop", "code": true, "chars": 2403, "built": true, "examples": 57, "elapsed": 790.6}
+{"round": 7, "secs": 821.6, "thermal_wait": 0, "prompt_tokens": 2119, "gen_tokens": 6000, "done_reason": "length", "code": true, "chars": 2403, "built": true, "examples": 57, "elapsed": 1612.5}

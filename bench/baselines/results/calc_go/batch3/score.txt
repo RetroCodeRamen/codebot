@@ -1,0 +1,9 @@
+restart-seed1: rounds=12 stop=time cap minutes=53.8 delivered=round 5 (13/15 examples)
+  one-shot : 1/32 hidden, 0/20 hand  R1:1/4 R2:0/3 R3:0/4 R4:0/4 R5:0/4 R6:0/7 R7:0/6
+  delivered: 22/32 hidden, 13/20 hand  R1:4/4 R2:3/3 R3:2/4 R4:3/4 R5:3/4 R6:4/7 R7:3/6
+restart-seed2: rounds=12 stop=time cap minutes=45.7 delivered=round 12 (1/15 examples)
+  one-shot : 1/32 hidden, 0/20 hand  R1:1/4 R2:0/3 R3:0/4 R4:0/4 R5:0/4 R6:0/7 R7:0/6
+  delivered: 6/32 hidden, 2/20 hand  R1:3/4 R2:0/3 R3:0/4 R4:0/4 R5:0/4 R6:2/7 R7:1/6
+restart-seed3: rounds=27 stop=time cap minutes=45.1 delivered=round 12 (13/15 examples)
+  one-shot : 1/32 hidden, 0/20 hand  R1:1/4 R2:0/3 R3:0/4 R4:0/4 R5:0/4 R6:0/7 R7:0/6
+  delivered: 22/32 hidden, 13/20 hand  R1:4/4 R2:3/3 R3:2/4 R4:3/4 R5:3/4 R6:4/7 R7:3/6

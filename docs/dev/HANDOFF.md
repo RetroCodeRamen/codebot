@@ -287,8 +287,9 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
   checks got past it.
 - Runaway replies: 5 of the restart runs' 51 replies ran to the 6000-token cap (12.5 min each, 64 of 145 min), the model reasoning in code
   comments; the two 13/15 replies were 605 and 830 tokens.
-- The loop scripts are in the session scratchpad, not in the repo. Everything here is calc_go only. Open decision for the user: rebuild
-  codebot around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the planner/check pipeline.
+- The loop scripts, drivers and per-run results are in `bench/baselines/` (see its README). Everything above is calc_go only. Open decision
+  for the user: rebuild codebot around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the
+  planner/check pipeline.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

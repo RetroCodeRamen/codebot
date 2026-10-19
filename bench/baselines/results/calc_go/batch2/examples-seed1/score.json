@@ -1,0 +1,93 @@
+{
+ "summary": {
+  "seed": 1,
+  "rounds": 12,
+  "stop": "round cap",
+  "minutes": 13.2,
+  "examples_total": 15,
+  "feedback": "examples",
+  "delivered_round": 12,
+  "delivered_examples": 13,
+  "model": "codebot-model",
+  "temperature": 0.2,
+  "num_predict": 6000,
+  "think": false
+ },
+ "one_shot": {
+  "hidden": 1,
+  "hidden_total": 32,
+  "hand": 0,
+  "hand_total": 20,
+  "by_req": {
+   "R1": "1/4",
+   "R2": "0/3",
+   "R3": "0/4",
+   "R4": "0/4",
+   "R5": "0/4",
+   "R6": "0/7",
+   "R7": "0/6"
+  },
+  "failing": [
+   "test_calc.TestBuildAndArguments.test_r01_examples_from_the_spec",
+   "test_calc.TestBuildAndArguments.test_r01_go_build_produces_the_program",
+   "test_calc.TestBuildAndArguments.test_r01_single_numbers",
+   "test_calc.TestErrors.test_r06_division_by_a_zero_written_differently",
+   "test_calc.TestErrors.test_r06_division_by_zero",
+   "test_calc.TestErrors.test_r06_division_by_zero_inside_a_longer_expression",
+   "test_calc.TestErrors.test_r06_starts_or_ends_with_an_operator",
+   "test_calc.TestErrors.test_r06_success_exits_zero",
+   "test_calc.TestErrors.test_r06_two_numbers_or_two_operators_in_a_row",
+   "test_calc.TestErrors.test_r06_unknown_tokens",
+   "test_calc.TestFormatting.test_r05_exactly_one_line",
+   "test_calc.TestFormatting.test_r05_examples_from_the_spec",
+   "test_calc.TestFormatting.test_r05_negative_zero_prints_zero",
+   "test_calc.TestFormatting.test_r05_no_exponent_for_large_and_small_values",
+   "test_calc.TestNumbers.test_r04_examples_from_the_spec",
+   "test_calc.TestNumbers.test_r04_forms_parsefloat_accepts",
+   "test_calc.TestNumbers.test_r04_infinity_and_nan_are_not_numbers",
+   "test_calc.TestNumbers.test_r04_negative_operands_after_operators",
+   "test_calc.TestOperators.test_r02_each_operator",
+   "test_calc.TestOperators.test_r02_examples_from_the_spec",
+   "test_calc.TestOperators.test_r02_star_and_x_are_the_same",
+   "test_calc.TestPrecedence.test_r03_division_before_subtraction",
+   "test_calc.TestPrecedence.test_r03_examples_from_the_spec",
+   "test_calc.TestPrecedence.test_r03_left_to_right_for_the_same_kind",
+   "test_calc.TestPrecedence.test_r03_longer_expressions",
+   "test_calc.TestStdin.test_r07_empty_input_prints_nothing",
+   "test_calc.TestStdin.test_r07_empty_lines_are_skipped",
+   "test_calc.TestStdin.test_r07_errors_are_reported_on_stdout_and_it_continues",
+   "test_calc.TestStdin.test_r07_extra_spaces_and_no_final_newline",
+   "test_calc.TestStdin.test_r07_precedence_and_x_in_lines",
+   "test_calc.TestStdin.test_r07_reads_one_expression_per_line"
+  ],
+  "hand_out": "## ws: DOES NOT BUILD: # calc\n./main.go:4:2: \"fmt\" imported and not used\n./main.go:6:2: \"strconv\" imported and not used\n./main.go:12:13: undefined: runExpr\n./main.go:17:13: undefined: bufio\n./main.go:31:13: undefined: runExpr\n\n"
+ },
+ "delivered": {
+  "hidden": 22,
+  "hidden_total": 32,
+  "hand": 13,
+  "hand_total": 20,
+  "by_req": {
+   "R1": "4/4",
+   "R2": "3/3",
+   "R3": "2/4",
+   "R4": "3/4",
+   "R5": "3/4",
+   "R6": "4/7",
+   "R7": "3/6"
+  },
+  "failing": [
+   "test_calc.TestErrors.test_r06_starts_or_ends_with_an_operator",
+   "test_calc.TestErrors.test_r06_two_numbers_or_two_operators_in_a_row",
+   "test_calc.TestErrors.test_r06_unknown_tokens",
+   "test_calc.TestFormatting.test_r05_negative_zero_prints_zero",
+   "test_calc.TestNumbers.test_r04_infinity_and_nan_are_not_numbers",
+   "test_calc.TestPrecedence.test_r03_division_before_subtraction",
+   "test_calc.TestPrecedence.test_r03_examples_from_the_spec",
+   "test_calc.TestStdin.test_r07_errors_are_reported_on_stdout_and_it_continues",
+   "test_calc.TestStdin.test_r07_extra_spaces_and_no_final_newline",
+   "test_calc.TestStdin.test_r07_precedence_and_x_in_lines"
+  ],
+  "hand_out": "## ws: 13/20 hand inputs\n  PASS basic add          calc 8 + 5 -> rc=0 out='13\\n' err=''\n  PASS basic sub          calc 3 - 10 -> rc=0 out='-7\\n' err=''\n  PASS basic mul *        calc 6 * 9 -> rc=0 out='54\\n' err=''\n  PASS basic mul x        calc 11 x 11 -> rc=0 out='121\\n' err=''\n  PASS basic div          calc 22 / 8 -> rc=0 out='2.75\\n' err=''\n  PASS single number      calc 15 -> rc=0 out='15\\n' err=''\n  PASS decimals           calc 1.5 + 2.25 -> rc=0 out='3.75\\n' err=''\n  PASS negative operand   calc -4 x 2.5 -> rc=0 out='-10\\n' err=''\n  FAIL precedence 1       calc 3 + 4 x 5 -> rc=0 out='35\\n' err=''\n  FAIL precedence 2       calc 20 - 8 / 4 -> rc=0 out='3\\n' err=''\n  PASS left to right      calc 12 / 3 / 2 -> rc=0 out='2\\n' err=''\n  FAIL long chain         calc 1 + 2 + 3 + 4 x 10 -> rc=0 out='100\\n' err=''\n  PASS big result         calc 99999 * 99999 -> rc=0 out='9999800001\\n' err=''\n  PASS third              calc 2 / 3 -> rc=0 out='0.6666666666666666\\n' err=''\n  PASS div by zero        calc 5 / 0 -> rc=1 out='' err='error: division by zero'\n  FAIL letters            calc abc -> rc=2 out='' err=''\n  FAIL bad operator       calc 4 & 2 -> rc=2 out='' err=''\n  FAIL dangling op        calc 9 - -> rc=2 out='' err='panic: runtime error: index out of range [2] with length 2\\n\\n'\n  PASS stdin two lines    calc <stdin '4 * 4\\n9 - 10\\n'> -> rc=0 out='16\\n-1\\n' err=''\n  FAIL stdin error line   calc <stdin '8 / 0\\n3 + 3\\n'> -> rc=1 out='' err='error: division by zero'\n\n"
+ }
+}

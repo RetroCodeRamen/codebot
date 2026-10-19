@@ -1,0 +1,12 @@
+{"round": 1, "secs": 30.3, "thermal_wait": 0, "prompt_tokens": 870, "gen_tokens": 198, "done_reason": "stop", "code": true, "chars": 502, "built": false, "examples": 0, "elapsed": 32.6}
+{"round": 2, "secs": 78.0, "thermal_wait": 0, "prompt_tokens": 1167, "gen_tokens": 697, "done_reason": "stop", "code": true, "chars": 1897, "built": true, "examples": 0, "elapsed": 110.8}
+{"round": 3, "secs": 70.5, "thermal_wait": 0, "prompt_tokens": 1910, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 181.4}
+{"round": 4, "secs": 69.7, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 251.2}
+{"round": 5, "secs": 67.2, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 318.6}
+{"round": 6, "secs": 67.5, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 386.2}
+{"round": 7, "secs": 67.5, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 453.8}
+{"round": 8, "secs": 67.6, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 521.5}
+{"round": 9, "secs": 67.7, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 589.3}
+{"round": 10, "secs": 67.6, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 657.0}
+{"round": 11, "secs": 67.5, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 724.6}
+{"round": 12, "secs": 67.5, "thermal_wait": 0, "prompt_tokens": 1550, "gen_tokens": 605, "done_reason": "stop", "code": true, "chars": 1533, "built": true, "examples": 13, "elapsed": 792.3}

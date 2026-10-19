@@ -1,0 +1,5 @@
+{"round": 1, "secs": 755.1, "thermal_wait": 20, "prompt_tokens": 870, "gen_tokens": 6000, "done_reason": "length", "code": true, "chars": 19213, "built": false, "examples": 0, "elapsed": 777.8}
+{"round": 2, "secs": 131.8, "thermal_wait": 0, "prompt_tokens": 6928, "gen_tokens": 849, "done_reason": "stop", "code": true, "chars": 2343, "built": true, "examples": 14, "elapsed": 910.0}
+{"round": 3, "secs": 113.3, "thermal_wait": 0, "prompt_tokens": 3542, "gen_tokens": 849, "done_reason": "stop", "code": true, "chars": 2343, "built": true, "examples": 14, "elapsed": 1023.6}
+{"round": 4, "secs": 105.1, "thermal_wait": 0, "prompt_tokens": 3542, "gen_tokens": 849, "done_reason": "stop", "code": true, "chars": 2343, "built": true, "examples": 14, "elapsed": 1129.0}
+{"round": 5, "secs": 895.2, "thermal_wait": 0, "prompt_tokens": 3614, "gen_tokens": 6000, "done_reason": "length", "code": true, "chars": 2343, "built": true, "examples": 14, "elapsed": 2024.6}

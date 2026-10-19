@@ -1,0 +1,13 @@
+{
+ "seed": 2,
+ "rounds": 12,
+ "stop": "round cap",
+ "minutes": 25.4,
+ "examples_total": 15,
+ "delivered_round": 12,
+ "delivered_examples": 1,
+ "model": "codebot-model",
+ "temperature": 0.2,
+ "num_predict": 6000,
+ "think": false
+}
