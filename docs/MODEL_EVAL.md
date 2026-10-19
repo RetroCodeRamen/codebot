@@ -217,6 +217,23 @@ times) or writing code block after block; they took 38 of seed 1's 54 min and 25
 replies were 605 and 830 tokens. Temperatures: median 89 °C, max 94 °C, one thermal pause (40 s). The loops, their drivers and the
 per-run results are in `bench/baselines/`.
 
+**The restart loop on two Python levels (2026-10-19)** [V]: to see whether calc_go generalises, the restart loop was ported to Python
+(`bare_py.py`): the model writes every module the spec names, each as `### name.py` plus one code block; the feedback is the compiler's error
+or the spec's own examples run by codebot's assert runner; 45 min per run (a round that starts before the cap finishes), seeds 1 and 2,
+scored with the level's hidden tests. **level_01** (4 modules, 33 examples, 64 hidden tests): 63 and 60 of 64, against codebot's 50, 30 and
+47 in run `20261015-180429-l1-full` (same model build, 90 min per task, 1.8 h per trial, before the regression gate, so today's pipeline is
+not measured), in 41 and 46 min. The model's first reply alone scored 60 and 55: one prompt beat codebot's best trial. Seed 1 passed all 33
+examples in its seventh draft; seed 2 never passed more than 31 and delivered a version that fails the same two examples seed 1's first draft
+failed (`safe_filename('naïve.txt')`, `split_ext('a.')`); those two are 2 of its 4 hidden misses. **level_03** (`depgraph.py`, 8
+requirements, 87 hidden tests, no codebot run to compare): both runs passed all 6 examples (8 rounds in 52 min, 4 in 31 min) and scored 58
+and 63 of 87; the first replies scored 6 and 44. The examples cover only `resolve`, `find_cycle` and `groups`, nothing told the loop about
+the other five requirements, and seed 1's module has no `resolve_subset` at all (R8 0 of 12). The loop is only as good as the examples it
+runs. As on calc_go the repairs mostly stalled (19 of the 38 repair rounds sent the program back unchanged) and the restarts did the work:
+all 4 delivered versions came from a later draft (drafts 7, 3, 3 and 2). One of the 57 replies ran to the 6000-token cap (12.8 min);
+level_01 replies were 700-1,100 tokens (1.5-2 min), level_03 replies 2,000-2,900 (4-7 min). Temperatures: median 92 °C, max 94 °C, a 20 s
+thermal pause before 45 of the 57 rounds (15 min in all, inside the time cap). The first attempt read `### fileutil.py` as `util.py` and was
+stopped after one round; the runs above use the fixed reader. Results in `bench/baselines/results/levels/`.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

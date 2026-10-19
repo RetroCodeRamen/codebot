@@ -1,0 +1,12 @@
+level_01-seed1: rounds=21 drafts=7 stop=examples pass minutes=40.9 delivered=round 21 (33/33 examples)
+  one-shot : 60/64 hidden  R1:8/8 R2:7/8 R3:6/6 R4:8/8 R5:8/9 R6:6/7 R7:10/11 R8:7/7
+  delivered: 63/64 hidden  R1:8/8 R2:8/8 R3:6/6 R4:8/8 R5:9/9 R6:7/7 R7:10/11 R8:7/7
+level_01-seed2: rounds=24 drafts=7 stop=time cap minutes=45.8 delivered=round 11 (31/33 examples)
+  one-shot : 55/64 hidden  R1:8/8 R2:2/8 R3:6/6 R4:8/8 R5:8/9 R6:6/7 R7:10/11 R8:7/7
+  delivered: 60/64 hidden  R1:8/8 R2:7/8 R3:6/6 R4:8/8 R5:8/9 R6:6/7 R7:10/11 R8:7/7
+level_03-seed1: rounds=8 drafts=3 stop=examples pass minutes=51.6 delivered=round 8 (6/6 examples)
+  one-shot : 6/87 hidden  R1:2/10 R2:1/12 R3:1/9 R4:1/16 R5:1/9 R6:0/10 R7:0/9 R8:0/12
+  delivered: 58/87 hidden  R1:7/10 R2:12/12 R3:8/9 R4:12/16 R5:8/9 R6:5/10 R7:6/9 R8:0/12
+level_03-seed2: rounds=4 drafts=2 stop=examples pass minutes=31.3 delivered=round 4 (6/6 examples)
+  one-shot : 44/87 hidden  R1:7/10 R2:12/12 R3:8/9 R4:4/16 R5:2/9 R6:5/10 R7:6/9 R8:0/12
+  delivered: 63/87 hidden  R1:9/10 R2:9/12 R3:9/9 R4:13/16 R5:9/9 R6:5/10 R7:6/9 R8:3/12

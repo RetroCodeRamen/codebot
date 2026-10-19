@@ -15,8 +15,7 @@ RUNNER = os.path.join(B.HOME, "modes/code/verifiers/assert_runner.py")
 SYSTEM = ("You are an expert Python programmer. You write complete, correct, working code. Reply with the complete contents of every file, "
           "each as a line `### <file name>` followed by one ```python code block, and nothing else.")
 NAME = r"([A-Za-z_]\w*\.py)"
-HEAD = re.compile(r"^[#*\s]*(?:file:?\s*)?`?" + NAME + r"`?\**:?\s*$", re.I)       # "### a.py", "**`a.py`**", "File: a.py", "a.py:"
-FIRST = re.compile(r"^#\s*(?:file:?\s*)?" + NAME + r"\s*$", re.I)                   # "# a.py" as the first line of a block
+TOKEN = re.compile(r"(?<![\w.])([A-Za-z_][\w-]*\.(?:py|md|txt|json|cfg|ini|toml|ya?ml|sh))(?!\w)")   # a file name anywhere in a line
 
 def load(level):
     cat = os.path.join(B.HOME, "bench/ladder/catalog", level); spec = open(os.path.join(cat, "SPEC.md")).read()
@@ -36,18 +35,23 @@ def repair_prompt(lv, files, feedback):
 
 def extract(reply, names):
     """{file name: code} for the spec's modules. parts[1], parts[3], ... are the insides of code blocks; with an odd number of fences the last
-    block was cut off and is kept as it is. A block is named by the line before it, else by a `# name.py` first line, else it is the only
-    module when the spec names one. The last block for a file wins (the model often drafts, then rewrites)."""
+    block was cut off and is kept as it is. A block belongs to the one module named on its fence line, else on the last line before it, else
+    in the text since the previous block, else on a `#` first line. A block with none of those is the only module when the spec names one,
+    unless the line before it names another file (the model also writes README.md). The last block for a file wins (the model often drafts,
+    then rewrites). The first version read `### fileutil.py` as `util.py` (a "File:" prefix took the "file") and lost the module."""
     parts, out = reply.split("```"), {}
     if len(parts) == 1 and len(names) == 1 and reply.lstrip().startswith(("import", "from", "def", "class", "#", '"""')):
         return {names[0]: reply}
+    def named(text):
+        found = {t for t in TOKEN.findall(text) if t in names}
+        return found.pop() if len(found) == 1 else None
     for i in range(1, len(parts), 2):
-        lang, _, code = parts[i].partition("\n")
-        if lang.strip().lower() not in ("", "python", "py", "python3"): continue
-        before = [l for l in parts[i - 1].split("\n") if l.strip()]
-        m = (HEAD.match(before[-1].strip()) if before else None) or FIRST.match(code.lstrip().split("\n", 1)[0].strip())
-        name = m.group(1) if m else (names[0] if len(names) == 1 else None)
-        if name in names: out[name] = code
+        info, _, code = parts[i].partition("\n")
+        lines = [l for l in parts[i - 1].split("\n") if l.strip()]; head = lines[-1] if lines else ""; first = code.lstrip().split("\n", 1)[0]
+        name = named(info) or named(head) or named(parts[i - 1]) or (named(first) if first.startswith("#") else None)
+        if not name and len(names) == 1 and not TOKEN.search(head) and (info.split() or [""])[0].lower() in ("", "python", "py", "python3"):
+            name = names[0]
+        if name: out[name] = code
     return out
 
 def label(a):

@@ -1,0 +1,20 @@
+{
+ "level": "level_03",
+ "seed": 2,
+ "rounds": 4,
+ "drafts": 2,
+ "stop": "examples pass",
+ "minutes": 31.3,
+ "examples_total": 6,
+ "files": [
+  "depgraph.py"
+ ],
+ "feedback": "examples",
+ "patience": 2,
+ "delivered_round": 4,
+ "delivered_examples": 6,
+ "model": "codebot-model",
+ "temperature": 0.2,
+ "num_predict": 6000,
+ "think": false
+}

@@ -13,7 +13,7 @@ pipeline has to beat. The results and what they mean are in `docs/MODEL_EVAL.md`
 | `score_py.py` | Python-level scoring: the level's hidden tests |
 | `make_calc_plan.py` | writes `bench/ladder/catalog/calc_go/reference_plan.json` |
 | `run_calc1.sh` ... `run_calc3.sh`, `run_levels.sh` | the drivers as run: one model job after another, temperatures every 60 s, unload, score |
-| `results/` | per run: `summary.json`, `rounds.jsonl`, `score.json` and the delivered code; the model's replies are not kept |
+| `results/` | `calc_go/batch1` ... `batch3`, `levels/` (level_01 and level_03); per run: `summary.json`, `rounds.jsonl`, `score.json` and the delivered code; the model's replies are not kept |
 
 Every loop talks to the private Ollama on 127.0.0.1:11500 (`codebot-model`); `--fake REPLY_FILE ...` replays files instead. The drivers take an
 output directory: put it outside the repo (a calc_go run keeps Go caches of about 100 MB).

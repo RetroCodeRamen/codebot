@@ -1,0 +1,70 @@
+{
+ "summary": {
+  "level": "level_01",
+  "seed": 2,
+  "rounds": 24,
+  "drafts": 7,
+  "stop": "time cap",
+  "minutes": 45.8,
+  "examples_total": 33,
+  "files": [
+   "fileutil.py",
+   "netutil.py",
+   "numutil.py",
+   "textutil.py"
+  ],
+  "feedback": "examples",
+  "patience": 2,
+  "delivered_round": 11,
+  "delivered_examples": 31,
+  "model": "codebot-model",
+  "temperature": 0.2,
+  "num_predict": 6000,
+  "think": false
+ },
+ "one_shot": {
+  "hidden": 55,
+  "hidden_total": 64,
+  "failing": [
+   "test_fileutil.TestSafeFilename.test_r05_examples_from_the_spec",
+   "test_fileutil.TestSplitExt.test_r06_examples_from_the_spec",
+   "test_netutil.TestIsValidIpv4.test_r07_non_ascii_digits_are_rejected",
+   "test_textutil.TestTruncate.test_r02_custom_suffix",
+   "test_textutil.TestTruncate.test_r02_examples_from_the_spec",
+   "test_textutil.TestTruncate.test_r02_one_over_the_limit_is_truncated",
+   "test_textutil.TestTruncate.test_r02_result_has_exactly_width_characters",
+   "test_textutil.TestTruncate.test_r02_width_equal_to_suffix_length",
+   "test_textutil.TestTruncate.test_r02_width_smaller_than_custom_suffix"
+  ],
+  "by_req": {
+   "R1": "8/8",
+   "R2": "2/8",
+   "R3": "6/6",
+   "R4": "8/8",
+   "R5": "8/9",
+   "R6": "6/7",
+   "R7": "10/11",
+   "R8": "7/7"
+  }
+ },
+ "delivered": {
+  "hidden": 60,
+  "hidden_total": 64,
+  "failing": [
+   "test_fileutil.TestSafeFilename.test_r05_examples_from_the_spec",
+   "test_fileutil.TestSplitExt.test_r06_examples_from_the_spec",
+   "test_netutil.TestIsValidIpv4.test_r07_non_ascii_digits_are_rejected",
+   "test_textutil.TestTruncate.test_r02_negative_width_raises_value_error"
+  ],
+  "by_req": {
+   "R1": "8/8",
+   "R2": "7/8",
+   "R3": "6/6",
+   "R4": "8/8",
+   "R5": "8/9",
+   "R6": "6/7",
+   "R7": "10/11",
+   "R8": "7/7"
+  }
+ }
+}

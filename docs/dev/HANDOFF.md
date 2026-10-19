@@ -287,9 +287,13 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
   checks got past it.
 - Runaway replies: 5 of the restart runs' 51 replies ran to the 6000-token cap (12.5 min each, 64 of 145 min), the model reasoning in code
   comments; the two 13/15 replies were 605 and 830 tokens.
-- The loop scripts, drivers and per-run results are in `bench/baselines/` (see its README). Everything above is calc_go only. Open decision
-  for the user: rebuild codebot around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the
-  planner/check pipeline.
+- Python levels (2026-10-19, `bare_py.py`: the restart loop writing every module, 45 min, seeds 1-2): level_01 63 and 60/64 hidden
+  against codebot's 50, 30, 47 (2026-10-15 run, 1.8 h per trial, before the regression gate); the first reply alone scored 60 and 55.
+  level_03: both runs passed all 6 examples and scored 58 and 63/87; the examples cover only 3 of 8 requirements and seed 1's module has no
+  `resolve_subset` at all (R8 0/12). 19 of 38 repair rounds sent the program back unchanged; all 4 delivered versions came from a restart.
+- The loop scripts, drivers and per-run results are in `bench/baselines/` (see its README). Open decision for the user: rebuild codebot
+  around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the planner/check pipeline. The
+  loop's limit is its signal: where the spec's examples do not cover a requirement (level_03), nothing checks it.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

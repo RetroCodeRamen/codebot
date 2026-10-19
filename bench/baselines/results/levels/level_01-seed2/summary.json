@@ -1,0 +1,23 @@
+{
+ "level": "level_01",
+ "seed": 2,
+ "rounds": 24,
+ "drafts": 7,
+ "stop": "time cap",
+ "minutes": 45.8,
+ "examples_total": 33,
+ "files": [
+  "fileutil.py",
+  "netutil.py",
+  "numutil.py",
+  "textutil.py"
+ ],
+ "feedback": "examples",
+ "patience": 2,
+ "delivered_round": 11,
+ "delivered_examples": 31,
+ "model": "codebot-model",
+ "temperature": 0.2,
+ "num_predict": 6000,
+ "think": false
+}

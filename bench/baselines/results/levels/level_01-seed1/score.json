@@ -1,0 +1,62 @@
+{
+ "summary": {
+  "level": "level_01",
+  "seed": 1,
+  "rounds": 21,
+  "drafts": 7,
+  "stop": "examples pass",
+  "minutes": 40.9,
+  "examples_total": 33,
+  "files": [
+   "fileutil.py",
+   "netutil.py",
+   "numutil.py",
+   "textutil.py"
+  ],
+  "feedback": "examples",
+  "patience": 2,
+  "delivered_round": 21,
+  "delivered_examples": 33,
+  "model": "codebot-model",
+  "temperature": 0.2,
+  "num_predict": 6000,
+  "think": false
+ },
+ "one_shot": {
+  "hidden": 60,
+  "hidden_total": 64,
+  "failing": [
+   "test_fileutil.TestSafeFilename.test_r05_examples_from_the_spec",
+   "test_fileutil.TestSplitExt.test_r06_examples_from_the_spec",
+   "test_netutil.TestIsValidIpv4.test_r07_non_ascii_digits_are_rejected",
+   "test_textutil.TestTruncate.test_r02_negative_width_raises_value_error"
+  ],
+  "by_req": {
+   "R1": "8/8",
+   "R2": "7/8",
+   "R3": "6/6",
+   "R4": "8/8",
+   "R5": "8/9",
+   "R6": "6/7",
+   "R7": "10/11",
+   "R8": "7/7"
+  }
+ },
+ "delivered": {
+  "hidden": 63,
+  "hidden_total": 64,
+  "failing": [
+   "test_netutil.TestIsValidIpv4.test_r07_non_ascii_digits_are_rejected"
+  ],
+  "by_req": {
+   "R1": "8/8",
+   "R2": "8/8",
+   "R3": "6/6",
+   "R4": "8/8",
+   "R5": "9/9",
+   "R6": "7/7",
+   "R7": "10/11",
+   "R8": "7/7"
+  }
+ }
+}
