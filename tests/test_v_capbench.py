@@ -57,7 +57,7 @@ class TestCatalog(unittest.TestCase):
             r = R.validate_level(m, REPO); self.assertEqual(r["problems"], [], m["_id"])
             self.assertEqual(r["solution"]["passed"], r["solution"]["total"]); self.assertEqual(r["solution"]["skipped"], 0); self.assertLess(r["seed"]["passed"], r["seed"]["total"])
     def test_reference_plans_are_validated_against_seed_and_solution(self):
-        for m in M.levels(REPO):
+        for m in [*M.levels(REPO), M.load(REPO, "calc_go")]:
             if M.plan_path(m): self.assertEqual(R.validate_plan(m, REPO), [], m["_id"])
     def test_a_module_that_does_not_exist_cannot_shrink_the_denominator(self):
         m = M.load(REPO, 1); tmp = self.tmp_ws(); R.overlay(tmp, M.seed_dir(m)); shutil.copyfile(os.path.join(SOL, "textutil.py"), os.path.join(tmp, "textutil.py"))

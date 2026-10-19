@@ -1,0 +1,814 @@
+{
+ "goal": "Build the command-line calculator calc described in SPEC.md.",
+ "context": "Go, standard library only. All code in package main in the root of the code directory (main.go); go build -o calc . produces the program calc.",
+ "done": "Every requirement of SPEC.md holds.",
+ "tasks": [
+  {
+   "title": "Program calc builds with go build -o calc . and evaluates an expression given as arguments, one number or operator per argument; a single number is an expression",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 1,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2",
+      "+",
+      "3"
+     ],
+     "stdout": "5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "7"
+     ],
+     "stdout": "7"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "40",
+      "+",
+      "2"
+     ],
+     "stdout": "42"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "19"
+     ],
+     "stdout": "19"
+    },
+    {
+     "type": "file_not_contains",
+     "path": "go.mod",
+     "text": "require"
+    }
+   ]
+  },
+  {
+   "title": "The four operators + - * / and the letter x as another way to write *",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 2,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "6",
+      "x",
+      "7"
+     ],
+     "stdout": "42"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "10",
+      "-",
+      "4"
+     ],
+     "stdout": "6"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "9",
+      "/",
+      "3"
+     ],
+     "stdout": "3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "7",
+      "+",
+      "8"
+     ],
+     "stdout": "15"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "3",
+      "-",
+      "9"
+     ],
+     "stdout": "-6"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "5",
+      "*",
+      "6"
+     ],
+     "stdout": "30"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "5",
+      "x",
+      "6"
+     ],
+     "stdout": "30"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "18",
+      "/",
+      "4"
+     ],
+     "stdout": "4.5"
+    }
+   ]
+  },
+  {
+   "title": "Precedence: * / x before + -, operators of the same kind applied left to right",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 3,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2",
+      "+",
+      "3",
+      "*",
+      "4"
+     ],
+     "stdout": "14"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "10",
+      "-",
+      "4",
+      "-",
+      "3"
+     ],
+     "stdout": "3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "8",
+      "/",
+      "4",
+      "/",
+      "2"
+     ],
+     "stdout": "1"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2",
+      "*",
+      "3",
+      "+",
+      "4",
+      "*",
+      "5"
+     ],
+     "stdout": "26"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "20",
+      "-",
+      "12",
+      "/",
+      "4"
+     ],
+     "stdout": "17"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "6",
+      "/",
+      "3",
+      "*",
+      "2"
+     ],
+     "stdout": "4"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1",
+      "-",
+      "2",
+      "+",
+      "3"
+     ],
+     "stdout": "2"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2",
+      "+",
+      "3",
+      "x",
+      "4",
+      "-",
+      "6",
+      "/",
+      "2"
+     ],
+     "stdout": "11"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "9",
+      "-",
+      "3",
+      "-",
+      "2",
+      "-",
+      "1"
+     ],
+     "stdout": "3"
+    }
+   ]
+  },
+  {
+   "title": "Numbers: integers, decimals and negatives, anything strconv.ParseFloat accepts except infinities and NaN (those are malformed, exit 2)",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 4,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-2.5",
+      "+",
+      "1"
+     ],
+     "stdout": "-1.5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "0.1",
+      "+",
+      "0.2"
+     ],
+     "stdout": "0.30000000000000004"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-3",
+      "*",
+      "-3"
+     ],
+     "stdout": "9"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "7",
+      "-",
+      "-2"
+     ],
+     "stdout": "9"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-1.5",
+      "x",
+      "4"
+     ],
+     "stdout": "-6"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2.5e2",
+      "+",
+      "0"
+     ],
+     "stdout": "250"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      ".25",
+      "+",
+      ".25"
+     ],
+     "stdout": "0.5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "+4",
+      "-",
+      "1"
+     ],
+     "stdout": "3"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "5.",
+      "x",
+      "2"
+     ],
+     "stdout": "10"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "nan",
+      "+",
+      "1"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1",
+      "+",
+      "Inf"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-infinity"
+     ],
+     "exit": 2,
+     "stdout": ""
+    }
+   ]
+  },
+  {
+   "title": "Output: one line ending in a newline, no trailing zeros and no exponent (strconv.FormatFloat(v, 'f', -1, 64)), negative zero printed as 0",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 5,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2.5",
+      "*",
+      "2"
+     ],
+     "stdout": "5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "7",
+      "/",
+      "2"
+     ],
+     "stdout": "3.5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1",
+      "/",
+      "3"
+     ],
+     "stdout": "0.3333333333333333"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1",
+      "/",
+      "8"
+     ],
+     "stdout": "0.125"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "3",
+      "/",
+      "1000000"
+     ],
+     "stdout": "0.000003"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1e15",
+      "x",
+      "1000"
+     ],
+     "stdout": "1000000000000000000"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "5",
+      "/",
+      "6"
+     ],
+     "stdout": "0.8333333333333334"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "0",
+      "/",
+      "-7"
+     ],
+     "stdout": "0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-0.0"
+     ],
+     "stdout": "0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import subprocess\nprint(repr(subprocess.run(['./calc', '9', 'x', '9'], capture_output=True, text=True).stdout))\n"
+     ],
+     "stdout": "'81\\n'"
+    }
+   ]
+  },
+  {
+   "title": "Errors: division by zero prints 'error: division by zero' to standard error and exits 1; a malformed expression prints a message starting with 'error:' to standard error and exits 2; nothing on standard output for either; success exits 0",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 6,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import subprocess\np = subprocess.run(['./calc', '8', '/', '0'], capture_output=True, text=True)\nprint('exit', p.returncode, '| stdout', repr(p.stdout), '| stderr', repr(p.stderr.strip()))\n"
+     ],
+     "stdout": "exit 1 | stdout '' | stderr 'error: division by zero'"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "2",
+      "x",
+      "3",
+      "/",
+      "0"
+     ],
+     "exit": 1,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "5",
+      "/",
+      "0.0"
+     ],
+     "exit": 1,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "6",
+      "-",
+      "4",
+      "/",
+      "0"
+     ],
+     "exit": 1,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "4",
+      "%",
+      "2"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "five",
+      "x",
+      "2"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "7",
+      "7"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "1",
+      "-",
+      "x",
+      "2"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "-",
+      "4"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "6",
+      "/"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "x"
+     ],
+     "exit": 2,
+     "stdout": ""
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import subprocess\np = subprocess.run(['./calc', '3', '+', '+', '1'], capture_output=True, text=True)\nprint('exit', p.returncode, '| stdout', repr(p.stdout), '| stderr starts with error:', p.stderr.startswith('error:'))\n"
+     ],
+     "stdout": "exit 2 | stdout '' | stderr starts with error: True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import subprocess\np = subprocess.run(['./calc', '2', 'abc'], capture_output=True, text=True)\nprint('exit', p.returncode, '| stdout', repr(p.stdout), '| stderr starts with error:', p.stderr.startswith('error:'))\n"
+     ],
+     "stdout": "exit 2 | stdout '' | stderr starts with error: True"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc",
+      "3",
+      "-",
+      "1"
+     ],
+     "exit": 0,
+     "stdout": "2"
+    }
+   ]
+  },
+  {
+   "title": "No arguments: read expressions from standard input, one per line; print each result, or the error message (starting with error:) on standard output and continue; skip empty lines; exit 0 at the end",
+   "files": [
+    "main.go"
+   ],
+   "size": "M",
+   "deps": [],
+   "item": 7,
+   "asserts": [
+    {
+     "type": "run",
+     "argv": [
+      "go",
+      "build",
+      "-o",
+      "calc",
+      "."
+     ],
+     "exit": 0
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc"
+     ],
+     "stdin": "3 + 4\n2 x 5\n",
+     "stdout": "7\n10"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc"
+     ],
+     "stdin": "6 - 2 * 2\n9\n",
+     "stdout": "2\n9"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "python3",
+      "-c",
+      "import subprocess\np = subprocess.run(['./calc'], input='5 / 0\\n1 +\\n6 - 1\\n', capture_output=True, text=True)\nl = p.stdout.splitlines()\nprint('exit', p.returncode, '|', len(l), 'lines |', [x.startswith('error:') for x in l[:2]], '|', l[2:])\n"
+     ],
+     "stdout": "exit 0 | 3 lines | [True, True] | ['5']"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc"
+     ],
+     "stdin": "\n4 + 4\n\n  \n1 - 1\n",
+     "stdout": "8\n0"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc"
+     ],
+     "stdin": "  9   x  2 \n8 - 3",
+     "stdout": "18\n5"
+    },
+    {
+     "type": "run",
+     "argv": [
+      "./calc"
+     ],
+     "stdin": "",
+     "exit": 0,
+     "stdout": ""
+    }
+   ]
+  }
+ ]
+}
