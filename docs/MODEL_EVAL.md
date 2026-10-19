@@ -185,6 +185,37 @@ that expanded `*` to the file names. Same-size rewrites took 46% of the model's 
 that standard error starts with `error:`, and the code writes `Error:`, which no check can see. One build is one plan: the plans of calc3,
 calc4 and calc5 differ in every task, so the total moves with the plan; the per-fix effects above are what the logs show.
 
+**A plain loop without codebot (2026-10-18)** [V]: three rounds of fixes moved the score 16 -> 15 -> 13, so the baseline was measured that
+had never been run. The model gets `SPEC.md` and `go.mod` in one prompt and replies with the whole `main.go`; the loop builds it and runs the 15
+spec examples codebot's grounding derives (compared as codebot's runner does: exit 0, stdout stripped); the next prompt is the spec, the current
+code and what failed. No planner, no tools, no model-written checks, no hidden tests. Same model and settings as the worker (`codebot-model`,
+thinking off, temperature 0.2, 32k context), 6000 output tokens, at most 12 rounds. Scored with the bench's own runner (`capbench.reference`,
+which gives calc5's code 13/32) and the 20 own inputs. Nine runs: the first version 25, 10, 25 of 32 (17, 2, 15 of 20); with a new sampling
+seed every round, the last code block of a reply and the best version kept, 22, 7, 10 (13, 3, 3); the same with the 71 checks of the calc_go
+reference plan (25ab269) as feedback instead of the examples, 26, 7, 10 (15, 3, 3). A single run is a coin flip: 4 of 9 reach 22-26 and 5
+stall at 7-10 (median 10, mean 15.8; codebot 16, 15, 13), in 13-35 min against codebot's 2.7-3.9 h. Runs stall because at temperature 0.2
+the model sends back the identical reply once the prompt stops changing, and a new seed did not change that: seed 2 rejected every expression
+with "two numbers in a row" for four rounds. The loop's own signal separates the outcomes (12-13 of 15 examples passing went with 22-26 hidden,
+0-1 with 7-10), so the best of each three runs by that signal scored 25, 22 and 26 in 54-83 min of model time. The 71 checks added 4 where the
+loop moved (seed 1: 26 against 22, with 57 of the 64 non-build checks passing) and nothing where it stalled (with the same seed both arms get the
+same first reply, and seeds 2 and 3 wrote the same code from round 2 under either feedback). Precedence stays the weak spot (0/4 or 2/4 in every
+good run); the other misses of a good run are stdin errors that exit instead of going on to the next line, and exit statuses. The model's first
+reply alone scored 1, 6 and 18 of 32 (the first version took the first of five code blocks in seed 3's reply and scored it 1). Codebot was
+never run with the reference plan (`--mode reference-plan`), so whether its pipeline does better with sound checks is not measured.
+
+**Restarting a stalled loop (2026-10-19)** [V]: the same loop with the examples as feedback, but when a draft has not improved for two rounds
+(by the loop's own signal: it builds, then spec examples passed) the next round starts a fresh draft from the spec alone, and the version
+delivered is the best of all drafts by that signal; 45 min per run. Same seeds as above, so each run's first draft is the same reply. Result
+22, 6 and 22 of 32 (13, 2, 13 of 20) against 22, 7 and 10 without restarts: restarting rescued seed 3 (its third draft passed 13 of 15
+examples 18 min in; 8 drafts in 45 min) but not seed 2 (4 drafts in 46 min, none passing more than 1 example). Seed 1 had its 13/15 version
+at round 3 (3 min) and never beat it. On 2 of 3 seeds one restart run matched the best of three plain runs (22-26 in 54-83 min) in 45-54 min.
+Two limits showed. A ceiling: across all 12 loop runs (59 distinct programs) no version passed more than 13 of the 15 examples, every 13/15
+version failed the same two precedence examples (`./calc 2 + 3 * 4` printed 20) and the model sent the same program back when shown them;
+seed 1's and seed 3's 13/15 programs are different code with the same 22/32, test for test. Runaway replies: 5 of the 51 replies ran to the
+6000-token cap (12.5-13 min each, 64 of the 145 min), the model reasoning in code comments ("Actually, let's just evaluate directly." 18
+times) or writing code block after block; they took 38 of seed 1's 54 min and 25 of seed 2's 46, while seed 3 had none. The two 13/15
+replies were 605 and 830 tokens. Temperatures: median 89 °C, max 94 °C, one thermal pause (40 s).
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

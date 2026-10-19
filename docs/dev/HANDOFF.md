@@ -268,6 +268,28 @@ calc5 (fixes 10-15) scored 13/32 hidden and 9/20 hand inputs (calc4: 15/32, 10/2
 - Flaky test: `test_v_capbench ... test_oracles_accept_the_reference_solution_and_reject_the_bare_seed` failed once in 12 full-suite runs on
   level_08's `test_r07_too_large_a_body` (a 1.1 MB body the server answers with 413); it passed 3 of 3 on its own. Rerun before suspecting a change.
 
+### Baselines: a plain loop against the pipeline (2026-10-18/19)
+
+Three rounds of fixes moved calc_go 16 -> 15 -> 13/32 and every build found new defects; the user said the path "leads no where". The fixes
+above (calc5 findings) were NOT made: we stopped changing `lib/` and measured what had never been measured. Details in `docs/MODEL_EVAL.md`,
+"A plain loop without codebot".
+
+- A plain loop (spec in, whole `main.go` out, feedback = compiler output + the 15 spec examples, a fresh prompt each round) is a coin flip per
+  run: 4 of 9 runs reached 22-26/32 hidden, 5 stalled at 7-10 (codebot: 16, 15, 13), in 13-35 min against codebot's 2.7-3.9 h.
+- Stalled runs send back the identical reply at temperature 0.2 once the prompt stops changing. The loop's own signal (spec examples
+  passed) tells good runs from stalled ones, so the best of three runs by it scored 25, 22 and 26.
+- `bench/ladder/catalog/calc_go/reference_plan.json` (25ab269): 71 hand-written checks, validated. As the loop's feedback they added 4 where
+  the loop moved and nothing where it stalled. `--mode reference-plan` (codebot's pipeline with these checks) has not been run.
+- Restart loop (2026-10-19: a fresh draft after 2 rounds without improvement, the best of all drafts by the spec examples delivered, 45 min
+  per run, same seeds): 22, 6, 22/32 against 22, 7, 10 without restarts; it rescued one of the two stalled seeds, not the other.
+- Ceiling: in all 12 loop runs (59 distinct programs) no version passed more than 13 of the 15 examples; every 13/15 version fails the two
+  precedence examples (`2 + 3 * 4`, `2 * 3 + 4 * 5`) and the model sends the same code back when shown them. Neither restarts nor the 71
+  checks got past it.
+- Runaway replies: 5 of the restart runs' 51 replies ran to the 6000-token cap (12.5 min each, 64 of 145 min), the model reasoning in code
+  comments; the two 13/15 replies were 605 and 830 tokens.
+- The loop scripts are in the session scratchpad, not in the repo. Everything here is calc_go only. Open decision for the user: rebuild
+  codebot around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the planner/check pipeline.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.
