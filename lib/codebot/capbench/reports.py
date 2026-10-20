@@ -86,24 +86,33 @@ def markdown(rep, store=None):
               "cancelled": f"**CANCELLED** (resumable: {p['trials_finished']} of {p['trials_total']} trials finished)", "finished": f"**FINISHED** ({p['trials_finished']} of {p['trials_total']} trials)"}.get(st, st)
     L = [f"# Capability ladder run `{rep['run_id']}`", "", banner, ""]
     c, e = rep["config"], rep["environment"]
-    L += [f"- mode `{rep['mode']}`, suite `{rep['suite']}`, per-task budget **{c['task_minutes']:g} min** (no project-wide limit), model `{c['model']}`, seed {c['seed']}, driver {c['driver']}",
+    drafts = rep["mode"] == "drafts"                   # no tasks: each trial is one run of whole-program drafts judged by the spec's examples
+    budget = f"time per run **{c['task_minutes']:g} min**" if drafts else f"per-task budget **{c['task_minutes']:g} min** (no project-wide limit)"
+    L += [f"- mode `{rep['mode']}`, suite `{rep['suite']}`, {budget}, model `{c['model']}`, seed {c['seed']}, driver {c['driver']}",
           f"- codebot `{(e.get('codebot_commit') or '?')[:10]}`{' (uncommitted changes)' if e.get('codebot_dirty') else ''}, framework {e.get('benchmark_framework_version')}, {e.get('cpu') or '?'}, {e.get('gpu') or 'no GPU info'}"]
     if c.get("roles"): L += ["- role settings: " + ", ".join(f"`{k}={v}`" for k, v in sorted(c["roles"].items()))]
     L += [""]
     if p.get("current"): L += [f"- now: `{p['current']['trial']}` in phase `{p['current']['phase']}`", ""]
     lvl_rows = [[g["benchmark"], f"{g['finished']}/{g['trials']}", g["complete"], f"{g['verified_tasks']}/{g['tasks']}", _pct(g["internal_rate_mean"]),
                  f"{_pct(g['reference_rate_median'])} ({_pct(g['reference_rate_min'])}-{_pct(g['reference_rate_max'])})", g["timeouts"], g["retries"], g["splits"], _min(g["run_s_mean"]), g["verified_per_hour_mean"]] for g in rep["levels"]]
-    L += ["## Per level", ""] + _table(["level", "trials done", "complete", "tasks verified", "internal", "independent (median / min-max)", "timeouts", "retries", "splits", "run min", "verified/h"], lvl_rows) + [""]
+    if drafts:
+        lvl_rows = [[g["benchmark"], f"{g['finished']}/{g['trials']}", g["complete"], f"{_pct(g['reference_rate_median'])} ({_pct(g['reference_rate_min'])}-{_pct(g['reference_rate_max'])})", _min(g["run_s_mean"])] for g in rep["levels"]]
+        L += ["## Per level", ""] + _table(["level", "trials done", "every spec example passes", "independent (median / min-max)", "run min"], lvl_rows) + [""]
+    else: L += ["## Per level", ""] + _table(["level", "trials done", "complete", "tasks verified", "internal", "independent (median / min-max)", "timeouts", "retries", "splits", "run min", "verified/h"], lvl_rows) + [""]
     ce = rep["ceiling"]
     L += ["## Observed capability ceiling", "", f"- {ce['definition']}",
           f"- highest level held: **{ce['highest_level_held'] or 'none'}**; first level below the threshold: {ce['first_level_below'] or 'none seen'}" + (f"; levels not yet finished: {ce['untested']}" if ce["untested"] else ""), ""]
     tr_rows = [[r["trial_id"], r["outcome"] or r["phase"], r["tasks_total"], r["verified"], r["timeouts"], _pct(r["internal_rate"]),
                 f"{r['reference_passed']}/{r['reference_total']} ({_pct(r['reference_rate'])})" if r["reference_total"] else "n/a",
                 _pct(r["internal_minus_reference"]) if r["internal_minus_reference"] is not None else "n/a", _min(r["plan_s"]), _min(r["run_s"]), r["retries"], r["splits"], r["failure_categories"]] for r in rep["trials"]]
-    L += ["## Trials", ""] + _table(["trial", "outcome", "tasks", "verified", "timeouts", "internal", "independent", "gap", "plan min", "run min", "retries", "splits", "categories"], tr_rows) + [""]
+    if drafts:
+        tr_rows = [[r["trial_id"], r["outcome"] or r["phase"], r["examples"], r["drafts_rounds"], r["drafts"], f"{r['reference_passed']}/{r['reference_total']} ({_pct(r['reference_rate'])})" if r["reference_total"] else "n/a",
+                    _min(r["run_s"]), r["failure_categories"]] for r in rep["trials"]]
+        L += ["## Trials", ""] + _table(["trial", "outcome", "spec examples", "rounds", "drafts", "independent", "run min", "categories"], tr_rows) + [""]
+    else: L += ["## Trials", ""] + _table(["trial", "outcome", "tasks", "verified", "timeouts", "internal", "independent", "gap", "plan min", "run min", "retries", "splits", "categories"], tr_rows) + [""]
     if rep["failure_categories"]: L += ["## Failure categories (all finished trials)", ""] + [f"- `{k}`: {v}" for k, v in sorted(rep["failure_categories"].items(), key=lambda kv: -kv[1])] + ["", "_Heuristic classifications with their evidence are in report.json / trial.json and can be recomputed (`codebot bench report --reclassify`). A TIMEOUT is never attributed to reasoning._", ""]
     tk_rows = [[r["trial_id"], f"{r['task']} {r['title'][:46]}", r["status"], r["attempts"], r["max_rung"], f"{r['used_s'] / 60:.1f} / {(r['limit_s'] or 0) / 60:.0f}", f"{r['thermal_s'] / 60:.1f}", r["model_calls"], r["category"]] for r in rep["tasks"]]
-    L += ["## Tasks", ""] + _table(["trial", "task", "status", "attempts", "rung", "min used / limit", "thermal min", "calls", "category"], tk_rows)
+    if not drafts: L += ["## Tasks", ""] + _table(["trial", "task", "status", "attempts", "rung", "min used / limit", "thermal min", "calls", "category"], tk_rows)
     return "\n".join(L) + "\n"
 
 def _csv(rows):
@@ -120,6 +129,8 @@ def one_line(store):
     rep = build(store); rows = [r for r in rep["trials"] if r["phase"] == "finished"]
     ver = sum(r["verified"] or 0 for r in rows); tot = sum(r["tasks_total"] or 0 for r in rows); to = sum(r["timeouts"] or 0 for r in rows)
     ref = _mean([r["reference_rate"] for r in rows])
+    if rep["mode"] == "drafts":
+        return f"{len(rows)} trials finished: spec examples {', '.join(str(r['examples']) for r in rows)}, independent pass rate {_pct(ref)}. Ceiling: level {rep['ceiling']['highest_level_held'] or 'none'}. Report: bench/results/ladder/{rep['run_id']}/report.md"
     return f"{len(rows)} trials finished: {ver}/{tot} tasks verified internally, independent pass rate {_pct(ref)}, {to} task timeout(s). Ceiling: level {rep['ceiling']['highest_level_held'] or 'none'}. Report: bench/results/ladder/{rep['run_id']}/report.md"
 
 def write_all(store):

@@ -75,6 +75,13 @@ Specs, tests, scoring and results live outside the workspace and the Docker sand
 
 One trial through the real planner, bash supervisor, worker, assertion runner and hidden tests: plan 6.3 min (8 tasks, sound), coding 18.3 min, 6 of 8 tasks verified internally, 2 tasks hit the 4-minute budget and were recorded `TIMEOUT` (the other tasks continued), hidden tests 41/64 (64%), 3 `VERIFICATION_GAP` classifications (tasks the internal check accepted but the hidden tests reject), thermal pauses counted inside the budgets (0.0-0.7 min per task), CPU 85-94 C throughout. This proves the pipeline end to end with a shortened budget; it says nothing about the 90-minute capability numbers.
 
+## Drafts mode run on record (2026-10-19, ornith:9b, `codebot bench run --level 1 --mode drafts --task-minutes 45 --repeats 2 --seed 1`, run `20261019-200101-drafts-l1`)
+
+Hidden tests 63/64 and 60/64 (median 96%: level 1 held), all 33 spec examples passed in trial 1 (round 21 of 7 drafts, 42.2 min), 31/33 in
+trial 2 (time cap after 23 rounds; delivered round 11). The same rounds and scores as the baseline loop with the same seeds
+(`docs/MODEL_EVAL.md`, "Drafts mode through the benchmark"). Trial 1 is a VERIFICATION_GAP: its one miss is requirement 7, which the spec gives
+no example for.
+
 ## First full-budget run (2026-10-15, ornith:9b, GPU auto-offload, `codebot bench run --level 1 --repeats 3`, run `20261015-180429-l1-full`)
 
 90 min per task, 3 independent trials (private memory each), 5.4 h wall. Independent (hidden-test) pass rate per trial 78%, 47%, 73% (median 73%, below the 80% bar, so no level is held); internal verification 88%, 62%, 100%; 20/24 tasks verified; 0 timeouts (no task came near 90 min: max 48 min); 60 retries, 5 splits; CPU about 89 C mean, 96 C max.

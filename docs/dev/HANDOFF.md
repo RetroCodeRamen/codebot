@@ -319,8 +319,11 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
 - Bench: `codebot bench run --level N --mode drafts --task-minutes 45 --seed 1 --repeats 2` (the repeat number picks the seed, so repeats 1-2 are
   the baselines' seeds 1-2). The trial records `drafts` (rounds, drafts, delivered round and examples, uncovered items, cut-off replies, unchanged
   repairs); the classifier adds a VERIFICATION_GAP when every example passed but the hidden tests did not (`classify.RULES_VERSION` 2).
-- Not done yet: a real-model run through `codebot bench --mode drafts` (does it reproduce 63/60 on level_01?); reruns of a finished project
-  (`start` refuses; make a new project); subdirectories (files are flat); requirements without examples are only listed, never checked.
+- Real-model check (run `20261019-200101-drafts-l1`, commit 3481000, `codebot bench run --level 1 --mode drafts --task-minutes 45 --repeats 2
+  --seed 1`): 63/64 and 60/64, the baseline's numbers, round for round (seed 1: all 21 rounds the same; seed 2: the first 23 of 24, one round
+  fewer before the cap because sandbox runs and commits count in a round's time). First level the benchmark reports as held (median 96%).
+- Not done yet: the Go path with the real model (calc_go; only fake-model tests); reruns of a finished project (`start` refuses; make a new
+  project); subdirectories (files are flat); requirements without examples are only listed, never checked.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

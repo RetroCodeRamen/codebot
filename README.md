@@ -31,8 +31,9 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
 
 - Drafts can only check what the spec shows by example: level 3's spec has examples for 3 of its 8 requirements, every run passed all of them,
   and one run never wrote the function of a requirement without examples. `codebot check-spec` lists such requirements before you start.
-- These drafts numbers come from the loops drafts mode was ported from (`bench/baselines/`). On the Python levels drafts mode sends the same
-  prompts and the same feedback word for word (a test holds it to that); for Go the wording differs from the Go-only original.
+- Level 1 was run through codebot itself (`codebot bench run --level 1 --mode drafts`): 63 and 60, round for round the same as the loop
+  drafts mode was ported from (`bench/baselines/`). calc_go and level 3 come from that loop only; for Go, drafts mode's wording differs from
+  the Go-only original and has not been run with the model yet.
 - The task pipeline's weak spot is the model writing impossible or weak acceptance tests for itself (`docs/dev/ROADMAP.md`).
 - Which local model to use: `docs/MODEL_EVAL.md`.
 

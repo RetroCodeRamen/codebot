@@ -234,6 +234,18 @@ level_01 replies were 700-1,100 tokens (1.5-2 min), level_03 replies 2,000-2,900
 thermal pause before 45 of the 57 rounds (15 min in all, inside the time cap). The first attempt read `### fileutil.py` as `util.py` and was
 stopped after one round; the runs above use the fixed reader. Results in `bench/baselines/results/levels/`.
 
+**Drafts mode through the benchmark (2026-10-19)** [V]: the loop above, ported into codebot as drafts mode (`lib/codebot/drafts.py`, commit
+3481000), run the way a user's project runs: `codebot bench run --level 1 --mode drafts --task-minutes 45 --repeats 2 --seed 1` (run
+`20261019-200101-drafts-l1`: `codebot start`, the bash supervisor, one round per engine step, the build and the examples in the Docker sandbox, the
+hidden tests after). Result **63/64 and 60/64**, the same as the baseline loop, with the same failing hidden tests. Seed 1 repeated all 21
+rounds of the baseline run (the same reply lengths, restarts and example counts each round, all 33 examples at round 21, 42.2 min); seed 2
+repeated the first 23 of its 24 rounds and stopped one round sooner at the 45-min cap, because drafts mode counts the sandbox runs and git
+commits in a round's time (45.2 min after 23 rounds against 43.2); the baseline's 24th round changed nothing, both delivered round 11. The model
+is deterministic for a given prompt and seed on this machine, so this shows the port sends the same prompts and the same feedback, and that
+the sandbox, the supervisor and the state kept between steps change nothing the model sees. Thermal pauses were the same (340 s, 420 s). It is
+the first time the benchmark reports a level as held (median 96%, the bar is 80%). The one miss of seed 1 is requirement 7 (`is_valid_ipv4`
+rejecting non-ASCII digits), which has no example in the spec. The Go path of drafts mode (calc_go) has only been tested with the fake model.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

@@ -246,6 +246,8 @@ class TestBenchmark(CapCase):
         env = open(os.path.join(self.home, "projects", tds[0]["project"], "project.env")).read()
         self.assertIn('DRAFTS_MINUTES="45"', env); self.assertIn('WORKFLOW="drafts"', env)
         rows = reports.build(store)["trials"]; self.assertEqual([r["examples"] for r in rows], ["33/33", "33/33"])
+        md = reports.markdown(reports.build(store)); self.assertIn("| trial | outcome | spec examples | rounds | drafts | independent |", md); self.assertIn("time per run **45 min**", md)
+        self.assertNotIn("## Tasks", md); self.assertIn("spec examples 33/33, 33/33, independent pass rate 100%", reports.one_line(store))
     def test_a_gap_between_the_examples_and_the_hidden_tests_is_classified(self):
         from codebot.capbench import classify as CL
         t = {"plan": {"mode": "drafts", "ok": True}, "drafts": {"delivered_round": 3, "delivered_examples": 6, "examples_total": 6, "uncovered": [8]},
