@@ -25,7 +25,9 @@ def trial_row(t):
             "inference_s": tt.get("inference_s"), "model_calls": tt.get("model_calls"), "prompt_tokens": tt.get("prompt_tokens"), "gen_tokens": tt.get("gen_tokens"),
             "thermal_wait_s": tt.get("thermal_wait_s"), "retries": tt.get("retries"), "splits": tt.get("splits"), "ladder_steps": tt.get("ladder_steps"), "manual_interventions": tt.get("manual_interventions"),
             "verified_per_hour": round(tt["verified"] / (run_s / 3600), 2) if run_s and tt.get("verified") is not None else None,
-            "failure_categories": ";".join(f"{k}={v}" for k, v in sorted(cl.items())), "error": t.get("error")}
+            "failure_categories": ";".join(f"{k}={v}" for k, v in sorted(cl.items())), "error": t.get("error"),
+            "examples": f"{(t.get('drafts') or {}).get('delivered_examples')}/{(t.get('drafts') or {}).get('examples_total')}" if t.get("drafts") else None,
+            "drafts_rounds": (t.get("drafts") or {}).get("rounds"), "drafts": (t.get("drafts") or {}).get("drafts")}
 
 def task_rows(t):
     out = []

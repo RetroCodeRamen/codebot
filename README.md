@@ -3,23 +3,38 @@
 An autonomous coding agent for **small, slow, fully offline models**. It runs a local 9B model (Ornith 1.0 through a private Ollama) unattended
 for hours on a laptop, and judges every task with an acceptance check the model cannot change.
 
-Most agent harnesses assume a frontier model and fall apart on a 9B one. codebot moves the decisions out of the model: the harness plans the work
-in small tasks, packs the context, validates every edit, runs every command in an offline Docker sandbox, checkpoints in git, re-checks finished
-work for regressions, escalates when a task is stuck, and writes you a report in the morning. The model only fills in structured JSON.
+Most agent harnesses assume a frontier model and fall apart on a 9B one. codebot has two ways to work:
 
-**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (437 tests), but it is slow by design and its
-success rate is limited by how good a 9B model is at writing tests for its own work. Nothing leaves your machine unless you turn notifications on.
+- **Drafts** (`codebot new`, recommended for small programs): the model gets your spec and writes the whole program; the harness builds it, runs
+  the worked examples written in your spec in an offline Docker sandbox, and tells the model what failed. A draft that stops improving is dropped
+  and a fresh one starts; the best version so far is committed. No planner, no tools, no tests written by the model. This is the simpler of the
+  two and, measured on three projects, the better one.
+- **Tasks** (`codebot plan`, the original pipeline): the harness plans the work in small tasks, each with an acceptance check the model cannot
+  change, packs the context, validates every edit, re-checks finished work for regressions and escalates when a task is stuck.
+
+Both run unattended, checkpoint in git, and write you a report in the morning.
+
+**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (519 tests), but it is slow by design, and how
+far it gets is limited by the worked examples in your spec (drafts) or by how good a 9B model is at writing tests for its own work (tasks).
+Nothing leaves your machine unless you turn notifications on.
 
 ## What it can do today
 
-Measured on one laptop (i7-11375H, 15 GB RAM, RTX 3050 Ti 4 GB) with the Capability Ladder Benchmark (`docs/BENCHMARK.md`): hidden tests the
-agent never sees, 90 minutes per task, no limit on the run.
+Measured on one laptop (i7-11375H, 15 GB RAM, RTX 3050 Ti 4 GB) with the hidden tests of the Capability Ladder Benchmark (`docs/BENCHMARK.md`),
+which the agent never sees. Small samples (2-3 runs per project); details and caveats in `docs/MODEL_EVAL.md`.
 
-- Level 1 (8 utility functions, 64 hidden tests), 3 independent trials: **78%, 47%, 73%** of the hidden tests passed (median 73%; the bar for
-  "level held" is 80%). Every function was solved in at least one trial; no task needed more than 48 minutes.
-- What held it back: the model writing impossible or weak acceptance tests for itself, and later tasks breaking finished ones. Both are now
-  addressed in the harness (per-item planning, assertion repair and salvage, a regression gate, `docs/dev/ROADMAP.md`); a full re-run is pending.
-- Which local model to use, and whether a bigger planner plus a faster worker beats one model: `docs/MODEL_EVAL.md` (in progress).
+| project | drafts (45 min per run) | tasks |
+|---|---|---|
+| level 1: 8 utility functions in 4 modules, 64 tests | **63, 60** | 50, 30, 47 (90 min per task, about 1.8 h per run) |
+| calc_go: a calculator in Go, 32 tests | **22, 6, 22** | 16, 15, 13 (three builds, each after a round of fixes; 2.7-3.9 h each) |
+| level 3: a dependency resolver, 87 tests | **58, 63** | not run |
+
+- Drafts can only check what the spec shows by example: level 3's spec has examples for 3 of its 8 requirements, every run passed all of them,
+  and one run never wrote the function of a requirement without examples. `codebot check-spec` lists such requirements before you start.
+- These drafts numbers come from the loops drafts mode was ported from (`bench/baselines/`). On the Python levels drafts mode sends the same
+  prompts and the same feedback word for word (a test holds it to that); for Go the wording differs from the Go-only original.
+- The task pipeline's weak spot is the model writing impossible or weak acceptance tests for itself (`docs/dev/ROADMAP.md`).
+- Which local model to use: `docs/MODEL_EVAL.md`.
 
 ## Requirements
 
@@ -45,6 +60,9 @@ The installer never uses sudo; it asks before adding a `codebot` symlink to `~/.
 
 ```
 codebot                                  # the guided menu: pick or create a project, plan, start, watch live
+codebot check-spec SPEC.md               # which requirements have worked examples (only those are checked in drafts mode)
+codebot new myapp SPEC.md ~/code/myapp   # a drafts project: the whole program from SPEC.md, judged by its own examples
+codebot start myapp                      # runs in the background; then status / log / pause / report / diff as below
 codebot plan myproj ~/code/repo          # interactive "grill me" planning chat -> PLAN.md with a check per task (needs opencode)
 codebot check-plan myproj                # test every check against today's code (rejects ones that already pass or are broken)
 codebot start myproj                     # freezes the checks and starts the unattended loop in the background
@@ -69,6 +87,18 @@ Your code is never edited in place: for an existing git repo codebot works in a 
 used by the benchmark; a `codebot plan-auto` command for your own projects is planned.
 
 ## How a run works
+
+**Drafts** (`lib/codebot/drafts.py`). Write a `SPEC.md` with numbered requirements and worked examples in a form codebot can run:
+`` `slugify("Hello World")` is `"hello-world"` `` (a call of a function, with "`textutil.py` provides `slugify(text)`" saying where it lives),
+`` `parse("")` raises `ValueError` ``, or `` `calc 2 + 3` prints `5` `` (a command line; "`go build -o calc .`" says how to build it).
+`codebot new` copies the spec and prints which requirements have no examples. Each round the model gets the spec (and, when it is repairing,
+the current code and what failed) and replies with every file whole. The harness compiles it and runs the examples in the sandbox. After
+`DRAFTS_PATIENCE` rounds without improvement the draft is dropped and the next round starts fresh from the spec. Each new best version
+(it builds, then the most examples pass) is committed to the branch `codebot/<project>`. The run stops when every example passes or after
+`DRAFTS_MINUTES`. Limits: it only knows what the examples show, and it sends the whole code in every prompt, so it is for programs up to about
+60 KB of spec and code.
+
+**Tasks** (`codebot plan`):
 
 1. **Plan.** `codebot plan` is a "grill me" interview (one question at a time, recommended answers, it challenges vague ones) that writes `PLAN.md`:
    small tasks, each with a `check:`, `files:` and `size:`. The unattended planner instead asks the model for one task per numbered spec item, with
@@ -105,7 +135,8 @@ used by the benchmark; a `codebot plan-auto` command for your own projects is pl
 `config/codebot.env` holds the defaults, every key documented inline. Put your own settings in `config/local.env` (created by the installer, not
 tracked by git); it is read after `codebot.env`, so it wins. Any key can also be overridden per project in `projects/<name>/project.env`.
 
-Model/server: `CODEBOT_MODEL`, `OLLAMA_PORT`, `NUM_CTX` (must equal the `num_ctx` in `config/Modelfile` and the opencode configs; a test enforces
+Drafts mode: `DRAFTS_MINUTES`, `DRAFTS_PATIENCE`, `DRAFTS_MAX_ROUNDS`, `DRAFTS_NUM_PREDICT`, `DRAFTS_TEMPERATURE`, `DRAFTS_SEED`; a project
+is in drafts mode when its `project.env` has `WORKFLOW="drafts"` (`codebot new` writes it). Model/server: `CODEBOT_MODEL`, `OLLAMA_PORT`, `NUM_CTX` (must equal the `num_ctx` in `config/Modelfile` and the opencode configs; a test enforces
 it), `KEEP_ALIVE`, `THINK`. Planning: `PLAN_STYLE=grill|quick`, `CHECK_BASELINE_GUARD`, `REGRESSION_GATE` (a task is done only when every done task
 still passes), `PLAN_PER_ITEM` (one planner call per numbered spec item). Per-role models: `PLANNER_MODEL`, `PLANNER_THINK`, `SPLITTER_MODEL`,
 `SPLITTER_THINK`, `WORKER_THINK`, `THINK_BUDGET` (`docs/MODEL_EVAL.md`). Worker: `WORKER=native`, `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`,

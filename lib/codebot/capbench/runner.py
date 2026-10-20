@@ -7,13 +7,15 @@ persisted phases, so a killed runner resumes exactly where it stopped without re
 Modes (what is being measured):
   full            planner (from the spec alone) + worker + recovery ladder: the normal benchmark
   reference-plan  the validated catalog plan replaces the planner (isolates planning)
-  minimal         one task = the whole spec, no acceptance check, no recovery ladder (isolates the model + bare coding loop)"""
+  minimal         one task = the whole spec, no acceptance check, no recovery ladder (isolates the model + bare coding loop)
+  drafts          no planner and no tasks: whole-program drafts judged by the spec's own examples, restarts, the best draft delivered (drafts.py);
+                  --task-minutes is the time of the whole run, the trial's repeat number picks the sampling seed (DRAFTS_SEED = seed + repeat - 1)"""
 import fcntl, json, os, shutil, subprocess, sys, tempfile, time, urllib.request
-from .. import bench, checkspec as K, engine, guard, planner as PL, planparse, sandbox, taskclock as TC, tasks as T, thermal
+from .. import bench, checkspec as K, drafts as DR, engine, guard, planner as PL, planparse, sandbox, taskclock as TC, tasks as T, thermal
 from ..config import Project, read_env, home_env
 from . import classify as CL, manifests as M, metrics as MT, notify as NT, reference as R, results as RS, workspace as W
 
-MODES = ("full", "reference-plan", "minimal")
+MODES = ("full", "reference-plan", "minimal", "drafts")
 TERMINAL_EVENTS = ("all_done", "finished_incomplete", "done_with_blocked", "stalled", "budget", "error")
 
 class RunError(Exception):
@@ -30,7 +32,8 @@ class Cfg:
         except (TypeError, ValueError): return d
     def p(self, *x): return os.path.join(self.home, "logs", *x)
 
-INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "PLAN_PER_ITEM", "PLANNER_MODEL", "PLANNER_THINK", "SPLITTER_MODEL", "SPLITTER_THINK", "WORKER_THINK", "ESCALATE_MODEL", "THINK_BUDGET", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL")
+INTEGRITY_ENV = ("SANDBOX", "TASK_MAX_MINUTES", "BLOCK_TERMINAL", "MAX_ITERATIONS", "PROJECT_MAX_MINUTES", "WORKER_CMD", "WORKER", "SPLIT_CMD", "CHECK_BASELINE_GUARD", "REGRESSION_GATE", "PLAN_PER_ITEM", "PLANNER_MODEL", "PLANNER_THINK", "SPLITTER_MODEL", "SPLITTER_THINK", "WORKER_THINK", "ESCALATE_MODEL", "THINK_BUDGET", "LADDER_TRIES", "ALLOW_UNCHECKED", "CODEBOT_MODEL",
+                 "WORKFLOW", "DRAFTS_MINUTES", "DRAFTS_PATIENCE", "DRAFTS_MAX_ROUNDS", "DRAFTS_NUM_PREDICT", "DRAFTS_TEMPERATURE", "DRAFTS_SEED")
 
 class Ctx:
     """Everything a trial needs; tests replace `sleep`, `sender` and `driver` to run without real time or a real model."""
@@ -156,6 +159,8 @@ def _cfg_for(ctx, tr, minimal=False, m=None):
     sb = (m or {}).get("sandbox") or {}                   # a catalog entry may need a toolchain in the sandbox (calc_go: Go on PATH, a build cache in the code dir)
     if sb.get("path_prepend"): extra["SANDBOX_PATH"] = sb["path_prepend"]
     if sb.get("env"): extra["SANDBOX_SETENV"] = ";".join(f"{k}={v}" for k, v in sb["env"].items())
+    if (getattr(ctx, "state", None) or {}).get("mode") == "drafts":     # the whole run gets the task budget; repeats differ by seed (seed 1, 2, 3 = bench/baselines' runs)
+        extra.update({"WORKFLOW": "drafts", "DRAFTS_MINUTES": f"{c['task_minutes']:g}", "DRAFTS_SEED": str((c.get("seed") or 1) + tr["repeat"] - 1)})
     return W.project_settings(ctx.home, c["task_minutes"], c.get("model"), c.get("seed"), c.get("interactive"), extra=extra or None, minimal=minimal)
 
 def setup_trial(ctx, tr, td):
@@ -192,6 +197,8 @@ def plan_trial(ctx, tr, td, proj):
     m, st = _benchmark(ctx, tr); mode = ctx.state["mode"]; spec = _spec_for(ctx, tr, m, st); lim = (st or m)["planner"]
     info = {"mode": mode, "ok": False, "rounds": [], "secs": 0, "spec_items": PL.spec_items(spec), "tasks_planned": None}
     t0 = time.time(); start_iso = RS.now_iso()
+    if mode == "drafts":                                  # nothing to plan: the spec's examples are the only checks, and coverage says which requirements have none
+        info.update({"ok": True, "coverage": DR.coverage(spec), "secs": 0, "window": [start_iso, start_iso]}); td["plan"] = info; return info
     if mode == "full":
         with model_lock(ctx.home):
             pi = PL.plan_auto(ctx.home, proj.name, int(ctx.cfg["plan_minutes"] * 60), ctx.cfg["plan_rounds"], log=ctx.log, max_tasks=lim["max_tasks"], num_predict=lim.get("num_predict", 5000))
@@ -216,6 +223,7 @@ def plan_trial(ctx, tr, td, proj):
     td["plan"] = info; return info
 
 def freeze_trial(ctx, tr, td, proj):
+    if ctx.state["mode"] == "drafts": return True        # no tasks, nothing to freeze: drafts.init freezes the spec's examples at the first round
     gate = add_regression_gate(ctx, proj, tr) if tr.get("stage") else 0
     if T.TaskStore(proj).exists(): return True
     try: engine.freeze_project(proj, allow_unchecked=ctx.state["mode"] == "minimal", allow_passing=bool(gate))
@@ -300,6 +308,48 @@ def drive_engine(ctx, tr, td, proj):
         if ev["event"] == "error": td.setdefault("infra_events", []).append({"ts": RS.now_iso(), "event": "engine_error", "error": ev.get("error")}); raise RunError(ev.get("error", "engine error"))
         if ev["event"] in TERMINAL_EVENTS: return "settled"
 
+def drive_drafts(ctx, tr, td, proj):
+    """drafts mode: in-process rounds (--driver engine) or the real supervisor (`codebot start`: one round per engine step), polled from here."""
+    home, t0, temps, restarts = ctx.home, time.time(), td.get("temps", []), 0
+    def finished(): st = DR.load(proj); return bool(st and st.get("finished"))
+    def progress():
+        t = thermal.read_temp()
+        if t is not None: temps.append(round(t, 1)); del temps[:-500]
+        td["progress"] = {"updated": RS.now_iso(), "drafts": DR.status_line(proj), "temp": t, "run_s": round(time.time() - t0)}; td["temps"] = temps[-200:]
+        ctx.store.save_trial(tr["trial_id"], td)
+    if ctx.driver == "engine":
+        while True:
+            if ctx.store.cancel_requested(): return "cancelled"
+            with model_lock(ctx.home): ev = DR.step(proj)
+            progress(); td.setdefault("events", []).append({k: v for k, v in ev.items() if k in ("event", "round", "draft", "examples", "error")}); del td["events"][:-300]
+            if ev["event"] == "error": td.setdefault("infra_events", []).append({"ts": RS.now_iso(), "event": "drafts_error", "error": ev.get("error")}); raise RunError(ev.get("error", "drafts error"))
+            if ev["event"] in TERMINAL_EVENTS: return "settled"
+            if ev["event"] == "model_error": ctx.sleep(30)
+    def start(keep):
+        r = bench.codebot(home, "start", proj.name, *(["--keep"] if keep else []))
+        if r.returncode != 0 and not _loop_alive(proj): raise RunError(f"codebot start failed: {(r.stdout + r.stderr).strip()[-400:]}")
+    def stop():
+        for _ in range(5):
+            bench.codebot(home, "stop", proj.name)
+            if not _loop_alive(proj): return
+            time.sleep(1)
+    if ctx.store.cancel_requested(): return "cancelled"
+    if not _loop_alive(proj) and not finished(): start(os.path.exists(proj.p(".git-prepped")))
+    while True:
+        if ctx.store.cancel_requested(): stop(); return "cancelled"
+        ctx.sleep(ctx.poll_s); progress()
+        if finished(): break
+        if not _loop_alive(proj):
+            restarts += 1; td.setdefault("infra_events", []).append({"ts": RS.now_iso(), "event": "loop_died", "n": restarts})
+            if restarts > 3: raise RunError("the supervisor loop died 4 times; giving up on this trial")
+            ctx.notifier.critical(ctx.state["run_id"], f"{tr['trial_id']}: the supervisor loop died; restarting ({restarts}/3)"); ctx.log(f"loop died; restarting ({restarts})"); start(True)
+        elif ctx.model_check and not model_up(home, ctx.cfg.get("ollama_port")):
+            td.setdefault("infra_events", []).append({"ts": RS.now_iso(), "event": "model_server_down"}); ctx.log("model server unreachable; pausing and restarting it")
+            bench.codebot(home, "pause", proj.name, "--soft")
+            if not ensure_model_server(ctx): ctx.notifier.critical(ctx.state["run_id"], f"{tr['trial_id']}: the model server is down and could not be restarted"); raise RunError("model server unavailable")
+            bench.codebot(home, "resume", proj.name)
+    stop(); return "settled"
+
 # ---------- verification ----------
 def snapshot(rundir, sha, dest):
     p = subprocess.run(f"git -C {rundir!r} archive {sha} | tar -x -C {dest!r}", shell=True, capture_output=True)
@@ -343,7 +393,12 @@ def verify_trial(ctx, tr, td, proj):
     from .. import roles as ROL
     td["roles"] = ROL.describe(proj)                    # exactly which model played which role, and whether it thought
     td["calls_sample"] = MT.model_calls(proj)[:2000]
-    if ctx.state["mode"] != "minimal" and os.path.isdir(proj.p("checks")):
+    if ctx.state["mode"] == "drafts":
+        d = td["drafts"] = DR.summary(proj)
+        td["outcome_hint"] = "COMPLETE" if d.get("delivered_round") and d.get("delivered_examples") == d.get("examples_total") else ("PARTIAL" if d.get("delivered_round") else "FAILED")
+        for fn in ("state.json", "rounds.jsonl", "summary.json"):                                    # evidence: every round's record (the replies stay in the trial project)
+            if os.path.isfile(DR.dpath(proj, fn)): os.makedirs(ctx.store.evidence_dir(tr["trial_id"]), exist_ok=True); shutil.copyfile(DR.dpath(proj, fn), os.path.join(ctx.store.evidence_dir(tr["trial_id"]), f"drafts-{fn}"))
+    if ctx.state["mode"] not in ("minimal", "drafts") and os.path.isdir(proj.p("checks")):
         seed, sol = _trees_for_audit(ctx, tr, m, st, proj)
         try: td["plan_audit"] = CL.plan_audit(proj, seed, sol)
         finally: shutil.rmtree(seed, ignore_errors=True); shutil.rmtree(sol, ignore_errors=True)
@@ -382,7 +437,8 @@ def run_trial(ctx, tr):
             else: td["outcome_hint"] = "PLANNING_FAILED"; ctx.log("no usable plan: the trial ends here (the empty workspace is still scored)"); _set_phase(ctx, tr, td, "loop_done")
         if tr["phase"] in ("frozen", "running"):
             _set_phase(ctx, tr, td, "running"); t0 = time.time(); prev = td.get("timing", {}).get("run_s", 0.0)
-            res = (drive_engine if ctx.driver == "engine" else drive_loop)(ctx, tr, td, Project(tr["project"], ctx.home))
+            drive = drive_drafts if ctx.state["mode"] == "drafts" else drive_engine if ctx.driver == "engine" else drive_loop
+            res = drive(ctx, tr, td, Project(tr["project"], ctx.home))
             td.setdefault("timing", {})["run_s"] = round(prev + time.time() - t0, 1)
             if res == "cancelled": ctx.log(f"{tr['trial_id']} cancelled (resumable)"); _set_phase(ctx, tr, td, "running"); return "cancelled"
             _set_phase(ctx, tr, td, "loop_done")

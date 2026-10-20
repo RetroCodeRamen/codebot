@@ -38,7 +38,7 @@ render_prompt() { # plan|work: the mode's prompt (a mode that extends another ge
 die() { echo "codebot: $*" >&2; exit 1; }
 sdir() { echo "$CODEBOT_HOME/projects/$1"; }
 need_proj() { [[ -n "${1:-}" && -d "$(sdir "$1")" ]] || die "unknown project '${1:-}' (see: codebot list)"; }
-load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; MODE=code; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; oc_setup; }
+load_proj() { need_proj "$1"; S="$(sdir "$1")"; NAME="$1"; MODE=code; WORKFLOW=""; source "$S/project.env"; RUNDIR="${RUNDIR:-$WORKDIR}"; oc_setup; }
 alive() { # pidfile; for loop.pid also confirm the pid is really a codebot loop (pid reuse after reboot)
   [[ -f "$1" ]] && kill -0 "$(cat "$1")" 2>/dev/null || return 1
   [[ "$1" != *loop.pid ]] || tr '\0' ' ' < "/proc/$(cat "$1")/cmdline" 2>/dev/null | grep -q '__loop'; }
@@ -76,7 +76,7 @@ phone_tick() { # call often; polls at most every 20s
       pause)  "$0" pause "$NAME" >/dev/null; notify "codebot: $NAME paused" "Model unloaded. Send 'resume' to continue." low pause_button 1;;
       resume) "$0" resume "$NAME" >/dev/null; notify "codebot: $NAME resumed" "Back to work." low arrow_forward 1;;
       stop)   notify "codebot: $NAME stopping" "Loop stopped from phone." default stop_button; "$0" stop "$NAME" >/dev/null & ;;
-      status) notify "codebot: $NAME status" "$(tasks_done) done / $(tasks_left) left. $([[ -f "$S/PAUSE" ]] && echo PAUSED || echo running). $(head -c 200 "$S/STATUS" 2>/dev/null)" low information_source 1;;
+      status) notify "codebot: $NAME status" "$(progress_text). $([[ -f "$S/PAUSE" ]] && echo PAUSED || echo running). $(head -c 200 "$S/STATUS" 2>/dev/null)" low information_source 1;;
       *) if has_blocked; then
            "$0" answer "$NAME" "$txt" >/dev/null; notify "codebot: $NAME" "Got your answer, continuing." low speech_balloon 1
          else notify "codebot: $NAME" "Nothing is waiting for an answer. Commands: pause, resume, stop, status." low question; fi;;
@@ -106,6 +106,7 @@ state_hash() {
     git -C "$RUNDIR" status --porcelain 2>/dev/null
     git -C "$RUNDIR" diff 2>/dev/null; } | md5sum | cut -d' ' -f1
 }
+progress_text() { if [[ "${WORKFLOW:-}" == drafts ]]; then eng status --short 2>/dev/null; else echo "$(tasks_done) done / $(tasks_left) left"; fi; }
 # tolerant of stray prefixes the model sometimes writes (e.g. "^- [x]")
 tasks_left() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[ \]' "$S/PLAN.md" 2>/dev/null || true; }
 tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md" 2>/dev/null || true; }
@@ -133,11 +134,33 @@ cmd_plan() {
   cd "$RUNDIR" && exec env "OPENCODE_CONFIG=$OC_CONFIG" "$OPENCODE_BIN" --agent "$OC_AGENT" --prompt "$(PLAN_STYLE=$style render_prompt plan)" "$RUNDIR"
 }
 
+cmd_new() { # <name> <spec.md> [code dir]: a drafts project; the model writes the whole program from the spec and the spec's own examples judge it
+  local name="${1:-}" spec="${2:-}" wd rc
+  [[ -n "$name" && -n "$spec" ]] || die "usage: codebot new <name> <spec.md> [code dir]   (code dir: default the current dir, created if missing)"
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "a project name is letters, digits, '.', '_' and '-'"
+  [[ -f "$spec" ]] || die "no such spec file: $spec"
+  S="$(sdir "$name")"; [[ -e "$S" ]] && die "project '$name' already exists (see: codebot status $name)"
+  wd="$(readlink -f "${3:-$PWD}")"
+  [[ "$wd" == "$CODEBOT_HOME" || "$wd" == "$CODEBOT_HOME"/* ]] && die "the code dir must be outside codebot's own folder ($CODEBOT_HOME)"
+  "$ENGINE" check-spec "$spec" --home "$CODEBOT_HOME" ${3:+--code "$wd"}; rc=$?
+  (( rc == 3 )) && die "not created: the code is too large for drafts mode"
+  (( rc == 0 )) || die "not created: cannot read the spec"
+  if [[ ! -d "$wd" ]]; then mkdir -p "$wd" || die "could not create $wd"; echo "created the code dir $wd"; fi
+  mkdir -p "$S" && cp "$spec" "$S/SPEC.md" && printf 'WORKDIR="%s"\nWORKFLOW="drafts"\n' "$wd" > "$S/project.env" || die "could not create $S"
+  echo; echo "created $name (code dir $wd). start it: codebot start $name"
+}
+cmd_check_spec() { [[ -n "${1:-}" ]] || die "usage: codebot check-spec <spec.md> [code dir]"; "$ENGINE" check-spec "$1" --home "$CODEBOT_HOME" ${2:+--code "$(readlink -f "$2")"}; }
+
 cmd_start() {
   load_proj "${1:-}"
-  [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
+  if [[ "${WORKFLOW:-}" == drafts ]]; then
+    [[ -s "$S/SPEC.md" ]] || die "no SPEC.md in $S (create the project with: codebot new $NAME <spec.md>)"
+    jq -e '.finished' "$S/drafts/state.json" >/dev/null 2>&1 && die "$NAME has finished: $(eng status --short). Review: codebot diff $NAME. A new run needs a new project (codebot new)"
+  else
+    [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
+  fi
   alive "$S/loop.pid" && die "$NAME is already running"
-  if [[ ! -f "$S/tasks.json" ]] && grep -qE '^[[:space:]]+[-*][[:space:]]*check:' "$S/PLAN.md"; then
+  if [[ "${WORKFLOW:-}" != drafts && ! -f "$S/tasks.json" ]] && grep -qE '^[[:space:]]+[-*][[:space:]]*check:' "$S/PLAN.md"; then
     echo "plan has per-task checks: freezing them (engine mode)"; "$ENGINE" freeze "$NAME" --home "$CODEBOT_HOME" || die "freeze failed: every task needs a check: line"
   fi
   [[ "${2:-}" == --keep ]] || rm -f "$S/PAUSE" "$S/STATUS"
@@ -145,7 +168,7 @@ cmd_start() {
   if [[ "${2:-}" != --keep || ! -f "$S/env.snap" ]]; then # remember the launching shell's environment (JAVA_HOME, GHIDRA_INSTALL_DIR, PATH...) for the loop
     ( umask 077; export -p | grep -vE '^declare -[a-zA-Z-]+ (INVOCATION_ID|JOURNAL_STREAM|SYSTEMD_EXEC_PID|MANAGERPID|MAINPID|LISTEN_[A-Z]+|NOTIFY_SOCKET|SHLVL|OLDPWD|PWD|_|BASHOPTS|SHELLOPTS|BASH_[A-Z_]+|PPID|UID|EUID|TERM_PROGRAM_VERSION)=' > "$S/env.snap" )
   fi
-  [[ -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
+  [[ "${WORKFLOW:-}" != drafts && -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
   if [[ "${RUNDIR:-}" == "$S"/* && -d "$RUNDIR" ]]; then   # older layout: the worktree lived INSIDE the state dir, which the harness protects from the worker
     local moved="$CODEBOT_HOME/workspaces/$NAME"; mkdir -p "$CODEBOT_HOME/workspaces"
@@ -277,6 +300,37 @@ loop_engine() {
   done
 }
 
+# supervisor for drafts projects: one round (one model call, one judged version) per engine step; the engine keeps the state between steps
+loop_drafts() {
+  local ev kind pid rc out="$S/.step.out" timeouts=0
+  notify "codebot: $NAME started" "Writing the whole program from SPEC.md, judged by the spec's own examples. $(eng status --short 2>/dev/null). Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
+  while [[ $finished == 0 ]]; do
+    if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
+    iter=$((iter+1)); echo "$iter" > "$S/iter.count"
+    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout $(( ITER_TIMEOUT + 1800 )) \
+      "$ENGINE" step "$NAME" --home "$CODEBOT_HOME" > "$out" 2>> "$S/loop.log" < /dev/null &
+    pid=$!; echo $pid > "$S/iter.pid"
+    while kill -0 "$pid" 2>/dev/null; do phone_tick; sleep 3; done
+    wait "$pid" 2>/dev/null; rc=$?; rm -f "$S/iter.pid"
+    [[ $finished == 2 ]] && break
+    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "(round interrupted by pause)" >> "$S/loop.log"; continue; fi
+    ev="$(tail -n1 "$out" 2>/dev/null)"; kind="$(jq -r '.event // "error"' <<< "$ev" 2>/dev/null || echo error)"
+    (( rc == 124 )) && kind=timeout
+    echo "[drafts] $(date '+%T') $kind $(jq -c . <<< "$ev" 2>/dev/null)" >> "$S/loop.log"
+    case "$kind" in
+      round) timeouts=0 ;;
+      model_error) sleep 30 ;;          # the engine counts these and ends the run after five in a row
+      timeout) timeouts=$((timeouts+1))
+        if (( timeouts >= 3 )); then notify "codebot: $NAME stopped" "Three rounds in a row ran past $(( (ITER_TIMEOUT + 1800) / 60 )) min. $(eng status --short 2>/dev/null)" high warning; finished=1; rm -f "$S/.active"; fi ;;
+      all_done) notify "codebot: $NAME COMPLETE" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" high white_check_mark
+        send_report; finished=1; rm -f "$S/.active" ;;
+      finished_incomplete) notify "codebot: $NAME finished (not every example passes)" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" high warning
+        send_report; finished=1; rm -f "$S/.active" ;;
+      *) notify "codebot: $NAME engine error" "$(jq -r '.error // "unexpected output (see codebot log)"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
+    esac
+  done
+}
+
 cmd___loop() {
   S="$(sdir "$1")"; [[ -f "$S/env.snap" ]] && source <(sed "s/^declare -x /declare -gx /" "$S/env.snap") 2>/dev/null
   load_proj "$1"; local iter stall=0 verify_fails=0 t0=$SECONDS notified_block=0 pid; finished=0
@@ -285,6 +339,7 @@ cmd___loop() {
   echo $$ > "$S/loop.pid"
   trap 'finished=2' TERM INT
   trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
+  if [[ "${WORKFLOW:-}" == drafts ]]; then loop_drafts; return; fi      # drafts project: whole-program rounds
   if [[ -f "$S/tasks.json" ]]; then loop_engine; return; fi      # frozen project: the engine owns the state machine
   notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR. Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
   while (( iter < MAX_ITERATIONS )) && [[ $finished == 0 ]]; do
@@ -365,6 +420,7 @@ cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
 cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
 cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
   alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
+  if [[ "${WORKFLOW:-}" == drafts ]]; then echo "$NAME: $s | $(eng status --short 2>/dev/null) | $WORKDIR"; return; fi
   local eng=""; [[ -f "$S/tasks.json" ]] && eng=" [engine: $(jq -r '[.tasks[]|.status]|group_by(.)|map("\(.[0]) \(length)")|join(", ")' "$S/tasks.json" 2>/dev/null)]"
   echo "$NAME: $s | done $(tasks_done) / left $(tasks_left)$eng | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
 cmd_resume_all() { # at login and every 5 min (watchdog): restart loops that should be running but are not
@@ -432,8 +488,9 @@ cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
 case "$c" in
-  setup|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|report|__loop) "cmd_$c" "$@";;
+  setup|new|plan|start|pause|resume|answer|stop|log|list|status|tidy|diff|prompt|freeze|engine|audit|modes|report|__loop) "cmd_$c" "$@";;
   check-plan) cmd_check_plan "$@";;
+  check-spec) cmd_check_spec "$@";;
   bench) cmd_bench "$@";;
   eval) exec "$CODEBOT_HOME/bin/codebot-eval" "$@";;
   doctor) exec "$CODEBOT_HOME/bin/codebot-doctor" "$@";;
@@ -445,6 +502,9 @@ case "$c" in
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   *) cat <<'USAGE'
 codebot - local-only autonomous coding agent for small offline models (run with no arguments for the menu)
+  new <name> <spec.md> [dir]   a project from a spec (recommended): the model writes the whole program, judged by the spec's own examples;
+                          restarts when stuck, keeps the best version (committed on branch codebot/<name>). Then: start <name>
+  check-spec <spec.md> [dir]   which requirements have examples (only those are checked) and whether the code fits that mode
   plan <name> [workdir] [--mode <m>] [--target <path>] [--quick]   interactive planning ("grill me" interview; --quick = short; --re = --mode re)
   check-plan <name>       test every check in PLAN.md against the code as it is now (a check that already passes, or is broken, is rejected and logged)
   freeze <name> [--allow-unchecked] [--allow-passing-checks]   lock per-task checks and create tasks.json (`start` does this automatically)

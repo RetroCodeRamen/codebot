@@ -22,7 +22,14 @@ def info(n):
     st = "stopped"
     if alive(f"{s}/loop.pid"): st = "PAUSED" if os.path.exists(f"{s}/PAUSE") else "running"
     status = rd(f"{s}/STATUS", 300)
-    return dict(s=s, left=left, done=done, wd=wd, st=st, status=status, hasplan=bool(plan))
+    drafts = 'WORKFLOW="drafts"' in rd(f"{s}/project.env", 4000); dl = ""
+    if drafts:                                   # a drafts project (codebot new): rounds and the best version instead of tasks
+        try:
+            import json; d = json.load(open(f"{s}/drafts/state.json")); b = d.get("best"); tot = d.get("examples_total", 0)
+            best = f"best {b['examples']}/{tot} examples" if b else "nothing builds yet"
+            dl = f"finished ({d['finished']['stop']}): {best}" if d.get("finished") else f"round {d['round']} · draft {d['draft']} · {best}"
+        except (OSError, ValueError, KeyError, TypeError): dl = "not started"
+    return dict(s=s, left=left, done=done, wd=wd, st=st, status=status, hasplan=bool(plan) or drafts, drafts=drafts, dl=dl)
 def line(): print(D + "─" * min(__import__("shutil").get_terminal_size().columns, 100) + R)
 def ask(q, default=""):
     v = input(f"{C}{q}{R}{f' [{default}]' if default else ''} ").strip()
@@ -33,7 +40,8 @@ def banner():
 def pretty(n):
     i = info(n); col = {"running": G, "PAUSED": Y, "stopped": D}[i["st"]]
     extra = f"  {RED}{i['status'][:60]}{R}" if i["status"] else ""
-    return f"{B}{n}{R}{' [RE]' if 'MODE="' in rd(i['s']+'/project.env', 2000) and 'MODE="code"' not in rd(i['s']+'/project.env', 2000) else ''}  {col}{i['st']}{R}  {i['done']} done / {i['left']} left  {D}{i['wd']}{R}{extra}"
+    prog = f"drafts: {i['dl']}" if i["drafts"] else f"{i['done']} done / {i['left']} left"
+    return f"{B}{n}{R}{' [RE]' if 'MODE="' in rd(i['s']+'/project.env', 2000) and 'MODE="code"' not in rd(i['s']+'/project.env', 2000) else ''}  {col}{i['st']}{R}  {prog}  {D}{i['wd']}{R}{extra}"
 
 def attach(n):
     i = info(n); logf = f"{i['s']}/loop.log"
@@ -47,9 +55,10 @@ def attach(n):
             chunk = f.read()
             if chunk: sys.stdout.write(chunk); sys.stdout.flush()
             cur = info(n)
-            key_state = (cur["st"], cur["status"][:40], cur["done"])
+            key_state = (cur["st"], cur["status"][:40], cur["done"], cur["dl"])
             if key_state != last:
-                print(f"\n{D}── {cur['st']} · {cur['done']} done / {cur['left']} left {cur['status'][:80]} ──{R}"); last = key_state
+                prog = f"drafts: {cur['dl']}" if cur["drafts"] else f"{cur['done']} done / {cur['left']} left"
+                print(f"\n{D}── {cur['st']} · {prog} {cur['status'][:80]} ──{R}"); last = key_state
                 if cur["st"] == "stopped" and not alive(f"{cur['s']}/loop.pid"): print(f"{G}loop finished or not running.{R}"); break
             if select.select([sys.stdin], [], [], 0.4)[0]:
                 k = sys.stdin.read(1).lower()
@@ -75,7 +84,10 @@ def project_menu(n):
               f" {B}a{R} answer a question   {B}x{R} stop   {B}l{R} full log   {B}r{R} morning report   {B}u{R} audit (offline proof)   {B}b{R} back")
         k = ask("›").lower()
         if k == "b": return
-        elif k == "e": sh("plan", n)
+        elif k == "e":
+            if not i["drafts"]: sh("plan", n)
+            elif i["dl"] == "not started": os.system(f"${{EDITOR:-nano}} '{i['s']}/SPEC.md'")
+            else: print(f"this run started from {i['s']}/drafts/SPEC.md; a changed spec needs a new project (n in the main menu)"); time.sleep(2.5)
         elif k == "g":
             if not i["hasplan"]: print("no plan yet; run planning first (e)"); time.sleep(1.5); continue
             if i["st"] == "stopped": sh("start", n)
@@ -95,6 +107,13 @@ def new_project():
     banner(); print(f"{B}New project{R}\n")
     n = ask("name (short, no spaces):").replace(" ", "-")
     if not n: return
+    spec = ask("spec file (SPEC.md with worked examples; empty = plan it in a chat instead):")
+    if spec:                                     # drafts mode: the whole program from the spec, judged by its own examples
+        wd = ask("path to the code folder (created if missing):", os.getcwd())
+        if sh("new", n, os.path.expanduser(spec), os.path.expanduser(wd)).returncode != 0: input("enter to continue"); return
+        if ask("Start it now? (y/n)", "y").lower().startswith("y"):
+            sh("setup", stdout=subprocess.DEVNULL); sh("start", n); attach(n); input("enter to continue")
+        project_menu(n); return
     wd = ask("path to the code folder (for reverse engineering: a folder for the findings):", os.getcwd())
     sys.path.insert(0, os.path.join(HOME, "lib")); from codebot import modes as M
     avail = M.describe(HOME); print("\nModes:"); [print(f"  {d['name']:<8} {d['description']}") for d in avail]

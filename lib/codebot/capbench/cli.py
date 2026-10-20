@@ -135,7 +135,7 @@ def main(argv, home):
     r = sub.add_parser("run", help="start a benchmark run (detached unless --foreground)")
     r.add_argument("--level", help="one level, e.g. 1 (repeats default to 1)"); r.add_argument("--levels", help="e.g. 1-12, 3,5 (default 1-12)"); r.add_argument("--suite", choices=["ladder", "growing"], default="ladder")
     r.add_argument("--bench", help="one named catalog entry outside the numbered ladder, e.g. calc_go (repeats default to 1)")
-    r.add_argument("--repeats", type=int, help="trials per level (default 3 for a suite, 1 for --level)"); r.add_argument("--mode", choices=list(RN.MODES), default="full", help="full | reference-plan | minimal (diagnostics)")
+    r.add_argument("--repeats", type=int, help="trials per level (default 3 for a suite, 1 for --level)"); r.add_argument("--mode", choices=list(RN.MODES), default="full", help="full | reference-plan | minimal (diagnostics) | drafts (no planner: whole-program drafts judged by the spec's examples; --task-minutes = the whole run)")
     r.add_argument("--task-minutes", type=float, default=90.0, help="wall-clock budget of EACH planned task (default 90); there is no project-wide limit"); r.add_argument("--plan-minutes", type=float, default=45.0)
     r.add_argument("--plan-rounds", type=int, default=3); r.add_argument("--model", help="the worker model (CODEBOT_MODEL); also the default for every other role")
     r.add_argument("--planner-model"); r.add_argument("--planner-think", choices=["off", "on", "low", "medium", "high"]); r.add_argument("--splitter-model")

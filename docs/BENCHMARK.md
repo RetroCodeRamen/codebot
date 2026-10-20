@@ -19,7 +19,7 @@ codebot bench cancel [run]                      stop at the next poll
 codebot bench validate [--levels 1-3|growing]   self-test of the catalog, no model
 ```
 
-The menu (`codebot`, option `b`) wraps the same commands. Runs are detached and unattended; `codebot resume-all` (the systemd watchdog) resumes a benchmark whose runner died. ntfy messages go out for completion, a task timeout, a critical failure and a task that needs a human (interactive mode only), not for every step. Useful flags: `--task-minutes` (default 90), `--plan-minutes`, `--mode full|reference-plan|minimal`, `--interactive`, `--checkpoints` (score the hidden tests after every verified task), `--driver loop|engine`, `--seed`, `--model`, `--dry-run`, `--foreground`. Preflight refuses to start when Docker, the model server or disk space is missing, or when an exported variable (SANDBOX, WORKER_CMD, TASK_MAX_MINUTES ...) would change what is measured.
+The menu (`codebot`, option `b`) wraps the same commands. Runs are detached and unattended; `codebot resume-all` (the systemd watchdog) resumes a benchmark whose runner died. ntfy messages go out for completion, a task timeout, a critical failure and a task that needs a human (interactive mode only), not for every step. Useful flags: `--task-minutes` (default 90), `--plan-minutes`, `--mode full|reference-plan|minimal|drafts`, `--interactive`, `--checkpoints` (score the hidden tests after every verified task), `--driver loop|engine`, `--seed`, `--model`, `--dry-run`, `--foreground`. Preflight refuses to start when Docker, the model server or disk space is missing, or when an exported variable (SANDBOX, WORKER_CMD, TASK_MAX_MINUTES ...) would change what is measured.
 
 ## The time rule
 
@@ -56,6 +56,8 @@ Project level: wall time, planning time, tasks planned/verified/timed out/blocke
 ## Diagnostic modes (never mixed into the normal score)
 
 `--mode reference-plan` replaces the model's plan with the catalog's validated plan (isolates planning from implementation); `--mode minimal` runs a bare loop with one attempt and no recovery (isolates what the recovery ladder adds). The default `full` is the benchmark proper. Every report and every `history.jsonl` row carries the mode, so a diagnostic trial is never mistaken for a full one; compare only trials of the same mode.
+
+`--mode drafts` measures drafts mode (`lib/codebot/drafts.py`, the workflow `codebot new` creates): no planner and no tasks; the model writes the whole program in rounds judged by the spec's own examples, with restarts, and the best version is delivered. `--task-minutes` is the time of the whole run (45 matches `bench/baselines/`), and the trial's repeat number picks the sampling seed (`DRAFTS_SEED = --seed + repeat - 1`, default seed 1), so `--repeats 2` replays the baselines' seeds 1 and 2. The trial records the delivered round and examples, the spec items without examples and the cut-off and unchanged replies (`report.md` column `examples`). The growing project is not available in this mode.
 
 ## Integrity
 

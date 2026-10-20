@@ -1,6 +1,6 @@
 # codebot: handoff (read this first in a new session)
 
-Last updated: 2026-10-15 (late), after the Capability Ladder Benchmark, its first real-model smoke run, a project review and per-trial memory isolation. Everything described here is committed (`git log` in this repo); the full suite (401 tests) is green.
+Last updated: 2026-10-19, after the baselines showed a plain whole-program loop beating the task pipeline and the user chose to rebuild around it: **drafts mode** (`codebot new`, `lib/codebot/drafts.py`, section "Drafts mode" below) is now the recommended way; the task pipeline stays as it was. Everything described here is committed (`git log` in this repo).
 This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/dev/ROADMAP.md` has
 the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
 
@@ -21,17 +21,17 @@ Repo: the codebot checkout (here `~/Documents/Development/codebot`) (git, branch
 
 | path | what |
 |---|---|
-| `bin/codebot` | bash CLI + supervisor loops (legacy loop and `loop_engine`), notify/ntfy, phone control, watchdog install. Dispatch is the `case` at the bottom. |
-| `bin/codebot-engine` | python CLI over the engine: freeze, step, status, render (re-render PLAN.md from tasks.json), answer, audit, report, check-plan, modes, mode-info, prompt-template, sizing, split, memory, plan-op, reset |
+| `bin/codebot` | bash CLI + supervisor loops (legacy loop, `loop_engine`, `loop_drafts`), `new` / `check-spec` (drafts projects), notify/ntfy, phone control, watchdog install. Dispatch is the `case` at the bottom. |
+| `bin/codebot-engine` | python CLI over the engine: freeze, step, status, render (re-render PLAN.md from tasks.json), answer, audit, report, check-plan, check-spec (a spec file: which items have examples), modes, mode-info, prompt-template, sizing, split, memory, plan-op, reset. For a drafts project step/status/report go to `drafts` |
 | `bin/codebot-ui` | the interactive menu (`codebot` with no args) |
 | `bin/codebot-bench` | `codebot bench ...` (preflight, suites, thermal sweep; the subcommands `list/run/status/report/resume/cancel/validate/coverage` go to `lib/codebot/capbench/`, see `docs/BENCHMARK.md`) |
 | `bin/codebot-mkconfig` | builds `config/opencode-re.json` (REA MCP config; data named in `modes/re/mode.json`) |
-| `lib/codebot/*.py` | the engine (python stdlib only): `engine` (step state machine), `tasks` (tasks.json store + integrity), `checks` (freeze/lock/tamper/run), `guard` (baseline guard), `planparse`, `planops` (add/split/reorder only), `gitops` (baseline commit, checkpoints, reset), `budgets` (stuck signals), `ladder`, `sizing` (split + stats), `splitter` (model-driven task splitter, the default SPLIT_CMD with the native worker; emits declarative assertions), `assertions` (declarative checks: the trusted assertion runner, copied into every project's `checks/` as `assert_runner.py`; exit 0 holds / 1 real failure / 2 unusable spec), `checkspec` (assertion JSON schema, spec files, check command, PLAN.md rendering), `planner` (native unattended planner: one constrained call + harness-driven repair rounds, used by `codebot bench --plan auto`), `worker` (native worker), `packer` (context), `specdoc` (the spec as a task sees it: the introduction plus the requirement the task implements, from `spec_items.json`, which the planner writes), `grounding` (checks grounded in the spec: its worked examples become harness-written assertions; `screen` drops model assertions that cannot hold for a program following the spec), `rederive` (before a split: assertions that failed in every attempt are judged against the spec and may be replaced, `checks.replace_check`), `ollama` (client), `tokens` (calibrated estimate), `thermal`, `taskclock` (per-task wall-clock budgets: one persisted budget per root task, enforced by killing the worker's process group; see ROADMAP), `proc` (run a shell command and kill its whole process tree on timeout), `sandbox` (Docker + policy), `audit` (hash chain), `memory` (evidence-backed lessons), `modes`, `report`, `preflight`, `bench`, `thermalbench`, `config` |
+| `lib/codebot/*.py` | the engine (python stdlib only): `drafts` (drafts mode: one whole-program round per step, restarts, best version delivered and committed, coverage of spec items by examples; the prompts are bench/baselines/bare_py.py's text), `engine` (step state machine), `tasks` (tasks.json store + integrity), `checks` (freeze/lock/tamper/run), `guard` (baseline guard), `planparse`, `planops` (add/split/reorder only), `gitops` (baseline commit, checkpoints, reset), `budgets` (stuck signals), `ladder`, `sizing` (split + stats), `splitter` (model-driven task splitter, the default SPLIT_CMD with the native worker; emits declarative assertions), `assertions` (declarative checks: the trusted assertion runner, copied into every project's `checks/` as `assert_runner.py`; exit 0 holds / 1 real failure / 2 unusable spec), `checkspec` (assertion JSON schema, spec files, check command, PLAN.md rendering), `planner` (native unattended planner: one constrained call + harness-driven repair rounds, used by `codebot bench --plan auto`), `worker` (native worker), `packer` (context), `specdoc` (the spec as a task sees it: the introduction plus the requirement the task implements, from `spec_items.json`, which the planner writes), `grounding` (checks grounded in the spec: its worked examples become harness-written assertions; `screen` drops model assertions that cannot hold for a program following the spec), `rederive` (before a split: assertions that failed in every attempt are judged against the spec and may be replaced, `checks.replace_check`), `ollama` (client), `tokens` (calibrated estimate), `thermal`, `taskclock` (per-task wall-clock budgets: one persisted budget per root task, enforced by killing the worker's process group; see ROADMAP), `proc` (run a shell command and kill its whole process tree on timeout), `sandbox` (Docker + policy), `audit` (hash chain), `memory` (evidence-backed lessons), `modes`, `report`, `preflight`, `bench`, `thermalbench`, `config` |
 | `lib/codebot/capbench/` + `bench/ladder/catalog/` | Capability Ladder Benchmark (12 levels + growing notes project, hidden reference tests, per-task 90 min budget via `taskclock` setting `TASK_MAX_MINUTES`, resumable runs in `bench/results/ladder/`). Modules: `manifests`, `reference`/`refrun` (hidden-test oracle), `workspace`, `runner`, `results`, `metrics`, `classify`, `reports`, `notify`, `cli`. Tests `tests/test_v_capbench.py`, `tests/test_u_taskclock.py`. Docs: `docs/BENCHMARK.md` |
 | `modes/<name>/` | `code` (default) and `re` (reverse engineering with REA, `extends` code). `mode.json` + prompts (`plan.md`, `plan-quick.md`, `plan-auto.md`, `plan-repair.md`, `work.md`) + `worker.md` + notes + `verifiers/` |
 | `config/codebot.env` | all settings (documented inline). `config/Modelfile` (num_ctx 32768), `config/opencode.json`, `config/opencode-re.json` (generated) |
 | `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json`. Shared by all projects unless a project sets `MEMORY_DIR` (benchmark trials do: `projects/<trial>/memory`). Committed to git but rewritten at run time, so runs leave it modified |
-| `tests/` | 401 test methods (`tests/run.sh [file]`, about 6 min for all, almost no CPU; full suite green on 2026-10-15). `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
+| `tests/` | 519 test methods (`tests/run.sh [file]`, about 7 min for all, almost no CPU; full suite green on 2026-10-19). `test_z_drafts.py` covers drafts mode. `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
@@ -43,7 +43,17 @@ hybrid/recurrent model) + 32k context. opencode 1.19.0 lives in `tools/node_modu
 already local. REA: `rea` 6.4.0 (`~/.local/node/bin/rea`), Ghidra 12.1.4 (`~/.local/ghidra_12.1.4_PUBLIC`), JDK 21 (`~/.local/jdk-21`). ntfy topic in `config/local.env` (rotated 2026-10-16; the old one was in git history)
 (reply topic `...-reply`). A systemd **user** timer `codebot.timer` restarts loops that die (only projects with a `.active` file). `codebot` is symlinked into `~/.local/bin`.
 
-## 3. How a run works (engine mode), in one paragraph
+## 3. How a run works
+
+**Drafts mode** (`WORKFLOW="drafts"` in project.env; `codebot new <name> <spec.md> [dir]` creates it, `codebot check-spec` shows which spec items
+have examples). `codebot start` does the usual git prep, then the bash supervisor (`loop_drafts`) calls `codebot-engine step` once per round:
+`drafts.step` asks the model for every file whole (first draft: spec + the baseline code dir; repair: spec + the draft's best version + what
+failed), extracts the files, compiles them, runs the spec's build command and examples (`grounding`, run by the trusted assert runner) in the
+sandbox, and keeps the round's record in `projects/<name>/drafts/`. A draft that has not improved for `DRAFTS_PATIENCE` rounds is dropped; each new
+best version is written to the code dir and committed. It stops when every example passes, at `DRAFTS_MINUTES` of round time or at
+`DRAFTS_MAX_ROUNDS`. Pause/resume/stop, phone control, the watchdog, `status`, `report` and `diff` work as for task projects.
+
+**Task (engine) mode**, in one paragraph:
 
 `codebot plan` (interactive "grill me" planner via opencode TUI) writes `PLAN.md` where every task has `check:` / `files:` / `size:`. `codebot start` freezes it:
 the **baseline guard** rejects checks that already pass, are broken, or have prose after the backticks; checks and fixtures are sha256-locked; `tasks.json` is
@@ -291,9 +301,26 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
   against codebot's 50, 30, 47 (2026-10-15 run, 1.8 h per trial, before the regression gate); the first reply alone scored 60 and 55.
   level_03: both runs passed all 6 examples and scored 58 and 63/87; the examples cover only 3 of 8 requirements and seed 1's module has no
   `resolve_subset` at all (R8 0/12). 19 of 38 repair rounds sent the program back unchanged; all 4 delivered versions came from a restart.
-- The loop scripts, drivers and per-run results are in `bench/baselines/` (see its README). Open decision for the user: rebuild codebot
-  around a plain whole-program loop (restarts, best version by its own signal) instead of adding rules to the planner/check pipeline. The
-  loop's limit is its signal: where the spec's examples do not cover a requirement (level_03), nothing checks it.
+- The loop scripts, drivers and per-run results are in `bench/baselines/` (see its README). The loop's limit is its signal: where the
+  spec's examples do not cover a requirement (level_03), nothing checks it.
+- **Decision (user, 2026-10-19: "Let's do it")**: rebuild codebot around the loop. Done as drafts mode (next section); the task pipeline is kept
+  unchanged (the user's rule: do not break existing commands; extend before rewriting).
+
+### Drafts mode (2026-10-19)
+
+- `lib/codebot/drafts.py` ports `bench/baselines/bare_py.py` into the harness, generalised to any language with a build command in the spec (Go
+  via `go build`, C) and to specs that name no file (the language's default file, e.g. `main.go`). Same model settings as the measured loop
+  (temperature 0.2, 6000 output tokens, thinking off, seed `DRAFTS_SEED * 1000 + round`, patience 2). `tests/test_z_drafts.py` holds it to the
+  measured loop: the same files, examples, first/repair/system prompts and the same feedback word for word on level_01 (`evaluate` against
+  `bare_py.evaluate`), and extraction identical on all 57 recorded replies of the level runs (checked once, not in the suite: the replies are not kept).
+- Differences from the baseline loop: the build command and the examples run in the Docker sandbox (Python compiling stays on the host, it runs
+  no model code); the time cap counts round time only (pauses do not count); state is saved after every round (resumable); every new best
+  version is committed to the code dir; a version that drops a file an earlier best version added puts it back to the baseline.
+- Bench: `codebot bench run --level N --mode drafts --task-minutes 45 --seed 1 --repeats 2` (the repeat number picks the seed, so repeats 1-2 are
+  the baselines' seeds 1-2). The trial records `drafts` (rounds, drafts, delivered round and examples, uncovered items, cut-off replies, unchanged
+  repairs); the classifier adds a VERIFICATION_GAP when every example passed but the hidden tests did not (`classify.RULES_VERSION` 2).
+- Not done yet: a real-model run through `codebot bench --mode drafts` (does it reproduce 63/60 on level_01?); reruns of a finished project
+  (`start` refuses; make a new project); subdirectories (files are flat); requirements without examples are only listed, never checked.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

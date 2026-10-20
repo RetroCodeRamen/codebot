@@ -7,7 +7,7 @@ from . import reference as R
 
 CATEGORIES = ("PLANNING_OMISSION", "PLANNING_UNSOUND", "IMPLEMENTATION_ERROR", "VERIFICATION_GAP", "RECOVERY_LOOP", "CONTEXT_FAILURE", "TIMEOUT", "BLOCKED_AMBIGUITY", "INFRASTRUCTURE_ERROR")
 EXTRA = ("SKIPPED_DEPENDENCY",)          # not in the requested list: a task that never ran because a prerequisite did not finish (the cause is its prerequisite)
-RULES_VERSION = 1
+RULES_VERSION = 2                 # 2 (2026-10-19): a VERIFICATION_GAP verdict for drafts mode (every spec example passed, the reference tests did not)
 
 def plan_audit(proj, seed_tree, solution_tree):
     """Run every frozen assertion spec against the trusted solution (a sound spec HOLDS: rc 0) and against the starting workspace (a real test FAILS: rc 1).
@@ -73,6 +73,10 @@ def classify_project(trial, requirements):
         kw = [k.lower() for k in r.get("keywords", [])]
         if kw and not any(k in texts for k in kw) and plan.get("mode") == "full":
             out.append(_v("PLANNING_OMISSION", "medium", requirement=r["id"], title=r["title"], note="no planned task or assertion mentions this requirement's keywords", keywords=kw))
+    d = trial.get("drafts") or {}
+    if plan.get("mode") == "drafts" and d.get("delivered_round") and d.get("delivered_examples") == d.get("examples_total") and ref.get("pass_rate") is not None and ref["pass_rate"] < 1.0:
+        out.append(_v("VERIFICATION_GAP", "high", internal_rate=1.0, reference_rate=ref["pass_rate"], failing_requirements=[r["id"] for r in failing], failing_tests=(ref.get("failing") or [])[:10],
+                      uncovered_spec_items=d.get("uncovered"), note="every spec example passed but the independent reference tests did not (requirements without examples are never checked)"))
     if tasks and all(t["status"] == "VERIFIED" for t in tasks) and ref.get("pass_rate") is not None and ref["pass_rate"] < 1.0:
         out.append(_v("VERIFICATION_GAP", "high", internal_rate=1.0, reference_rate=ref["pass_rate"], failing_requirements=[r["id"] for r in failing], failing_tests=(ref.get("failing") or [])[:10],
                       note="every internal acceptance check passed but the independent reference tests did not"))
