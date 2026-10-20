@@ -263,6 +263,9 @@ class TestCli(CapCase):
         rc, out = self.run_cli("status"); self.assertIn("dry", out); rc, out = self.run_cli("status", "dry"); self.assertIn("L01-r1", out)
         rc, out = self.run_cli("report", "dry"); self.assertIn("NOT STARTED", out)
         st = RS.Store(self.home, RS.resolve(self.home, "dry")).load(); self.assertEqual(st["config"]["task_minutes"], 90.0); self.assertEqual(st["config"]["model"], "codebot-model"); self.assertEqual(len(st["trials"]), 1)
+    def test_a_context_size_reaches_every_trial(self):
+        rc, out = self.run_cli("run", "--level", "1", "--dry-run", "--name", "ctx", "--num-ctx", "16384", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(rc, 0, out)
+        st = RS.Store(self.home, RS.resolve(self.home, "ctx")).load(); self.assertEqual(st["config"]["roles"], {"NUM_CTX": "16384"})
     def test_the_watchdog_never_undoes_a_cancel(self):
         rc, out = self.run_cli("run", "--level", "1", "--dry-run", "--name", "w", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(rc, 0, out)
         store = RS.Store(self.home, RS.resolve(self.home, "w")); open(store.active_path(), "w").close(); store.request_cancel()

@@ -342,6 +342,15 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
 - Not done yet: reruns of a finished project (`start` refuses; make a new project); subdirectories (files are flat); requirements without
   examples are only listed, never checked.
 
+### Larger local models (2026-10-20, in progress; `docs/LARGE_MODELS.md`)
+
+- The user asked for a larger MoE model with CPU/GPU splitting, judged on complete tasks under a 3-hour budget per task, baseline included.
+- Qwen3-Coder-30B-A3B at UD-IQ3_XXS (`models/gguf/`, 12.85 GB) runs at 11-15 tokens/s (ornith: 8.5) with Ollama's own runner and `--fit`;
+  it is imported as `coder30b-iq3` (`bench/bigmodel/Modelfile.coder30b-iq3`). Run it with `codebot bench run ... --model coder30b-iq3
+  --num-ctx 16384` (its KV cache at 32K would take 3 GB). It does not fit beside the user's programs: they go to swap while it runs.
+- `bin/codebot` starts Ollama with `LLAMA_ARG_CACHE_RAM=0` (llama-server's 8 GiB prompt cache went to swap). Restarting the private Ollama
+  is enough to apply it. The upstream llama.cpp build b11755 is in `tools/llama.cpp/b11755/`; its expert cache made this GPU slower.
+
 ## 7. Working agreements and gotchas (learned the hard way)
 
 - **The user cares about honesty**: say what is untested, what failed, and what you got wrong. They explicitly thanked the "nothing ran against the real model yet" disclosure.

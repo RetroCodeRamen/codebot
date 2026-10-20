@@ -39,6 +39,7 @@ SOURCE_EXT = tuple(sorted({e for v in LANGS.values() for e in v[0]}))
 CONFIG_FILES = ("go.mod", "go.sum", "Cargo.toml", "package.json", "tsconfig.json", "pyproject.toml", "requirements.txt", "setup.cfg", "Makefile", "CMakeLists.txt")
 TOKEN = re.compile(r"(?<![\w.])([A-Za-z_][\w-]*\.(?:py|go|mod|sum|rs|c|h|cc|cpp|hpp|js|mjs|ts|rb|md|txt|json|cfg|ini|toml|ya?ml|sh))(?!\w)")   # a file name anywhere in a line
 SAFE = re.compile(r"^[A-Za-z_][\w.-]*$")              # the model writes flat file names in the code dir, never a path, never a dot file
+HEADER = re.compile(r"^#{2,4}\s+\S+\s*$")              # a "### main.go" line, as the first line inside a code block
 MAX_FILE, MAX_SHOWN = 20_000, 60_000                    # a baseline file larger than this is listed by name only; above MAX_SHOWN in all, drafts mode does not fit
 MAX_TREE_FILES, MAX_TREE_BYTES = 2000, 50 * 1024 ** 2   # the code dir is copied as the baseline: drafts mode is for small projects
 GO_BIN = "/usr/local/go/bin"
@@ -225,7 +226,8 @@ def extract(reply, names, lang):
     unnamed block is the language's default file). parts[1], parts[3], ... are the insides of code blocks; with an odd number of fences the last block
     was cut off, and it is kept only for a file with no complete block before it (in the 10 cut-off replies of the 2026-10-19 drafts runs the cut-off
     copy never built; the complete block before it built in 4, one passing 11 of 15 examples). A block belongs to the one file named on its fence line,
-    else on the last line before it, else in the text since the previous block, else on a comment first line. A block with none of those is the only
+    else on a `### name` header just inside it (Qwen3-Coder writes it there; the line is dropped), else on the last line before it, else in the text
+    since the previous block, else on a comment first line. A block with none of those is the only
     file when there is one (the spec's, or the default), unless the line before it names another file (the model also writes README.md) or its fence
     names another language. The last block for a file wins (the model often drafts, then rewrites). Ported from bench/baselines/bare_py.py, whose
     first version read `### fileutil.py` as `util.py`."""
@@ -241,7 +243,9 @@ def extract(reply, names, lang):
     for i in range(1, len(parts), 2):
         info, _, code = parts[i].partition("\n")
         lines = [l for l in parts[i - 1].split("\n") if l.strip()]; head = lines[-1] if lines else ""; first = code.lstrip().split("\n", 1)[0]
-        name = named(info) or named(head) or named(parts[i - 1]) or (named(first) if first.startswith(comments) else None)
+        inner = named(first) if HEADER.match(first) else None
+        if inner: code = code.lstrip().partition("\n")[2]
+        name = named(info) or inner or named(head) or named(parts[i - 1]) or (named(first) if first.startswith(comments) else None)
         if not name and only and not TOKEN.search(head) and (info.split() or [""])[0].lower() in words: name = only
         if name and not (i == cut and name in out): out[name] = code
     return out

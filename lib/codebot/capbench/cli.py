@@ -32,7 +32,7 @@ def cmd_run(home, a):
     if problems: print("cannot start:\n  - " + "\n  - ".join(problems)); return 2
     try: store = RN.create_run(home, suite, levels, repeats, a.mode, a.task_minutes, a.plan_minutes, a.plan_rounds, a.model, a.seed, a.interactive, a.name, a.poll, not a.no_notify, a.order, a.driver, a.checkpoints,
                                   roles={"PLANNER_MODEL": a.planner_model, "PLANNER_THINK": a.planner_think, "SPLITTER_MODEL": a.splitter_model, "SPLITTER_THINK": a.splitter_think,
-                                         "WORKER_THINK": a.worker_think, "ESCALATE_MODEL": a.escalate_model})
+                                         "WORKER_THINK": a.worker_think, "ESCALATE_MODEL": a.escalate_model, "NUM_CTX": a.num_ctx})
     except RN.RunError as e: print(e); return 2
     n = len(store.load()["trials"])
     print(f"run {store.run_id}: {n} trial(s), mode {a.mode}, {a.task_minutes:g} min per task (no limit on the project as a whole)")
@@ -143,6 +143,7 @@ def main(argv, home):
     r.add_argument("--planner-model"); r.add_argument("--planner-think", choices=["off", "on", "low", "medium", "high"]); r.add_argument("--splitter-model")
     r.add_argument("--splitter-think", choices=["off", "on", "low", "medium", "high"]); r.add_argument("--worker-think", choices=["off", "on", "low", "medium", "high"])
     r.add_argument("--escalate-model", help="ladder rung 5 retries a stuck task with this model"); r.add_argument("--seed", type=int); r.add_argument("--name"); r.add_argument("--poll", type=float, default=20.0)
+    r.add_argument("--num-ctx", type=int, help="the context window sent with every model request (NUM_CTX), e.g. 16384 for a larger model whose KV cache must stay small (default: codebot's setting)")
     r.add_argument("--interactive", action="store_true", help="a blocked task waits for `codebot answer` instead of being a terminal outcome"); r.add_argument("--no-notify", action="store_true")
     r.add_argument("--order", choices=["repeat-major", "level-major"], default="repeat-major"); r.add_argument("--driver", choices=["loop", "engine"], default="loop", help="loop = the real bash supervisor (unattended); engine = in-process steps")
     r.add_argument("--checkpoints", action="store_true", help="also score the independent tests after every verified task"); r.add_argument("--foreground", action="store_true"); r.add_argument("--dry-run", action="store_true")

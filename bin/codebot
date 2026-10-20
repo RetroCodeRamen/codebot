@@ -11,6 +11,8 @@ OPENCODE_BIN="$CODEBOT_HOME/tools/node_modules/.bin/opencode"
 export OLLAMA_HOST="127.0.0.1:$OLLAMA_PORT"
 export OLLAMA_MODELS="$CODEBOT_HOME/models"
 export OLLAMA_KEEP_ALIVE=30m OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1
+export LLAMA_ARG_CACHE_RAM=0     # Ollama's llama-server runner otherwise keeps up to 8 GiB of earlier prompts in RAM; codebot sends one request at a
+                                 # time, and with a 30B model that cache grew 2 GB in 6 requests and went to swap (2026-10-20)
 export OPENCODE_CONFIG="$CODEBOT_HOME/config/opencode.json"
 THINK="${THINK:-on}"; [[ "$THINK" == off ]] && THINK_VARIANT=nothink || THINK_VARIANT=""
 mkdir -p "$CODEBOT_HOME/logs" "$CODEBOT_HOME/projects"

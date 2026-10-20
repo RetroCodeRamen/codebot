@@ -36,6 +36,7 @@ class TestExtract(unittest.TestCase):
                  ("**`textutil.py`**\n```python\nB\n```", {"textutil.py": "B\n"}),
                  ("```python fileutil.py\nA\n```", {"fileutil.py": "A\n"}),
                  ("```python\n# textutil.py\nB\n```", {"textutil.py": "# textutil.py\nB\n"}),
+                 ("```python\n### textutil.py\nB\n```", {"textutil.py": "B\n"}),            # Qwen3-Coder puts the header inside the block (2026-10-20)
                  ("### fileutil.py\n```python\nold\n```\nBetter:\n### fileutil.py\n```python\nnew\n```", {"fileutil.py": "new\n"}),   # the last block wins
                  ("### fileutil.py\n```python\nA\n```\n### textutil.py\n```python\ncut off", {"fileutil.py": "A\n", "textutil.py": "cut off"}),
                  ("### fileutil.py\n```python\nA\n```\nWait, a better one:\n### fileutil.py\n```python\nhalf a rewr", {"fileutil.py": "A\n"}),   # a cut-off rewrite does not replace a complete block
