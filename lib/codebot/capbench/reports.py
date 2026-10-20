@@ -9,6 +9,10 @@ def _mean(xs): xs = [x for x in xs if x is not None]; return round(statistics.me
 def _med(xs): xs = [x for x in xs if x is not None]; return round(statistics.median(xs), 4) if xs else None
 def _pct(x): return "n/a" if x is None else f"{round(100 * x)}%"
 def _min(s): return "n/a" if s is None else f"{s / 60:.1f}"
+def _examples(d):
+    """A drafts trial's delivered spec examples ("12/15"), or "nothing built" when no version built."""
+    if not d: return None
+    return f"{d['delivered_examples']}/{d.get('examples_total')}" if d.get("delivered_examples") is not None else "nothing built"
 
 def trial_row(t):
     """One flat record per trial (also the CSV row)."""
@@ -26,7 +30,7 @@ def trial_row(t):
             "thermal_wait_s": tt.get("thermal_wait_s"), "retries": tt.get("retries"), "splits": tt.get("splits"), "ladder_steps": tt.get("ladder_steps"), "manual_interventions": tt.get("manual_interventions"),
             "verified_per_hour": round(tt["verified"] / (run_s / 3600), 2) if run_s and tt.get("verified") is not None else None,
             "failure_categories": ";".join(f"{k}={v}" for k, v in sorted(cl.items())), "error": t.get("error"),
-            "examples": f"{(t.get('drafts') or {}).get('delivered_examples')}/{(t.get('drafts') or {}).get('examples_total')}" if t.get("drafts") else None,
+            "examples": _examples(t.get("drafts")),
             "drafts_rounds": (t.get("drafts") or {}).get("rounds"), "drafts": (t.get("drafts") or {}).get("drafts")}
 
 def task_rows(t):

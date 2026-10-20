@@ -260,6 +260,22 @@ as `str` in `str(error)` do not count). Only one recorded version lacked one, an
 passed and the run stopped without `resolve_subset` (requirement 8: 0 of 12 hidden tests). These change what the model sees, so drafts mode no
 longer replays the baseline runs; the prompts are otherwise the same.
 
+**The tuned drafts mode, measured (2026-10-20)** [V]: commit 4c5b056, 45 min per run (runs `20261019-221143-drafts2-calc`,
+`20261020-003318-drafts2-l3`, `20261020-015546-drafts2-l1`). Hidden tests: level_01 **63/64 and 61/64** (patience 2 gave 63 and 60; 10 and 11
+drafts in 21 and 23 rounds against 7 and 7), held with a median of 97%. level_03 **74/87 and 44/87** (the baseline loop: 58 and 63). Seed 1
+passed all 6 examples and all 9 declared names after 32 min and stopped, with `resolve_subset` there this time (requirement 8: 11 of 12). Seed
+2 spent 29 of its 47 min on two replies that ran to the 6000-token cap (the reply cap does not bite at this program size: 3 x 2925 tokens is
+more than 6000) and delivered a `resolve_subset` that fails all 12 of its hidden tests. calc_go **6, 21 and 1 of 32** (the Go restart loop: 22, 6
+and 22; the task pipeline: 16, 15 and 13). 8 of its 11 fresh drafts ran to the cap (13 min each, 99 of 136 model minutes); seed 3 never built
+in 47 min and seed 1 first built at minute 46. Two causes, both in the port, not in the three rules: (1) the calc spec names no file, so the first
+prompt asked for "every file", and the model wrote README.md and go.mod first in all 11 fresh drafts, then rewrote main.go and argued with itself
+in prose or code comments until it was cut off (the Go loop, which asked for main.go only: no README, 6 of 24 fresh drafts cut off). (2) A
+reply cut off inside a rewrite was judged on the cut-off copy, never on the complete version written earlier in the same reply. Judged on that
+earlier block instead (the same judging, in the sandbox), 4 of the 10 cut-off replies of these runs build, where none did; one is calc seed 1's
+round 5 with 11 of 15 examples, in a run that ended at 3. Changed since (not yet measured): the first prompt names the files to write and asks
+for no other (`main.go and any other .go file the program needs` when the spec names none), and a cut-off block no longer replaces a complete
+block of the same file.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

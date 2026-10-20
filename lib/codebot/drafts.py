@@ -199,12 +199,19 @@ def system_prompt(lang):
     return (f"You are an expert {lang} programmer. You write complete, correct, working code. Reply with the complete contents of every file, "
             f"each as a line `### <file name>` followed by one ```{LANGS[lang][1]} code block, and nothing else.")
 
-def first_prompt(spec, names, shown, named):
+def wanted(names, lang):
+    """The files a first reply is asked for: the spec's, else the language's source files. Never "every file": asked for that, the model rewrote
+    README.md and go.mod first in all 11 fresh calc_go drafts (2026-10-19), and 8 of them ran to the token limit (the Go loop that asked for main.go: 6 of 24)."""
+    if names: return _join(names)
+    ext, default = LANGS[lang][0][0], LANGS[lang][5]
+    return f"{default} and any other {ext} file the program needs" if default else f"every {ext} file the program needs"
+
+def first_prompt(spec, names, shown, named, lang="Python"):
     if shown: where = f"The code directory contains {_join(named) + ' and ' if named else ''}these files:\n\n{show(shown)}"
     elif named: where = f"The code directory contains only {_join(named)}."
     else: where = "The code directory is empty."
     return (f"Write the code this specification describes.\n\n{where}\n\nSpecification (SPEC.md):\n\n{spec.strip()}\n\n"
-            f"Reply with the complete contents of every file{' (' + ', '.join(names) + ')' if names else ''}.")
+            f"Reply with the complete contents of {wanted(names, lang)}, and no other file.")
 
 def repair_prompt(spec, files, named, feedback):
     lead = _join(named) + " and " if named else ""
@@ -215,14 +222,17 @@ def repair_prompt(spec, files, named, feedback):
 def extract(reply, names, lang):
     """{file name: code} from a reply. names: the files the spec names (only these are taken), or [] (any file of the language is taken, and a lone
     unnamed block is the language's default file). parts[1], parts[3], ... are the insides of code blocks; with an odd number of fences the last block
-    was cut off and is kept as it is. A block belongs to the one file named on its fence line, else on the last line before it, else in the text since
-    the previous block, else on a comment first line. A block with none of those is the only file when there is one (the spec's, or the default),
-    unless the line before it names another file (the model also writes README.md) or its fence names another language. The last block for a file
-    wins (the model often drafts, then rewrites). Ported from bench/baselines/bare_py.py, whose first version read `### fileutil.py` as `util.py`."""
+    was cut off, and it is kept only for a file with no complete block before it (in the 10 cut-off replies of the 2026-10-19 drafts runs the cut-off
+    copy never built; the complete block before it built in 4, one passing 11 of 15 examples). A block belongs to the one file named on its fence line,
+    else on the last line before it, else in the text since the previous block, else on a comment first line. A block with none of those is the only
+    file when there is one (the spec's, or the default), unless the line before it names another file (the model also writes README.md) or its fence
+    names another language. The last block for a file wins (the model often drafts, then rewrites). Ported from bench/baselines/bare_py.py, whose
+    first version read `### fileutil.py` as `util.py`."""
     exts, _, words, starts, comments, default = LANGS[lang]
     ok = (lambda t: t in names) if names else (lambda t: t.endswith(exts) and bool(SAFE.match(t)))
     only = names[0] if len(names) == 1 else (default if not names else None)
     parts, out = reply.split("```"), {}
+    cut = len(parts) - 1 if len(parts) % 2 == 0 else None       # the index of a cut-off last block
     if len(parts) == 1 and only and reply.lstrip().startswith(starts): return {only: reply}
     def named(text):
         found = {t for t in TOKEN.findall(text) if ok(t)}
@@ -232,7 +242,7 @@ def extract(reply, names, lang):
         lines = [l for l in parts[i - 1].split("\n") if l.strip()]; head = lines[-1] if lines else ""; first = code.lstrip().split("\n", 1)[0]
         name = named(info) or named(head) or named(parts[i - 1]) or (named(first) if first.startswith(comments) else None)
         if not name and only and not TOKEN.search(head) and (info.split() or [""])[0].lower() in words: name = only
-        if name: out[name] = code
+        if name and not (i == cut and name in out): out[name] = code
     return out
 
 # ---------- judging one version ----------
@@ -381,7 +391,7 @@ def step(proj):
     if st["used_s"] > cfg["minutes"] * 60: return finish(proj, st, "time cap")
     if st["round"] >= cfg["max_rounds"]: return finish(proj, st, "round cap")
     t0 = time.time(); rnd = st["round"] + 1
-    if st["fresh"]: draft, stale, dbest = st["draft"] + 1, 0, None; user = first_prompt(spec, st["names"], base_shown, named)
+    if st["fresh"]: draft, stale, dbest = st["draft"] + 1, 0, None; user = first_prompt(spec, st["names"], base_shown, named, st["language"])
     else: draft, stale, dbest = st["draft"], st["stale"], st["dbest"]; user = repair_prompt(spec, {**base_shown, **dbest["files"]}, named, dbest["feedback"])
     try: r = _model_call(proj, st, cfg, rnd, user)
     except ollama.ModelError as e:

@@ -38,6 +38,7 @@ class TestExtract(unittest.TestCase):
                  ("```python\n# textutil.py\nB\n```", {"textutil.py": "# textutil.py\nB\n"}),
                  ("### fileutil.py\n```python\nold\n```\nBetter:\n### fileutil.py\n```python\nnew\n```", {"fileutil.py": "new\n"}),   # the last block wins
                  ("### fileutil.py\n```python\nA\n```\n### textutil.py\n```python\ncut off", {"fileutil.py": "A\n", "textutil.py": "cut off"}),
+                 ("### fileutil.py\n```python\nA\n```\nWait, a better one:\n### fileutil.py\n```python\nhalf a rewr", {"fileutil.py": "A\n"}),   # a cut-off rewrite does not replace a complete block
                  ("```python\nA\n```", {}),                                                   # two files: an unnamed block is nobody's
                  ("### helper.py\n```python\nA\n```", {})]                                    # only the spec's modules are taken
         for reply, want in cases: self.assertEqual(D.extract(reply, self.N, "Python"), want, reply)
@@ -53,7 +54,8 @@ class TestExtract(unittest.TestCase):
         self.assertEqual(D.extract("### lexer.go\n```go\npackage main\n```\n### main.go\n```go\npackage main\n```", [], "Go"), {"lexer.go": "package main\n", "main.go": "package main\n"})
 
 class TestParity(unittest.TestCase):
-    """The prompts and the judging are bench/baselines/bare_py.py's text: with the same seed the model gets the same prompt as in the measured runs."""
+    """The prompts and the judging are bench/baselines/bare_py.py's text (the measured loop), except the first prompt's last sentence, which names the
+    files to write and asks for no other (asked for "every file", the model rewrote README.md and go.mod first)."""
     @classmethod
     def setUpClass(cls): import bare_py; cls.P = bare_py
     def test_files_examples_and_prompts_are_the_measured_ones(self):
@@ -61,11 +63,27 @@ class TestParity(unittest.TestCase):
             L = self.P.load(lv); spec = L["spec"]; shown, named = D._listing(os.path.join(CAT, lv, "seed"))
             self.assertEqual(D.spec_files(spec), L["files"]); self.assertEqual(D.examples(spec), (None, L["checks"]))
             self.assertEqual(D.system_prompt("Python"), self.P.SYSTEM)
-            self.assertEqual(D.first_prompt(spec, L["files"], shown, named), self.P.first_prompt(L))
+            measured = self.P.first_prompt(L); old = f"every file ({', '.join(L['files'])})."
+            self.assertTrue(measured.endswith(old))
+            self.assertEqual(D.first_prompt(spec, L["files"], shown, named), measured[:-len(old)] + D._join(L["files"]) + ", and no other file.")
             files = {n: f"# {n}\n" for n in L["files"]}
+            whole = module_reply(os.path.join(CAT, lv, "reference_solution"), L["files"])
+            self.assertEqual(D.extract(whole, L["files"], "Python"), self.P.extract(whole, L["files"]))
             for fb in ("These files are missing: x.py.", "All files compile, but 1 of 6 examples from the specification fail:\nFAIL: f(1)"):
                 self.assertEqual(D.repair_prompt(spec, {**shown, **files}, named, fb), self.P.repair_prompt(L, files, fb))
             self.assertEqual(D.repair_prompt(spec, {}, named, "x"), self.P.repair_prompt(L, {}, "x"))
+    def test_a_spec_that_names_no_file_asks_for_the_source_files_only(self):
+        spec = read(os.path.join(CAT, "calc_go", "SPEC.md")); shown, named = D._listing(os.path.join(CAT, "calc_go", "seed"))
+        self.assertEqual((sorted(shown), named), (["go.mod"], ["README.md"]))
+        p = D.first_prompt(spec, [], shown, named, "Go")
+        self.assertTrue(p.endswith("\n\nReply with the complete contents of main.go and any other .go file the program needs, and no other file."), p[-160:])
+        self.assertEqual(D.wanted([], "Rust"), "every .rs file the program needs")
+
+class TestReports(unittest.TestCase):
+    def test_a_trial_where_nothing_built_says_so(self):
+        from codebot.capbench import reports as RP
+        self.assertEqual((RP._examples({"delivered_examples": None, "examples_total": 15}), RP._examples({"delivered_examples": 12, "examples_total": 15}), RP._examples(None)),
+                         ("nothing built", "12/15", None))
 
 class Proj(Sandboxed):
     """A drafts project over the throwaway code dir, a scripted fake model and no sandbox."""
@@ -156,7 +174,7 @@ class TestRounds(Proj):
         self.run_until_done(); p = self.user_prompts()
         self.assertIn("did not contain any file as a line `### <file name>` followed by a ```python code block", p[1])
         self.assertIn("Your last reply was cut off because it was too long.\n\nThese files are missing: other.py.", p[2])
-        self.assertIn("Reply with the complete contents of every file (mathx.py, other.py).", p[0])
+        self.assertIn("Reply with the complete contents of mathx.py and other.py, and no other file.", p[0])
     def test_the_time_cap_counts_only_rounds_and_settings_apply_at_once(self):
         self.set_env(DRAFTS_MINUTES="0"); self.fake.script = [HALF, HALF]
         evs = self.run_until_done()
