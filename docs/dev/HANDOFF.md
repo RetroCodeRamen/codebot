@@ -329,7 +329,12 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
 - calc_go lost its time to replies that ran to the token cap. Since then (42e6cd9 and the next commit): the first prompt names the files to
   write and asks for no other (asked for "every file", the model wrote README.md and go.mod first); a cut-off block never replaces a complete
   block of the same file; and the reply is streamed and stopped once it repeats itself (`drafts.loop_watch`: its last 8 non-blank lines
-  appeared twice before; every recorded runaway was such a loop; `ollama.chat(stop_if=...)`, the only streaming call). Not yet measured.
+  appeared twice before; every recorded runaway was such a loop; `ollama.chat(stop_if=...)`, the only streaming call). Measured 2026-10-20
+  (runs `*drafts4*`): calc_go 21, 21 and 18/32, level_01 62 and 62/64, level_03 63 and 61/87. On level_03 the stop also cut good code (the same
+  input check at the top of every function: 6 of seed 2's 8 replies), so `loop_watch` now also requires the lines since the block's previous
+  copy to be at least 90% lines the reply already wrote (428 recorded replies: 20 of 22 runaways stopped, 2 of 390 normal replies, none of the
+  6 cut ones). The feedback now shows a crash's stderr from both ends with paths relative to the code dir (`assertions._err`). Both not yet
+  measured end to end.
 - The watchdog (`codebot resume-all`, every 5 min) resumed a benchmark run in the second its cancel finished, and the runner it started died
   with the oneshot service, leaving the trial's loop running alone (2026-10-20, stopped by hand). Now `resume --auto` (the watchdog's) never
   resumes a cancelled or inactive run, and a runner started under systemd gets its own transient unit (`runner.detached_cmd`). To stop a

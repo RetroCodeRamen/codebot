@@ -42,8 +42,8 @@ SAFE = re.compile(r"^[A-Za-z_][\w.-]*$")              # the model writes flat fi
 MAX_FILE, MAX_SHOWN = 20_000, 60_000                    # a baseline file larger than this is listed by name only; above MAX_SHOWN in all, drafts mode does not fit
 MAX_TREE_FILES, MAX_TREE_BYTES = 2000, 50 * 1024 ** 2   # the code dir is copied as the baseline: drafts mode is for small projects
 GO_BIN = "/usr/local/go/bin"
-RUNAWAY_FACTOR, RUNAWAY_FLOOR = 3, 3000
-LOOP_LINES, LOOP_REPEATS = 8, 2              # a reply is stopped when its last 8 non-blank lines already appeared twice before (loop_watch)                  # the output cap of a reply once a complete reply has built (see the module docstring)
+RUNAWAY_FACTOR, RUNAWAY_FLOOR = 3, 3000                 # the output cap of a reply once a complete reply has built (see the module docstring)
+LOOP_LINES, LOOP_REPEATS, LOOP_NEW = 8, 2, 0.10         # when a reply is stopped as a loop (loop_watch)
 EXC = re.compile(r"`([A-Z]\w*(?:Error|Exception))`")
 
 class DraftsError(Exception):
@@ -376,26 +376,31 @@ def output_cap(st, cfg):
     m = st.get("max_complete") or 0
     return min(cfg["num_predict"], max(RUNAWAY_FLOOR, RUNAWAY_FACTOR * m)) if m else cfg["num_predict"]
 
-def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS):
+def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS, new=LOOP_NEW):
     """A stop_if for ollama.chat: "loop" once the reply's last `lines` non-blank lines (stripped) have already appeared, as the same run of lines,
-    `repeats` times before it without overlapping. All 22 replies that ran to the token cap in the recorded loop runs (2026-10-18..20) were loops
-    like that: the same dozen comment lines about operator precedence 28 times over, or the same file again and again. This rule stops 21 of
-    them (the 22nd repeats in longer runs) and 2 of the 289 replies that ended on their own."""
-    seen, done, at = {}, [], [0]
+    `repeats` times before it without overlapping, and at most a share `new` of the lines since the last time are lines the reply had not written
+    before. All 22 replies that ran to the token cap in the recorded runs (2026-10-18..20) were loops: the same dozen comment lines about operator
+    precedence 28 times over, or the same file again and again. The first version of this rule had no `new` test, and it also cut good code:
+    level_03 checks its input the same way in every function, and 6 of the 8 replies of one run (2026-10-20) were stopped at the third copy of that
+    check. On the 428 recorded replies this rule stops 20 of the 22 runaways (at a median 38% of their length), 2 of the 390 replies that ended on
+    their own (both writing their file for the third time) and none of those 6."""
+    seen, done, fresh, at, known = {}, [], [], [0], set()
     def check(text):
         k = text.rfind("\n")
         if k < at[0]: return None
-        new, at[0] = text[at[0]:k], k + 1
-        for raw in new.split("\n"):
+        add, at[0] = text[at[0]:k], k + 1
+        for raw in add.split("\n"):
             s = raw.strip()
             if not s: continue
-            done.append(s)
+            done.append(s); fresh.append(s not in known); known.add(s)
             if len(done) < lines: continue
-            ends = seen.setdefault(tuple(done[-lines:]), []); n, last = 0, len(done)
+            ends = seen.setdefault(tuple(done[-lines:]), []); occ, last = [], len(done)
             for e in reversed(ends):
-                if e <= last - lines: n, last = n + 1, e
+                if e <= last - lines:
+                    occ.append(e); last = e
+                    if len(occ) == repeats: break
             ends.append(len(done))
-            if n >= repeats: return "loop"
+            if len(occ) == repeats and sum(fresh[occ[0]:]) <= new * (len(done) - occ[0]): return "loop"
         return None
     return check
 

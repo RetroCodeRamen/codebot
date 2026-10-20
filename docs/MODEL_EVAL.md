@@ -285,6 +285,23 @@ replies that ended on their own; both were writing their file for the third time
 the copy before. On the real server, closing the stream stops the generation: after a reply stopped at 6 tokens the next request answered in
 1.4 s (the full 400-token reply takes 44 s). The next repair is told "Your last reply was stopped because it repeated the same lines over and over."
 
+**The prompt fix and the loop stop, measured (2026-10-20)** [V]: commit 65389f3, 45 min per run, the same seeds (runs
+`20261020-042326-drafts4-calc`, `20261020-064805-drafts4-l3`, `20261020-082753-drafts4-l1`). calc_go **21, 21 and 18 of 32** hidden tests
+(before the two fixes: 6, 21 and 1; the Go restart loop: 22, 6 and 22; the task pipeline: 16, 15 and 13), with 11, 13 and 12 of the 15 spec
+examples. No reply ran to the cap (8 of 22 before, 13 min each); the runs made 50 rounds in 127 model minutes (22 in 136 before), and 10 of
+22 fresh drafts built (4 of 11). The lost hidden tests are operator precedence (requirement 3: 11 of 12 lost; every delivered program fails a
+spec example of it, the ceiling the loop runs found) and the two requirements without examples (6, errors: 13 of 21 lost, two of the programs
+panic on a division by zero and two exit 1 where a malformed expression must exit 2; 7, standard input: 5 of 18). level_01 **62 and 62 of
+64** (63 and 61 before), 32 of 33 examples each, held (97%). level_03 **63 and 61 of 87** (74 and 44 before; the loop: 58 and 63), 5 of 6
+examples each, in only 10 and 8 rounds, because the loop stop also cut good code: 7 of seed 2's 8 replies were stopped, and 6 of those were
+no loop. The model checked the graph the same way at the top of every function, and the rule fired at the third copy of that check,
+mid-file. One of calc_go's 8 stops was of the same kind (a second, revised copy of main.go cut at a block it repeated); the other 7 were
+loops. The rule now also requires that the lines since the block's previous copy add almost nothing new (at most 10% lines the reply had not
+written before). On the 428 recorded replies it stops 20 of the 22 runaways and 2 of the 390 replies that ended on their own (the first rule:
+21 and 2), and none of the 6 cut replies; not yet measured end to end. Also changed: a failing command's stderr in the feedback shows its
+start and its end (up to 400 characters) with paths relative to the code dir. Before, the last 150 characters of a Go panic were two bare
+stack frames without the panic's message (2 of the 78 repair prompts with failing examples so far).
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

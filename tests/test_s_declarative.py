@@ -53,6 +53,16 @@ class TestRunner(RunnerCase):
         self.write_code("n.py", "def f(): return 2\ndef g(): return True\ndef h(): return 0.1 + 0.2\n")
         rc, out = self.run_spec([{"type": "call", "module": "n", "func": "f", "expect": 2.0}, {"type": "call", "module": "n", "func": "h", "expect": 0.3}]); self.assertEqual(rc, 0, out)
         rc, out = self.run_spec([{"type": "call", "module": "n", "func": "g", "expect": 1}]); self.assertEqual(rc, 1, out)
+    def test_a_crash_shows_its_message_and_paths_inside_the_code_dir_are_relative(self):
+        # 2026-10-20 calc_go: a Go panic's message is its first line and each frame names the code dir; the last 150 characters showed neither
+        here = os.path.realpath(self.code)
+        frames = "".join(f"main.f{i}(...)\n\t{here}/main.go:{100 + i} +0x1f\n" for i in range(12))
+        self.write_code("crash.py", "import sys\nsys.stderr.write('panic: runtime error: index out of range [1] with length 1\\n\\ngoroutine 1 [running]:\\n' + "
+                        + repr(frames) + ")\nsys.exit(2)\n")
+        rc, out = self.run_spec([{"type": "run", "argv": ["python3", "crash.py"], "stdout": "5"}])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("exited 2, expected 0 (stderr: panic: runtime error: index out of range [1] with length 1", out)
+        self.assertIn("main.go:111", out); self.assertNotIn(here, out)
     def test_empty_string_expectation_is_a_real_expectation(self):
         self.write_code("e.py", "def s(t): return t.strip()\n")
         rc, out = self.run_spec([{"type": "call", "module": "e", "func": "s", "args": ["  "], "expect": ""}]); self.assertEqual(rc, 0, out)

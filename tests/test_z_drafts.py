@@ -235,6 +235,15 @@ class TestLoopWatch(unittest.TestCase):
         prog = "".join(f"x{i} = {i}\n" for i in range(20))
         self.assertIsNone(self.feed(prog + "Better:\n\n" + prog))        # a file written twice is no loop
         self.assertIsNotNone(self.feed(prog * 3))                         # a third copy is
+    def test_the_same_check_in_every_function_is_not_a_loop(self):
+        # 2026-10-20 level_03: the model checked the graph the same way in each function, and the first rule cut 6 of 8 replies at the third copy
+        check = ("if not isinstance(graph, dict):", "    raise TypeError('graph must be a dict')", "for node, deps in graph.items():",
+                 "    if not isinstance(node, str):", "        raise TypeError('node names must be str')", "    if not isinstance(deps, list):",
+                 "        raise TypeError('dependencies must be a list')", "    for d in deps:", "        if not isinstance(d, str): raise TypeError('names must be str')")
+        body = "".join(f"    {l}\n" for l in check)
+        mod = "".join(f"def {n}(graph):\n{body}    return _{n}(graph, {i})\n\n" for i, n in enumerate(("resolve", "groups", "find_cycle", "transitive_deps", "dependents", "resolve_subset")))
+        self.assertIsNone(self.feed("```python\n" + mod + "```\n"))
+        self.assertIsNotNone(self.feed("```python\n" + body * 4 + "```\n"))      # the check alone, over and over, is a loop
 
 class TestJudgingParity(Proj):
     """evaluate() gives bare_py.evaluate()'s verdict and feedback, word for word, on level_01."""

@@ -25,15 +25,15 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
 
 | project | drafts (45 min per run) | tasks |
 |---|---|---|
-| level 1: 8 utility functions in 4 modules, 64 tests | **63, 60** | 50, 30, 47 (90 min per task, about 1.8 h per run) |
-| calc_go: a calculator in Go, 32 tests | **22, 6, 22** | 16, 15, 13 (three builds, each after a round of fixes; 2.7-3.9 h each) |
-| level 3: a dependency resolver, 87 tests | **58, 63** | not run |
+| level 1: 8 utility functions in 4 modules, 64 tests | **62, 62** | 50, 30, 47 (90 min per task, about 1.8 h per run) |
+| calc_go: a calculator in Go, 32 tests | **21, 21, 18** | 16, 15, 13 (three builds, each after a round of fixes; 2.7-3.9 h each) |
+| level 3: a dependency resolver, 87 tests | **63, 61** | not run |
 
-- Drafts can only check what the spec shows by example: level 3's spec has examples for 3 of its 8 requirements, every run passed all of them,
-  and one run never wrote the function of a requirement without examples. `codebot check-spec` lists such requirements before you start.
-- Level 1 was run through codebot itself (`codebot bench run --level 1 --mode drafts`): 63 and 60, round for round the same as the loop
-  drafts mode was ported from (`bench/baselines/`). calc_go and level 3 come from that loop only; for Go, drafts mode's wording differs from
-  the Go-only original and has not been run with the model yet.
+- Drafts can only check what the spec shows by example: level 3's spec has examples for 3 of its 8 requirements, and most of the tests the
+  runs miss belong to the other 5. `codebot check-spec` lists such requirements before you start.
+- The drafts numbers are codebot itself (`codebot bench run --mode drafts`, 2026-10-20). The plain loop drafts mode was ported from
+  (`bench/baselines/`) scored 63 and 60, 22, 6 and 22, and 58 and 63. The level 3 runs lost rounds to a bug in the loop stop, fixed since and
+  not yet re-measured; single runs still vary a lot (calc_go has ranged from 1 to 22 across versions and seeds).
 - The task pipeline's weak spot is the model writing impossible or weak acceptance tests for itself (`docs/dev/ROADMAP.md`).
 - Which local model to use: `docs/MODEL_EVAL.md`.
 

@@ -97,6 +97,13 @@ def _call(a):
     if "raises" in a: return f"{label} returned {_short(got)} instead of raising {a['raises']}"
     return None if _same(got, a["expect"]) else f"{label} returned {_short(got)}, expected {_short(a['expect'])}"
 
+def _err(s, n=400):
+    """A failing command's stderr for the feedback: paths inside the code dir made relative (a Go panic names every frame by its absolute path),
+    and when long, its start and its end (a Go panic's message is its first line, a Python traceback's its last). Keeping only the last 150
+    characters showed the model two bare stack frames of a panic and never its message (calc_go, 2026-10-20)."""
+    s = s.strip().replace(os.getcwd() + os.sep, "")
+    return s if len(s) <= n else s[:n // 2] + " ... " + s[-(n // 2):]
+
 def _run(a):
     argv = [sys.executable if a["argv"][0] in PY else a["argv"][0], *a["argv"][1:]]
     try: p = subprocess.run(argv, input=a.get("stdin"), capture_output=True, text=True, timeout=60)
@@ -105,7 +112,7 @@ def _run(a):
         return f"{c} does not exist yet" if "/" in c else f"command not available in the sandbox: {c}"
     except subprocess.TimeoutExpired: return f"{' '.join(a['argv'])} timed out after 60 s"
     cmd = " ".join(a["argv"]); out = p.stdout.strip(); want_exit = a.get("exit", 0)
-    if p.returncode != want_exit: return f"{cmd} exited {p.returncode}, expected {want_exit}" + (f" (stderr: {p.stderr.strip()[-150:]})" if p.stderr.strip() else "")
+    if p.returncode != want_exit: return f"{cmd} exited {p.returncode}, expected {want_exit}" + (f" (stderr: {_err(p.stderr)})" if p.stderr.strip() else "")
     if "stdout" in a and out != a["stdout"].strip(): return f"{cmd} printed {_short(out)}, expected {_short(a['stdout'].strip())}"
     for s in ([a["stdout_contains"]] if isinstance(a.get("stdout_contains"), str) else a.get("stdout_contains", [])):
         if s not in p.stdout: return f"{cmd} output does not contain {_short(s)} (got {_short(out)})"

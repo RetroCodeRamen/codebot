@@ -82,6 +82,9 @@ trial 2 (time cap after 23 rounds; delivered round 11). The same rounds and scor
 (`docs/MODEL_EVAL.md`, "Drafts mode through the benchmark"). Trial 1 is a VERIFICATION_GAP: its one miss is requirement 7, which the spec gives
 no example for.
 
+Latest drafts runs (2026-10-20, commit 65389f3, 45 min per run, runs `*-drafts4-*`): level 1 62 and 62/64 (held), level 3 63 and 61/87,
+calc_go 21, 21 and 18/32 (`docs/MODEL_EVAL.md`, "The prompt fix and the loop stop, measured").
+
 ## First full-budget run (2026-10-15, ornith:9b, GPU auto-offload, `codebot bench run --level 1 --repeats 3`, run `20261015-180429-l1-full`)
 
 90 min per task, 3 independent trials (private memory each), 5.4 h wall. Independent (hidden-test) pass rate per trial 78%, 47%, 73% (median 73%, below the 80% bar, so no level is held); internal verification 88%, 62%, 100%; 20/24 tasks verified; 0 timeouts (no task came near 90 min: max 48 min); 60 retries, 5 splits; CPU about 89 C mean, 96 C max.
