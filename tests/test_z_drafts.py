@@ -24,7 +24,9 @@ Build `mathx.py` in Python 3 (standard library only).
 GOOD = "### mathx.py\n```python\ndef double(n):\n    return 2 * n\n\ndef half(n):\n    return n / 2\n```\n"
 HALF = "### mathx.py\n```python\ndef double(n):\n    return n + 2\n```\n"           # double(2) holds, double(-3) does not
 BROKEN = "### mathx.py\n```python\ndef double(n)\n    return 2 * n\n```\n"
-def module_reply(sol, names): return "\n".join(f"### {n}\n```python\n{open(os.path.join(sol, n)).read()}```" for n in names)
+def read(path):
+    with open(path) as f: return f.read()
+def module_reply(sol, names): return "\n".join(f"### {n}\n```python\n{read(os.path.join(sol, n))}```" for n in names)
 
 class TestExtract(unittest.TestCase):
     N = ["fileutil.py", "textutil.py"]
@@ -91,10 +93,10 @@ class Proj(Sandboxed):
 
 class TestRounds(Proj):
     def test_a_stalled_draft_restarts_and_the_best_version_is_delivered_and_committed(self):
-        self.fake.script = [HALF, HALF, HALF, GOOD]
+        self.set_env(DRAFTS_PATIENCE="2"); self.fake.script = [HALF, HALF, HALF, GOOD]
         evs = self.run_until_done()
         self.assertEqual([e["event"] for e in evs], ["round", "round", "round", "all_done"])
-        self.assertEqual(evs[-1], {"event": "all_done", "stop": "examples pass", "delivered_round": 4, "examples": "2/2", "rounds": 4, "drafts": 2, "minutes": evs[-1]["minutes"]})
+        self.assertEqual(evs[-1], {"event": "all_done", "stop": "examples pass", "delivered_round": 4, "examples": "2/2", "declared": "2/2", "rounds": 4, "drafts": 2, "minutes": evs[-1]["minutes"]})
         p = self.user_prompts(); first = D.first_prompt(SPEC, ["mathx.py"], {}, ["README.md"])
         self.assertEqual((p[0], p[3]), (first, first))                                            # a fresh draft starts from the spec alone
         self.assertIn("FAIL: double(-3) returned -1, expected -6", p[1]); self.assertIn("1 of 2 examples from the specification fail", p[1])
@@ -102,13 +104,14 @@ class TestRounds(Proj):
         self.assertEqual([r["options"]["seed"] for r in rq], [1001, 1002, 1003, 1004])
         self.assertEqual((rq[0]["options"]["temperature"], rq[0]["options"]["num_predict"], rq[0]["think"], rq[0]["messages"][0]["content"]), (0.2, 6000, False, D.system_prompt("Python")))
         with open(os.path.join(self.code, "mathx.py")) as f: self.assertIn("return 2 * n", f.read())
-        self.assertEqual(self.log()[:2], ["drafts: round 4 (draft 2) builds, 2 of 2 spec examples pass", "drafts: round 1 (draft 1) builds, 1 of 2 spec examples pass"])
+        self.assertEqual(self.log()[:2], ["drafts: round 4 (draft 2) builds, 2 of 2 spec examples pass, 2 of 2 declared names defined",
+                                          "drafts: round 1 (draft 1) builds, 1 of 2 spec examples pass, 1 of 2 declared names defined"])
         s = D.summary(self.proj())
         self.assertEqual((s["rounds"], s["drafts"], s["repairs"], s["unchanged"], s["delivered_round"], s["uncovered"]), (4, 2, 2, 2, 4, [2]))
         rep = D.report(self.proj()); self.assertIn("**2 of 2** spec examples pass", rep); self.assertIn("requirement(s) 2 of SPEC.md have no examples", rep)
         self.assertEqual(D.step(self.proj())["event"], "all_done"); self.assertEqual(len(self.fake.requests), 4)    # a finished run stays finished
     def test_a_worse_later_draft_never_replaces_the_delivered_version(self):
-        self.set_env(DRAFTS_MAX_ROUNDS="5"); self.fake.script = [HALF, BROKEN, BROKEN, BROKEN, BROKEN]
+        self.set_env(DRAFTS_MAX_ROUNDS="5", DRAFTS_PATIENCE="2"); self.fake.script = [HALF, BROKEN, BROKEN, BROKEN, BROKEN]
         evs = self.run_until_done()
         self.assertEqual((evs[-1]["event"], evs[-1]["stop"], evs[-1]["delivered_round"], evs[-1]["examples"]), ("finished_incomplete", "round cap", 1, "1/2"))
         with open(os.path.join(self.code, "mathx.py")) as f: self.assertIn("return n + 2", f.read())
@@ -116,8 +119,34 @@ class TestRounds(Proj):
         self.assertTrue(all("The code does not compile" not in x for x in p[:4]))           # a draft continues from its best version, not from a worse reply
         self.assertEqual(p[3], D.first_prompt(SPEC, ["mathx.py"], {}, ["README.md"])); self.assertIn("The code does not compile", p[4])
         self.assertIn("still gets wrong", D.report(self.proj())); self.assertIn("FAIL: double(-3)", D.report(self.proj()))
+    def test_one_repair_that_does_not_improve_starts_a_fresh_draft_by_default(self):
+        self.fake.script = [HALF, HALF, GOOD]
+        evs = self.run_until_done(); p = self.user_prompts()
+        self.assertEqual([e["event"] for e in evs], ["round", "round", "all_done"]); self.assertEqual(evs[1]["restart_next"], True)
+        self.assertEqual(p[2], D.first_prompt(SPEC, ["mathx.py"], {}, ["README.md"])); self.assertEqual(evs[-1]["drafts"], 2)
+    def test_a_declared_name_must_exist_even_when_every_example_passes(self):
+        only_double = "### mathx.py\n```python\ndef double(n):\n    return 2 * n\n```\n"
+        self.fake.script = [only_double, GOOD]
+        evs = self.run_until_done(); p = self.user_prompts()
+        self.assertEqual([e["event"] for e in evs], ["round", "all_done"])
+        self.assertIn("All files compile and all 2 examples from the specification pass, but these names the specification declares are not defined: `half` (mathx.py).", p[1])
+        self.assertEqual(D.load(self.proj())["declared"], {"double": "mathx.py", "half": "mathx.py"})
+    def test_names_are_read_from_the_syntax_tree_and_builtins_never_count(self):
+        path = os.path.join(self.tmp, "m.py")
+        with open(path, "w") as f: f.write("import os, json as j\nfrom x import y as z\ntry:\n    def a(): pass\nexcept ImportError:\n    def a(): pass\nif True:\n    class B: pass\nC = D = 1\ndef outer():\n    def inner(): pass\n")
+        self.assertEqual(D.defined(path), {"os", "j", "z", "a", "B", "C", "D", "outer"})
+        with open(path, "w") as f: f.write("def broken(:\n")
+        self.assertIsNone(D.defined(path))
+        spec = "Build `g.py`.\n\n1. `run(x)` returns `str(x)`; it raises `BadInput` (a `ValueError`) and `GraphError`."
+        self.assertEqual(D.declared(spec, ["g.py"]), {"GraphError": "g.py", "run": "g.py"})
+        self.assertEqual(D.declared(spec, []), {}); self.assertEqual(D.declared(spec, ["main.go"]), {})
+    def test_a_repair_reply_is_capped_once_a_complete_reply_has_built(self):
+        self.set_env(DRAFTS_MAX_ROUNDS="3", DRAFTS_PATIENCE="3"); self.fake.script = [("I am thinking", "length"), HALF, HALF]
+        self.run_until_done()
+        self.assertEqual([r["options"]["num_predict"] for r in self.fake.requests], [6000, 6000, 3000])     # a cut-off reply sets no cap; the fake's replies are 20 tokens
+        self.assertEqual(D.output_cap({"max_complete": 2400}, {"num_predict": 6000}), 6000); self.assertEqual(D.output_cap({"max_complete": 1200}, {"num_predict": 6000}), 3600)
     def test_equal_scores_deliver_the_latest(self):
-        self.set_env(DRAFTS_MAX_ROUNDS="2"); self.fake.script = [HALF, HALF.replace("n + 2", "2 + n")]
+        self.set_env(DRAFTS_MAX_ROUNDS="2", DRAFTS_PATIENCE="2"); self.fake.script = [HALF, HALF.replace("n + 2", "2 + n")]
         self.run_until_done()
         with open(os.path.join(self.code, "mathx.py")) as f: self.assertIn("2 + n", f.read())
     def test_feedback_for_no_code_missing_files_and_a_cut_off_reply(self):
@@ -147,7 +176,7 @@ class TestRounds(Proj):
         with open(os.path.join(self.code, "README.md")) as f: self.assertEqual(f.read(), "base\n")
         self.assertTrue(os.path.exists(os.path.join(self.code, "keep.py")))                        # never touches a file it did not write
     def test_a_hanging_example_is_redone_one_at_a_time(self):
-        self.set_env(DRAFTS_MAX_ROUNDS="1"); self.fake.script = ["### mathx.py\n```python\ndef double(n):\n    while n < 0: pass\n    return 2 * n\n```"]
+        self.set_env(DRAFTS_MAX_ROUNDS="1"); self.fake.script = ["### mathx.py\n```python\ndef double(n):\n    while n < 0: pass\n    return 2 * n\n\ndef half(n):\n    return n / 2\n```"]
         real = D.run_examples
         def short(proj, ws, checks, env=None):                       # the real timeouts are 120 s and 20 s; the same logic with 2 s and 1 s
             orig = D.sandbox.execute
@@ -161,21 +190,21 @@ class TestRounds(Proj):
 
 class TestJudgingParity(Proj):
     """evaluate() gives bare_py.evaluate()'s verdict and feedback, word for word, on level_01."""
-    spec = open(os.path.join(CAT, "level_01", "SPEC.md")).read()
+    spec = read(os.path.join(CAT, "level_01", "SPEC.md"))
     def test_same_verdicts_and_feedback_as_the_measured_loop(self):
         import bare_py as P
         shutil.copyfile(os.path.join(CAT, "level_01", "seed", "README.md"), os.path.join(self.code, "README.md"))
         p = self.proj(); st = D.init(p); L = P.load("level_01"); sol = os.path.join(CAT, "level_01", "reference_solution")
-        good = {n: open(os.path.join(sol, n)).read() for n in L["files"]}
+        good = {n: read(os.path.join(sol, n)) for n in L["files"]}
         versions = [good, {**good, "textutil.py": good["textutil.py"] + "\ndef broken(:\n"}, {k: v for k, v in good.items() if k != "fileutil.py"},
                     {**good, "fileutil.py": good["fileutil.py"].replace("def safe_filename(", "def _old_safe_filename(") + "\ndef safe_filename(name, max_len=255):\n    return name\n"}]
         for v in versions:
             mine, theirs = D.evaluate(p, st, v), P.evaluate(L, os.path.join(self.tmp, "bare"), v)
-            self.assertEqual(mine, theirs)
-        self.assertEqual(D.evaluate(p, st, good), (True, 33, ""))
+            self.assertEqual((mine[0], mine[1], mine[3]), theirs)
+        self.assertEqual(D.evaluate(p, st, good), (True, 33, 8, ""))
 
 class TestCoverage(unittest.TestCase):
-    def spec(self, lv): return open(os.path.join(CAT, lv, "SPEC.md")).read()
+    def spec(self, lv): return read(os.path.join(CAT, lv, "SPEC.md"))
     def test_requirements_without_examples_are_listed(self):
         c = D.coverage(self.spec("level_03")); self.assertEqual((c["examples"], c["uncovered"], c["files"]), (6, [1, 3, 6, 7, 8], ["depgraph.py"]))
         self.assertIn("Nothing will check requirements 1, 3, 6, 7, 8", D.coverage_text(c))
@@ -217,8 +246,8 @@ class TestSupervisor(Sandboxed):
         r = self.cli("start", self.name); self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         end = time.time() + 60
         while time.time() < end and os.path.exists(os.path.join(self.state, ".active")): time.sleep(0.5)
-        titles = [m["title"] for m in self.ntfy.msgs]; self.assertIn(f"codebot: {self.name} COMPLETE", titles, open(os.path.join(self.state, "loop.log")).read()[-3000:])
-        done = [m for m in self.ntfy.msgs if "COMPLETE" in m["title"]][0]["body"]; self.assertIn("2/2 spec examples pass (round 1)", done); self.assertIn("requirement(s) 2 have no examples", done)
+        titles = [m["title"] for m in self.ntfy.msgs]; self.assertIn(f"codebot: {self.name} COMPLETE", titles, read(os.path.join(self.state, "loop.log"))[-3000:])
+        done = [m for m in self.ntfy.msgs if "COMPLETE" in m["title"]][0]["body"]; self.assertIn("2/2 spec examples pass, 2/2 declared names defined (round 1)", done); self.assertIn("requirement(s) 2 have no examples", done)
         wt = os.path.join(self.home, "workspaces", self.name)                                           # the code dir has history: the run worked in a worktree on codebot/<name>
         log = subprocess.run(["git", "-C", self.code, "log", "--format=%s", f"codebot/{self.name}"], capture_output=True, text=True).stdout
         self.assertIn("drafts: round 1 (draft 1) builds, 2 of 2 spec examples pass", log); self.assertTrue(os.path.isfile(os.path.join(wt, "mathx.py")))
@@ -243,14 +272,14 @@ class TestBenchmark(CapCase):
             self.assertEqual((td["outcome"], td["reference"]["passed"], td["reference"]["total"], td["drafts"]["delivered_examples"], td["plan"]["mode"]), ("COMPLETE", 64, 64, 33, "drafts"))
             self.assertEqual(td["plan"]["coverage"]["uncovered"], [7])
         self.assertEqual(sorted(r["options"]["seed"] for r in self.fake.requests), [1001, 2001])
-        env = open(os.path.join(self.home, "projects", tds[0]["project"], "project.env")).read()
+        env = read(os.path.join(self.home, "projects", tds[0]["project"], "project.env"))
         self.assertIn('DRAFTS_MINUTES="45"', env); self.assertIn('WORKFLOW="drafts"', env)
         rows = reports.build(store)["trials"]; self.assertEqual([r["examples"] for r in rows], ["33/33", "33/33"])
         md = reports.markdown(reports.build(store)); self.assertIn("| trial | outcome | spec examples | rounds | drafts | independent |", md); self.assertIn("time per run **45 min**", md)
         self.assertNotIn("## Tasks", md); self.assertIn("spec examples 33/33, 33/33, independent pass rate 100%", reports.one_line(store))
     def test_a_gap_between_the_examples_and_the_hidden_tests_is_classified(self):
         from codebot.capbench import classify as CL
-        t = {"plan": {"mode": "drafts", "ok": True}, "drafts": {"delivered_round": 3, "delivered_examples": 6, "examples_total": 6, "uncovered": [8]},
+        t = {"plan": {"mode": "drafts", "ok": True}, "drafts": {"delivered_round": 3, "delivered_examples": 6, "examples_total": 6, "complete": True, "uncovered": [8]},
              "reference": {"pass_rate": 0.7, "by_requirement": {"R8": {"passed": 0, "total": 12}}, "failing": ["t1"]}, "tasks": []}
         v = CL.classify_project(t, [{"id": "R8", "title": "subset"}])
         self.assertEqual([x["category"] for x in v], ["VERIFICATION_GAP"]); self.assertEqual(v[0]["evidence"]["uncovered_spec_items"], [8])

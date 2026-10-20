@@ -395,7 +395,7 @@ def verify_trial(ctx, tr, td, proj):
     td["calls_sample"] = MT.model_calls(proj)[:2000]
     if ctx.state["mode"] == "drafts":
         d = td["drafts"] = DR.summary(proj)
-        td["outcome_hint"] = "COMPLETE" if d.get("delivered_round") and d.get("delivered_examples") == d.get("examples_total") else ("PARTIAL" if d.get("delivered_round") else "FAILED")
+        td["outcome_hint"] = "COMPLETE" if d.get("complete") else ("PARTIAL" if d.get("delivered_round") else "FAILED")
         for fn in ("state.json", "rounds.jsonl", "summary.json"):                                    # evidence: every round's record (the replies stay in the trial project)
             if os.path.isfile(DR.dpath(proj, fn)): os.makedirs(ctx.store.evidence_dir(tr["trial_id"]), exist_ok=True); shutil.copyfile(DR.dpath(proj, fn), os.path.join(ctx.store.evidence_dir(tr["trial_id"]), f"drafts-{fn}"))
     if ctx.state["mode"] not in ("minimal", "drafts") and os.path.isdir(proj.p("checks")):

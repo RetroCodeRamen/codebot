@@ -31,7 +31,7 @@ Repo: the codebot checkout (here `~/Documents/Development/codebot`) (git, branch
 | `modes/<name>/` | `code` (default) and `re` (reverse engineering with REA, `extends` code). `mode.json` + prompts (`plan.md`, `plan-quick.md`, `plan-auto.md`, `plan-repair.md`, `work.md`) + `worker.md` + notes + `verifiers/` |
 | `config/codebot.env` | all settings (documented inline). `config/Modelfile` (num_ctx 32768), `config/opencode.json`, `config/opencode-re.json` (generated) |
 | `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json`. Shared by all projects unless a project sets `MEMORY_DIR` (benchmark trials do: `projects/<trial>/memory`). Committed to git but rewritten at run time, so runs leave it modified |
-| `tests/` | 519 test methods (`tests/run.sh [file]`, about 7 min for all, almost no CPU; full suite green on 2026-10-19). `test_z_drafts.py` covers drafts mode. `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
+| `tests/` | 523 test methods (`tests/run.sh [file]`, about 7 min for all, almost no CPU; full suite green on 2026-10-19). `test_z_drafts.py` covers drafts mode. `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
@@ -322,6 +322,10 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
 - Real-model check (run `20261019-200101-drafts-l1`, commit 3481000, `codebot bench run --level 1 --mode drafts --task-minutes 45 --repeats 2
   --seed 1`): 63/64 and 60/64, the baseline's numbers, round for round (seed 1: all 21 rounds the same; seed 2: the first 23 of 24, one round
   fewer before the cap because sandbox runs and commits count in a round's time). First level the benchmark reports as held (median 96%).
+- Tuned from the 13 recorded runs (MODEL_EVAL "Tuning drafts mode"): `DRAFTS_PATIENCE=1` (a repair that does not improve ends the draft),
+  a reply cap of 3x the longest complete reply that built (at least 3000 tokens), and declared Python names (functions with a signature, a
+  one-module spec's exceptions) must exist (`drafts.declared` / `drafts.defined`, counted like examples; `check-spec` lists them). Measured
+  with the real model next: calc_go x3, level_03 x2, level_01 x2 (45 min each).
 - Not done yet: the Go path with the real model (calc_go; only fake-model tests); reruns of a finished project (`start` refuses; make a new
   project); subdirectories (files are flat); requirements without examples are only listed, never checked.
 

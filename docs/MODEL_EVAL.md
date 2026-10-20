@@ -246,6 +246,20 @@ the sandbox, the supervisor and the state kept between steps change nothing the 
 the first time the benchmark reports a level as held (median 96%, the bar is 80%). The one miss of seed 1 is requirement 7 (`is_valid_ipv4`
 rejecting non-ASCII digits), which has no example in the spec. The Go path of drafts mode (calc_go) has only been tested with the fake model.
 
+**Tuning drafts mode from the recorded rounds (2026-10-19)** [V for the analysis; the effect is not yet measured]: all 13 recorded loop runs
+(calc_go batches 2-3, level_01, level_03) have every round's code, so three questions could be answered without the model. (1) Which rounds
+gave a new best version (the one a run delivers)? 8 were fresh drafts, 14 a draft's first repair, 3 a second repair and 1 a third, and every
+one of those later repairs came right after a repair that had improved. The 54 repairs that followed a repair that did not improve (34 of them
+after the model sent the program back unchanged) improved their draft once and never gave a new best. So a draft now ends at its first repair
+that does not improve (`DRAFTS_PATIENCE=1`, was 2), which frees about half of all repair rounds for fresh drafts. (2) 10 replies ran to the
+6000-token cap (12.5-15 min each) and none was useful, while no complete reply that built was longer than 2.93 times the longest complete
+reply that had built before it in the same run. A reply's cap is now 3 times that length, at least 3000 tokens (6000 until something has built):
+it would have cut none of the useful replies and shortened 3 of the runaways by 6-7.5 min each and 2 by about 1 min. (3) In Python, a version must define every
+function the spec declares and, for a one-module spec, every exception it names (read from the syntax tree, so no model code runs; builtins such
+as `str` in `str(error)` do not count). Only one recorded version lacked one, and it was the one level_03 seed 1 delivered: all 6 examples
+passed and the run stopped without `resolve_subset` (requirement 8: 0 of 12 hidden tests). These change what the model sees, so drafts mode no
+longer replays the baseline runs; the prompts are otherwise the same.
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

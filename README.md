@@ -14,7 +14,7 @@ Most agent harnesses assume a frontier model and fall apart on a 9B one. codebot
 
 Both run unattended, checkpoint in git, and write you a report in the morning.
 
-**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (519 tests), but it is slow by design, and how
+**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (523 tests), but it is slow by design, and how
 far it gets is limited by the worked examples in your spec (drafts) or by how good a 9B model is at writing tests for its own work (tasks).
 Nothing leaves your machine unless you turn notifications on.
 
@@ -93,10 +93,11 @@ used by the benchmark; a `codebot plan-auto` command for your own projects is pl
 `` `slugify("Hello World")` is `"hello-world"` `` (a call of a function, with "`textutil.py` provides `slugify(text)`" saying where it lives),
 `` `parse("")` raises `ValueError` ``, or `` `calc 2 + 3` prints `5` `` (a command line; "`go build -o calc .`" says how to build it).
 `codebot new` copies the spec and prints which requirements have no examples. Each round the model gets the spec (and, when it is repairing,
-the current code and what failed) and replies with every file whole. The harness compiles it and runs the examples in the sandbox. After
-`DRAFTS_PATIENCE` rounds without improvement the draft is dropped and the next round starts fresh from the spec. Each new best version
-(it builds, then the most examples pass) is committed to the branch `codebot/<project>`. The run stops when every example passes or after
-`DRAFTS_MINUTES`. Limits: it only knows what the examples show, and it sends the whole code in every prompt, so it is for programs up to about
+the current code and what failed) and replies with every file whole. The harness compiles it and runs the examples in the sandbox; in Python
+every function the spec declares (and, for a one-module spec, every exception it names) must also exist. A repair that does not improve the
+draft ends it (`DRAFTS_PATIENCE`) and the next round starts fresh from the spec; a repair reply may be at most 3 times as long as the longest
+complete reply so far (at least 3000 tokens), which stops runaway replies early. Each new best version (it builds, then the most checks pass)
+is committed to the branch `codebot/<project>`. The run stops when every check passes or after `DRAFTS_MINUTES`. Limits: it only knows what the examples show, and it sends the whole code in every prompt, so it is for programs up to about
 60 KB of spec and code.
 
 **Tasks** (`codebot plan`):
