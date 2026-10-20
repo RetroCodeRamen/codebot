@@ -499,10 +499,30 @@ def execute(ctx):
         unload_model(ctx.home, ctx.cfg.get("model"), ctx.cfg.get("ollama_port")) if ctx.model_check else None
     return ctx.store.load()["status"]
 
+def detached_cmd(home, run_id, log):
+    """The command that starts a runner. Under a systemd unit (the watchdog's oneshot service, which kills what it started when it ends: on
+    2026-10-20 a resumed runner died at once and left its trial's loop running alone) the runner gets its own transient unit, as a loop does."""
+    cmd = [sys.executable, os.path.join(home, "bin", "codebot-bench"), "--home", home, "resume", run_id, "--foreground"]
+    if os.environ.get("INVOCATION_ID") and shutil.which("systemd-run"):
+        return ["systemd-run", "--user", "--quiet", "--collect", f"--unit=codebot-bench-{run_id}-{int(time.time())}",
+                f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}", *cmd]
+    return cmd
+
 def start_detached(home, run_id):
-    """Run `execute` in its own session (survives the shell closing); progress in runner.log. Returns the pid."""
-    store = RS.Store(home, run_id); os.makedirs(store.dir, exist_ok=True)
-    with open(os.path.join(store.dir, "runner.log"), "a") as log:                                         # the child keeps its own copy of the handle
-        p = subprocess.Popen([sys.executable, os.path.join(home, "bin", "codebot-bench"), "--home", home, "resume", run_id, "--foreground"], stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    """Run `execute` in its own session (survives the shell closing) or its own systemd unit; progress in runner.log. Returns the pid."""
+    store = RS.Store(home, run_id); os.makedirs(store.dir, exist_ok=True); log = os.path.join(store.dir, "runner.log")
+    cmd = detached_cmd(home, run_id, log)
+    if cmd[0] == "systemd-run":
+        try:
+            subprocess.run(cmd, check=True, stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+            for _ in range(100):                   # execute() writes its own pid; wait for it so a cancel right after a start finds the runner
+                if store.runner_alive(): break
+                time.sleep(0.1)
+            return int(RS.read_text(store.pid_path()).strip())
+        except (OSError, ValueError, subprocess.SubprocessError): pass
+        if store.runner_alive(): return int(RS.read_text(store.pid_path()).strip())
+        cmd = cmd[cmd.index(sys.executable):]                                                                # no user systemd: a plain session
+    with open(log, "a") as fp:                                                                              # the child keeps its own copy of the handle
+        p = subprocess.Popen(cmd, stdout=fp, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
     with open(store.pid_path(), "w") as f: f.write(str(p.pid))
     return p.pid

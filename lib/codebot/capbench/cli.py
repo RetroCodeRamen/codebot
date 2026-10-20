@@ -49,6 +49,8 @@ def cmd_resume(home, a):
     store = _store(home, a.run); st = store.load()
     if store.runner_alive() and not a.foreground: print(f"{store.run_id} is already running (pid {RS.read_text(store.pid_path()).strip()})"); return 0
     if st["status"] == "finished": print(f"{store.run_id} already finished"); return 0
+    if a.auto and (store.cancel_requested() or st["status"] == "cancelled" or not os.path.exists(store.active_path())):     # 2026-10-20: the watchdog resumed a run in the second its cancel ended
+        print(f"not resuming {store.run_id}: it was cancelled or is not active (codebot bench resume {store.run_id} resumes it)"); return 0
     unfinished = sum(1 for t in st["trials"] if t["phase"] != "finished"); print(f"resuming {store.run_id}: {unfinished} unfinished trial(s); finished trials and consumed task time are kept")
     if a.foreground: return _go(home, store.run_id)
     pid = RN.start_detached(home, store.run_id); print(f"running in the background (pid {pid})"); return 0
@@ -149,6 +151,7 @@ def main(argv, home):
     rp = sub.add_parser("report"); rp.add_argument("run", nargs="?"); rp.add_argument("--json", action="store_true"); rp.add_argument("--history", action="store_true"); rp.add_argument("--level-filter", type=int, dest="level_filter")
     rp.add_argument("--compare", nargs=2, metavar="RUN"); rp.add_argument("--reclassify", action="store_true")
     rs = sub.add_parser("resume"); rs.add_argument("run", nargs="?"); rs.add_argument("--foreground", action="store_true")
+    rs.add_argument("--auto", action="store_true", help="the watchdog's resume: a run that was cancelled or is no longer active is left alone")
     c = sub.add_parser("cancel"); c.add_argument("run", nargs="?")
     v = sub.add_parser("validate", help="self-test the catalog's oracles (no model)"); v.add_argument("--levels")
     cv = sub.add_parser("coverage"); cv.add_argument("--levels")

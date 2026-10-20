@@ -433,7 +433,7 @@ cmd_resume_all() { # at login and every 5 min (watchdog): restart loops that sho
   done
   for d in "$CODEBOT_HOME"/bench/results/ladder/*/; do   # benchmark runs whose runner died (reboot, crash): resume keeps finished trials and every task's consumed time
     [[ -f "$d/.active" ]] || continue; local r; r=$(basename "$d")
-    local out; out=$("$CODEBOT_HOME/bin/codebot-bench" --home "$CODEBOT_HOME" resume "$r" 2>&1) || continue   # the runner checks for itself whether it is alive (pid reuse after a reboot)
+    local out; out=$("$CODEBOT_HOME/bin/codebot-bench" --home "$CODEBOT_HOME" resume "$r" --auto 2>&1) || continue   # the runner checks for itself whether it is alive (pid reuse after a reboot); --auto never undoes a cancel
     [[ "$out" == resuming* ]] && { echo "$out" | head -1; notify "codebot: benchmark $r resumed" "The benchmark runner had died. Resumed it; finished trials and consumed task time are kept." high recycle 1; }
   done
 }

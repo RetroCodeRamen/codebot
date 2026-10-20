@@ -325,9 +325,17 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
 - Tuned from the 13 recorded runs (MODEL_EVAL "Tuning drafts mode"): `DRAFTS_PATIENCE=1` (a repair that does not improve ends the draft),
   a reply cap of 3x the longest complete reply that built (at least 3000 tokens), and declared Python names (functions with a signature, a
   one-module spec's exceptions) must exist (`drafts.declared` / `drafts.defined`, counted like examples; `check-spec` lists them). Measured
-  with the real model next: calc_go x3, level_03 x2, level_01 x2 (45 min each).
-- Not done yet: the Go path with the real model (calc_go; only fake-model tests); reruns of a finished project (`start` refuses; make a new
-  project); subdirectories (files are flat); requirements without examples are only listed, never checked.
+  2026-10-20 (MODEL_EVAL "The tuned drafts mode, measured"): level_01 63 and 61/64, level_03 74 and 44/87, calc_go 6, 21 and 1/32.
+- calc_go lost its time to replies that ran to the token cap. Since then (42e6cd9 and the next commit): the first prompt names the files to
+  write and asks for no other (asked for "every file", the model wrote README.md and go.mod first); a cut-off block never replaces a complete
+  block of the same file; and the reply is streamed and stopped once it repeats itself (`drafts.loop_watch`: its last 8 non-blank lines
+  appeared twice before; every recorded runaway was such a loop; `ollama.chat(stop_if=...)`, the only streaming call). Not yet measured.
+- The watchdog (`codebot resume-all`, every 5 min) resumed a benchmark run in the second its cancel finished, and the runner it started died
+  with the oneshot service, leaving the trial's loop running alone (2026-10-20, stopped by hand). Now `resume --auto` (the watchdog's) never
+  resumes a cancelled or inactive run, and a runner started under systemd gets its own transient unit (`runner.detached_cmd`). To stop a
+  benchmark for good: `codebot bench cancel <run>`; check `ls bench/results/ladder/*/.active projects/*/.active` afterwards.
+- Not done yet: reruns of a finished project (`start` refuses; make a new project); subdirectories (files are flat); requirements without
+  examples are only listed, never checked.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

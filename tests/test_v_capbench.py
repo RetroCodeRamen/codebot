@@ -263,6 +263,12 @@ class TestCli(CapCase):
         rc, out = self.run_cli("status"); self.assertIn("dry", out); rc, out = self.run_cli("status", "dry"); self.assertIn("L01-r1", out)
         rc, out = self.run_cli("report", "dry"); self.assertIn("NOT STARTED", out)
         st = RS.Store(self.home, RS.resolve(self.home, "dry")).load(); self.assertEqual(st["config"]["task_minutes"], 90.0); self.assertEqual(st["config"]["model"], "codebot-model"); self.assertEqual(len(st["trials"]), 1)
+    def test_the_watchdog_never_undoes_a_cancel(self):
+        rc, out = self.run_cli("run", "--level", "1", "--dry-run", "--name", "w", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(rc, 0, out)
+        store = RS.Store(self.home, RS.resolve(self.home, "w")); open(store.active_path(), "w").close(); store.request_cancel()
+        rc, out = self.run_cli("resume", store.run_id, "--auto"); self.assertEqual(rc, 0); self.assertIn("not resuming", out); self.assertFalse(store.runner_alive())
+        store.clear_cancel(); os.remove(store.active_path())
+        rc, out = self.run_cli("resume", store.run_id, "--auto"); self.assertIn("not resuming", out)                 # no longer active (the runner ended it)
     def test_default_repeats_are_three_for_a_suite_and_one_for_a_single_level(self):
         rc, out = self.run_cli("run", "--levels", "1", "--dry-run", "--name", "a", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(len(RS.Store(self.home, RS.resolve(self.home, "a")).load()["trials"]), 3)
         rc, out = self.run_cli("run", "--level", "1", "--dry-run", "--name", "b", "--driver", "engine", "--allow-env-overrides"); self.assertEqual(len(RS.Store(self.home, RS.resolve(self.home, "b")).load()["trials"]), 1)
@@ -302,7 +308,15 @@ class TestGrowing(CapCase):
 class TestWatchdogAndMenu(unittest.TestCase):
     def test_the_watchdog_resumes_benchmark_runs_and_leaves_trial_projects_to_their_runner(self):
         src = RS.read_text(os.path.join(REPO, "bin", "codebot")); body = src[src.index("cmd_resume_all()"):src.index("cmd_install_service()")]
-        self.assertIn("bench/results/ladder", body); self.assertIn("codebot-bench", body); self.assertIn("cap-*", body)
+        self.assertIn("bench/results/ladder", body); self.assertIn("codebot-bench", body); self.assertIn("cap-*", body); self.assertIn("resume \"$r\" --auto", body)
+    def test_a_runner_started_by_a_systemd_unit_gets_its_own_unit(self):
+        import tempfile; d = tempfile.mkdtemp(); self.addCleanup(__import__("shutil").rmtree, d, True)
+        with open(os.path.join(d, "systemd-run"), "w") as f: f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(os.path.join(d, "systemd-run"), 0o755); saved = dict(os.environ); self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
+        os.environ.pop("INVOCATION_ID", None); plain = RN.detached_cmd("/h", "r1", "/h/log")
+        os.environ.update(INVOCATION_ID="x", PATH=d + os.pathsep + os.environ["PATH"]); unit = RN.detached_cmd("/h", "r1", "/h/log")
+        self.assertEqual(plain[1:], [os.path.join("/h", "bin", "codebot-bench"), "--home", "/h", "resume", "r1", "--foreground"])
+        self.assertEqual(unit[:4], ["systemd-run", "--user", "--quiet", "--collect"]); self.assertTrue(unit[4].startswith("--unit=codebot-bench-r1-")); self.assertEqual(unit[-len(plain):], plain)
     def test_the_menu_has_a_benchmark_submenu_that_calls_the_cli(self):
         src = RS.read_text(os.path.join(REPO, "bin", "codebot-ui")); compile(src, "codebot-ui", "exec"); self.assertIn("def bench_menu", src); self.assertIn('sh("bench"', src); self.assertIn('startswith("cap-")', src)
 

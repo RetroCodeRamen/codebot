@@ -42,7 +42,8 @@ SAFE = re.compile(r"^[A-Za-z_][\w.-]*$")              # the model writes flat fi
 MAX_FILE, MAX_SHOWN = 20_000, 60_000                    # a baseline file larger than this is listed by name only; above MAX_SHOWN in all, drafts mode does not fit
 MAX_TREE_FILES, MAX_TREE_BYTES = 2000, 50 * 1024 ** 2   # the code dir is copied as the baseline: drafts mode is for small projects
 GO_BIN = "/usr/local/go/bin"
-RUNAWAY_FACTOR, RUNAWAY_FLOOR = 3, 3000                  # the output cap of a reply once a complete reply has built (see the module docstring)
+RUNAWAY_FACTOR, RUNAWAY_FLOOR = 3, 3000
+LOOP_LINES, LOOP_REPEATS = 8, 2              # a reply is stopped when its last 8 non-blank lines already appeared twice before (loop_watch)                  # the output cap of a reply once a complete reply has built (see the module docstring)
 EXC = re.compile(r"`([A-Z]\w*(?:Error|Exception))`")
 
 class DraftsError(Exception):
@@ -375,11 +376,34 @@ def output_cap(st, cfg):
     m = st.get("max_complete") or 0
     return min(cfg["num_predict"], max(RUNAWAY_FLOOR, RUNAWAY_FACTOR * m)) if m else cfg["num_predict"]
 
+def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS):
+    """A stop_if for ollama.chat: "loop" once the reply's last `lines` non-blank lines (stripped) have already appeared, as the same run of lines,
+    `repeats` times before it without overlapping. All 22 replies that ran to the token cap in the recorded loop runs (2026-10-18..20) were loops
+    like that: the same dozen comment lines about operator precedence 28 times over, or the same file again and again. This rule stops 21 of
+    them (the 22nd repeats in longer runs) and 2 of the 289 replies that ended on their own."""
+    seen, done, at = {}, [], [0]
+    def check(text):
+        k = text.rfind("\n")
+        if k < at[0]: return None
+        new, at[0] = text[at[0]:k], k + 1
+        for raw in new.split("\n"):
+            s = raw.strip()
+            if not s: continue
+            done.append(s)
+            if len(done) < lines: continue
+            ends = seen.setdefault(tuple(done[-lines:]), []); n, last = 0, len(done)
+            for e in reversed(ends):
+                if e <= last - lines: n, last = n + 1, e
+            ends.append(len(done))
+            if n >= repeats: return "loop"
+        return None
+    return check
+
 def _model_call(proj, st, cfg, rnd, user):
     tw = thermal.wait(proj); cap = output_cap(st, cfg)
     msgs = [{"role": "system", "content": system_prompt(st["language"])}, {"role": "user", "content": user}]
     r = ollama.chat(proj, msgs, temperature=cfg["temperature"], num_predict=cap, timeout=3600, options={"seed": cfg["seed"] * 1000 + rnd},
-                    think=False, role="drafts")
+                    think=False, role="drafts", stop_if=loop_watch())
     return {**r, "thermal_wait": tw, "num_predict": cap}
 
 def step(proj):
@@ -419,8 +443,9 @@ def step(proj):
         except (OSError, RuntimeError, subprocess.SubprocessError) as e: return {"event": "error", "error": f"could not judge or deliver round {rnd}: {e}"[:400]}    # the round is not counted
         score = (built, passed + names)
         rec.update(code=True, files=sorted(got), chars=sum(map(len, got.values())), built=built, examples=passed, declared=names, unchanged=bool(dbest) and files == dbest["files"])
-        if built and r["done_reason"] != "length": st["max_complete"] = max(st.get("max_complete") or 0, r["gen_tokens"])
+        if built and r["done_reason"] not in ("length", "loop"): st["max_complete"] = max(st.get("max_complete") or 0, r["gen_tokens"])
     if r["done_reason"] == "length": fb = "Your last reply was cut off because it was too long.\n\n" + fb
+    if r["done_reason"] == "loop": fb = "Your last reply was stopped because it repeated the same lines over and over.\n\n" + fb
     improved = dbest is None or score > tuple(dbest["score"])
     if improved or score == tuple(dbest["score"]): dbest = {"score": list(score), "files": files, "feedback": fb, "round": rnd}     # continue from the draft's best version (latest among equals)
     stale = 0 if improved else stale + 1
@@ -468,7 +493,8 @@ def summary(proj, st=None):
             "examples_total": st["examples_total"], "delivered_round": b and b["round"], "delivered_draft": b and b["draft"], "delivered_examples": b["examples"] if b else None,
             "declared_total": st.get("declared_total", 0), "delivered_declared": b.get("declared", 0) if b else None, "complete": complete(st),
             "commit": b and b.get("commit"), "files": st["names"], "language": st["language"], "uncovered": st["uncovered"],
-            "cut_off": sum(1 for r in rs if r.get("done_reason") == "length"), "no_code": sum(1 for r in rs if not r.get("code")),
+            "cut_off": sum(1 for r in rs if r.get("done_reason") == "length"), "looped": sum(1 for r in rs if r.get("done_reason") == "loop"),
+            "no_code": sum(1 for r in rs if not r.get("code")),
             "repairs": sum(1 for r in rs if not r.get("fresh")), "unchanged": sum(1 for r in rs if r.get("unchanged")),
             "model_s": round(sum(r.get("secs") or 0 for r in rs), 1), "thermal_s": sum(r.get("thermal_wait") or 0 for r in rs),
             "gen_tokens": sum(r.get("gen_tokens") or 0 for r in rs), "settings": st["settings"]}

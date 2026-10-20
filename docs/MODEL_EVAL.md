@@ -276,6 +276,15 @@ round 5 with 11 of 15 examples, in a run that ended at 3. Changed since (not yet
 for no other (`main.go and any other .go file the program needs` when the spec names none), and a cut-off block no longer replaces a complete
 block of the same file.
 
+**Stopping replies that repeat themselves (2026-10-20)** [V for the analysis; not yet measured end to end]: with the prompt fixed, calc_go seed
+1's first reply began with main.go instead of README.md, but it still ran to the cap, 13 min: the same 12 comment lines about operator
+precedence, 28 times over. All 22 replies that ran to the cap in the recorded runs (the loop baselines and drafts mode) were loops like that.
+drafts mode now streams the reply and stops it once its last 8 non-blank lines have appeared twice before (`drafts.loop_watch`). On the
+recorded replies that stops 21 of the 22, at a median of 32% of their length (about 165 of the 290 model minutes they took), and 2 of the 289
+replies that ended on their own; both were writing their file for the third time, and with the cut-off rule above such a reply is judged on
+the copy before. On the real server, closing the stream stops the generation: after a reply stopped at 6 tokens the next request answered in
+1.4 s (the full 400-token reply takes 44 s). The next repair is told "Your last reply was stopped because it repeated the same lines over and over."
+
 ## Known limits
 
 - Level 1 is pure functions with literal examples, which flatters planners that copy examples; levels 2-3 have fewer focused mutants (79 and 27).

@@ -4,7 +4,7 @@ import http.server, json, os, threading
 
 class FakeOllama:
     def __init__(self, script=None, reject_schema=False, cache=False, ps=None, tags=None):
-        self.script, self.requests, self.reject_schema, self.cache, self.last_text = script or [], [], reject_schema, cache, ""
+        self.script, self.requests, self.reject_schema, self.cache, self.last_text, self.closed_early = script or [], [], reject_schema, cache, "", 0
         self.ps = ps if ps is not None else {"models": []}; self.tags = tags if tags is not None else {"models": [{"name": "codebot-model:latest"}]}
         outer = self
         class H(http.server.BaseHTTPRequestHandler):
@@ -29,6 +29,14 @@ class FakeOllama:
                     else: k = len(os.path.commonprefix([text, outer.last_text]))
                     outer.last_text = text; evaluated = max(5, int((len(text) - k) / 3.0)) + 25; dur = evaluated * 40_000_000     # 25 tok/s
                 out = {"message": {"role": "assistant", "content": content}, "prompt_eval_count": total, "eval_count": 20, "prompt_eval_duration": dur, "eval_duration": 1_000_000_000, "load_duration": 0, "total_duration": 3_000_000_000, "done": True, "done_reason": reason}
+                if body.get("stream"):         # one JSON object per line, a line of the reply per piece, then the final object with an empty message
+                    self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
+                    try:
+                        for piece in content.splitlines(keepends=True):
+                            self.wfile.write((json.dumps({"message": {"role": "assistant", "content": piece}, "done": False}) + "\n").encode()); self.wfile.flush()
+                        self.wfile.write((json.dumps({**out, "message": {"role": "assistant", "content": ""}}) + "\n").encode())
+                    except (BrokenPipeError, ConnectionResetError): outer.closed_early += 1      # the client stopped reading (stop_if)
+                    return
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(json.dumps(out).encode())
         self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H); self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()

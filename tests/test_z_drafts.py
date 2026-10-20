@@ -175,6 +175,23 @@ class TestRounds(Proj):
         self.assertIn("did not contain any file as a line `### <file name>` followed by a ```python code block", p[1])
         self.assertIn("Your last reply was cut off because it was too long.\n\nThese files are missing: other.py.", p[2])
         self.assertIn("Reply with the complete contents of mathx.py and other.py, and no other file.", p[0])
+    def test_a_reply_that_repeats_itself_is_stopped_and_judged_on_its_last_complete_block(self):
+        cycle = "".join(f"# step {i}: think about the order again\n" for i in range(12))
+        looping = GOOD + "Wait, let me redo it.\n### mathx.py\n```python\n" + cycle * 30
+        self.set_env(DRAFTS_MAX_ROUNDS="2"); self.fake.script = ["### mathx.py\n```python\n" + cycle * 30, looping]
+        evs = self.run_until_done(); rs = D.rounds(self.proj())
+        self.assertEqual([(r["done_reason"], r["built"], r["examples"]) for r in rs], [("loop", True, 0), ("loop", True, 2)])   # round 2: the complete block before the loop
+        self.assertEqual(evs[-1]["event"], "all_done"); self.assertEqual(D.summary(self.proj())["looped"], 2)
+        self.assertIn("Your last reply was stopped because it repeated the same lines over and over.\n\nAll files compile, but 2 of 2", self.user_prompts()[1])
+        self.assertLess(len(read(D.dpath(self.proj(), "rounds", "02", "reply.md"))), len(looping) // 4)
+        self.assertEqual([q["stream"] for q in self.fake.requests], [True, True])
+    def test_a_streamed_reply_ends_where_stop_if_says(self):
+        self.fake.script = ["a\nb\nc\nd\n", "a\nb\n"]; msgs = [{"role": "user", "content": "x"}]
+        r = ollama.chat(self.proj(), msgs, stop_if=lambda t: "enough" if t.count("\n") >= 2 else None)
+        self.assertEqual((r["content"], r["done_reason"], r["gen_tokens"]), ("a\nb\n", "enough", 2))
+        r = ollama.chat(self.proj(), msgs, stop_if=lambda t: None)
+        self.assertEqual((r["content"], r["done_reason"], r["gen_tokens"], r["prompt_tokens"]), ("a\nb\n", "stop", 20, 100))
+        self.fake.script = ["whole"]; self.assertEqual(ollama.chat(self.proj(), msgs)["content"], "whole"); self.assertFalse(self.fake.requests[-1]["stream"])
     def test_the_time_cap_counts_only_rounds_and_settings_apply_at_once(self):
         self.set_env(DRAFTS_MINUTES="0"); self.fake.script = [HALF, HALF]
         evs = self.run_until_done()
@@ -205,6 +222,19 @@ class TestRounds(Proj):
         try: self.run_until_done()
         finally: D.run_examples = real
         self.assertEqual(D.load(self.proj())["best"]["feedback"].splitlines()[1:], ["FAIL: double(-3) did not finish within 20 seconds", "1 of 2 assertions failed"])
+
+class TestLoopWatch(unittest.TestCase):
+    def feed(self, text):
+        w = D.loop_watch()
+        for i, c in enumerate(text):
+            if c == "\n" and w(text[:i + 1]): return i + 1
+    def test_a_repeating_run_of_lines_is_stopped_and_ordinary_code_is_not(self):
+        cycle = "".join(f"// idea {i}\n" for i in range(12)); head = "package main\n"
+        at = self.feed(head + cycle * 5); self.assertIsNotNone(at); self.assertLessEqual(at, len(head + cycle * 3))
+        self.assertIsNone(self.feed("".join(f"if err := step{i}(); err != nil {{\n\treturn err\n}}\n" for i in range(40))))   # a short pattern, never the same 8 lines
+        prog = "".join(f"x{i} = {i}\n" for i in range(20))
+        self.assertIsNone(self.feed(prog + "Better:\n\n" + prog))        # a file written twice is no loop
+        self.assertIsNotNone(self.feed(prog * 3))                         # a third copy is
 
 class TestJudgingParity(Proj):
     """evaluate() gives bare_py.evaluate()'s verdict and feedback, word for word, on level_01."""
