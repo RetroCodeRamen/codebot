@@ -16,8 +16,12 @@ def _static(proj, home):
             p = os.path.join(home, "config", fn)
             if os.path.exists(p):
                 with open(p) as f: ocs.append(json.load(f)["provider"]["ollama"]["models"]["codebot-model"]["limit"]["context"])
-        vals = {mf, tokens.num_ctx(proj), *ocs}
-        items.append(("num_ctx explicit and identical (Modelfile, NUM_CTX, opencode configs)", "PASS" if len(vals) == 1 else "FAIL", f"Modelfile={mf} NUM_CTX={tokens.num_ctx(proj)} opencode={ocs}"))
+        model = (proj.get("CODEBOT_MODEL", "codebot-model") or "codebot-model").split(":")[0]
+        own = model == "codebot-model"      # opencode always runs codebot-model (config/Modelfile); NUM_CTX is the context of CODEBOT_MODEL
+        vals = {mf, *ocs} | ({tokens.num_ctx(proj)} if own else set())
+        items.append(("num_ctx explicit and identical (Modelfile, NUM_CTX, opencode configs)", "PASS" if len(vals) == 1 else "FAIL",
+                      f"Modelfile={mf} NUM_CTX={tokens.num_ctx(proj)} opencode={ocs}"
+                      + ("" if own else f"; NUM_CTX belongs to {model}, which opencode does not use (checked against the server below)")))
     except (OSError, AttributeError, KeyError, ValueError) as e: items.append(("num_ctx explicit and identical", "FAIL", f"cannot read config: {e}"))
     ka = proj.get("KEEP_ALIVE", "")
     items.append(("keep_alive configured and sent on every request", "PASS" if re.fullmatch(r"\d+[mh]", ka or "") else "FAIL", f"KEEP_ALIVE={ka!r}"))

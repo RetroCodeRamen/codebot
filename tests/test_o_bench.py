@@ -91,7 +91,7 @@ class TestPreflight(BenchHome):
         with open(os.path.join(self.home, "config", "codebot.env"), "a") as f:
             for k, v in kv.items(): f.write(f"\n{k}={v}")
     def run_pf(self, fake, **cfg):
-        self.fake = fake; self.cfg(OLLAMA_PORT=fake.port, NUM_CTX=32768, KEEP_ALIVE="30m", **cfg)
+        self.fake = fake; self.cfg(**{"OLLAMA_PORT": fake.port, "NUM_CTX": 32768, "KEEP_ALIVE": "30m", **cfg})
         class P:
             home = self.home; name = "pf"; mode = "code"; rundir = self.home; state = self.home
             def __init__(s):
@@ -155,6 +155,13 @@ class TestPreflight(BenchHome):
         with open(os.path.join(self.home, "config", "Modelfile"), "w") as f: f.write("FROM x\nPARAMETER num_ctx 8192\n")
         fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS()); items = self.run_pf(fake)
         self.assertEqual(self.status(items, "num_ctx explicit"), "FAIL")
+    def test_another_model_has_its_own_context(self):
+        # 2026-10-20: this machine runs codebot's requests on a 30B model at 16K, while opencode keeps codebot-model (ornith) at 32K
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(ctx=16384)); items = self.run_pf(fake, CODEBOT_MODEL="big", NUM_CTX=16384)
+        self.assertEqual(self.status(items, "num_ctx explicit"), "PASS")
+        fake.stop(); self.fake = None
+        fake = FakeOllama(lambda m, b: A("finish", summary="x"), cache="hybrid", ps=self.GOOD_PS(ctx=16384)); items = self.run_pf(fake, CODEBOT_MODEL="codebot-model", NUM_CTX=16384)
+        self.assertEqual(self.status(items, "num_ctx explicit"), "FAIL")         # codebot-model itself at 16K would disagree with its Modelfile
 
     def test_unreachable_server(self):
         self.cfg(OLLAMA_PORT=1, NUM_CTX=32768, KEEP_ALIVE="30m")

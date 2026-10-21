@@ -350,6 +350,10 @@ above (calc5 findings) were NOT made: we stopped changing `lib/` and measured wh
   --num-ctx 16384` (its KV cache at 32K would take 3 GB). It does not fit beside the user's programs: they go to swap while it runs.
 - `bin/codebot` starts Ollama with `LLAMA_ARG_CACHE_RAM=0` (llama-server's 8 GiB prompt cache went to swap). Restarting the private Ollama
   is enough to apply it. The upstream llama.cpp build b11755 is in `tools/llama.cpp/b11755/`; its expert cache made this GPU slower.
+- Measured under a 3-hour budget per task: calc_go 26 and 26/32 (all 15 examples, in 34 and 28 min) against ornith's 23 and 21 (never
+  all 15), level_03 75/87 in 4 min against 64/87 in 64 min. The user then switched this machine to it (2026-10-20): `config/local.env` has
+  `CODEBOT_MODEL="coder30b-iq3"` and `NUM_CTX=16384` (delete those two lines to go back to ornith). opencode paths keep ornith. The
+  preflight's num_ctx check now compares NUM_CTX with the Modelfile only when codebot's model is `codebot-model`.
 
 ## 7. Working agreements and gotchas (learned the hard way)
 

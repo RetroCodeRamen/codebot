@@ -91,6 +91,31 @@ processing, generation, test runs, repairs, thermal pauses and recovery; downloa
 comes afterwards from the delivered commits (`checkpoints.py`), without interrupting the runs. Drafts prompts plus replies stay under 12K
 tokens, so the two context sizes do not change what either model sees.
 
-## 6. Results
+## 6. Results (2026-10-20) [M]
 
-(pending)
+Drafts mode, 180 min per task, same seeds, candidate and baseline interleaved (runs `20261020-*-bigC-*`). Hidden tests at fixed minutes
+come from the version delivered by then (`checkpoints.py`).
+
+| task, seed | Qwen3-Coder-30B-A3B UD-IQ3_XXS | ornith:9b |
+|---|---|---|
+| calc_go 1 | all 15 spec examples at **33.9 min** (12 rounds); hidden **26/32** | 12/15 at the 180-min cap; hidden 20, 21, 23, 23 at 30, 90, 150, 180 min |
+| calc_go 2 | all 15 at **28.4 min** (10 rounds); hidden **26/32** | 13/15 from minute 4.8 (hidden 21) to minute 162, when the user stopped the series |
+| level_03 1 | all 6 examples and 9 declared names at **3.6 min** (its first draft); hidden **75/87** | all 6 and 9 at 64.1 min (13 rounds); hidden 64/87 |
+
+- Completed (every spec example passes) within 3 hours: the candidate 3 of 3, ornith 1 of 3 (it has never passed calc_go's 2 operator
+  precedence examples, in any run). Time to completion: 34, 28 and 4 min against never, never and 64 min.
+- Hidden tests: 26, 26 and 75 against 23, 21 and 64. On calc_go the candidate passes all 4 precedence tests; it loses the same kind of
+  tests as ornith, in requirements without examples (division by zero, infinity and NaN input, standard input).
+- First attempts: its first level_03 draft passed everything; its first calc_go drafts did not compile (a constant division by zero, an
+  undefined name), and 3 of its 5 calc_go drafts in seed 1 never compiled. No reply ran away (no loop stop in its 3 runs; ornith: 15 in one).
+- Not run: level_03 seed 2 for both (the user stopped the series with the evidence above), level_01, other levels, the task pipeline.
+
+**Decision (user, 2026-10-20: "Let's stop the test since we already know that the new model is significantly better")**: this machine's
+codebot now runs on the candidate (`config/local.env`: `CODEBOT_MODEL="coder30b-iq3"`, `NUM_CTX=16384`; `codebot bench --preflight` passes:
+JSON schema enforced, KV cache reused 82% across turns, context 16384). opencode-based paths (`codebot plan`'s interview, legacy projects)
+keep `codebot-model` (ornith) at 32K. The shipped default stays ornith, which fits smaller machines. The costs: the user's programs are
+pushed to swap while it runs, the CPU runs at 93-97 C, and the model takes 12.85 GB of disk (twice while the download is kept beside
+Ollama's copy).
+
+Next, if wanted: Stage D (higher precision with SSD streaming; Qwen3-Coder-Next 80B-A3B), which the brief allowed once a smaller
+candidate gave useful results.

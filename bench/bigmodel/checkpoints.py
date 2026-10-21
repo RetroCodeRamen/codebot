@@ -38,7 +38,7 @@ def main():
     mins = [float(x) for x in (a[a.index("--minutes") + 1] if "--minutes" in a else "45,90,150,180").split(",")]
     for tj in sorted(glob.glob(f"{H}/bench/results/ladder/{run}/trials/*/trial.json")):
         d = json.load(open(tj)); tid = d["trial_id"]; bench = d.get("benchmark") or f"level_{int(d['level']):02d}"
-        proj = f"cap-{run}-{tid.lower().replace('_', '-')}"
+        proj = f"cap-{run.lower()}-{tid.lower().replace('_', '-')}"           # project names are lower case
         pd, code = os.path.join(H, "projects", proj), os.path.join(H, "bench", "runs", proj, "code")
         dr = d.get("drafts") or {}
         print(f"{tid}: finished by {dr.get('stop')} after {dr.get('minutes')} min, final hidden {d.get('reference', {}).get('passed')}/{d.get('reference', {}).get('total')}")
