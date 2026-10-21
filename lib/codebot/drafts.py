@@ -144,7 +144,10 @@ def coverage_text(cov, path="SPEC.md"):
     else: L.append("Every requirement has at least one example. Only the examples are checked: a rule no example shows is still unchecked.")
     if cov["examples"] == 0 or cov["uncovered"]:
         L.append('  `slugify("Hello World")` is `"hello-world"`      `parse("")` raises `ValueError`      `calc 2 + 3` prints `5`')
-        L.append("  (a call of a function the spec declares with its module, `is`/`returns`/`raises`; a command line with `prints`)")
+        L.append("  `calc 1 / 0` prints `error: division by zero` to standard error, nothing to standard output, and exits with status 1")
+        L.append("  `calc` with standard input `2 + 3\\n1 / 0` prints `5\\nerror: division by zero` and exits with status 0")
+        L.append("  (a call of a function the spec declares with its module, `is`/`returns`/`raises`; a command line with `prints`, `prints a message")
+        L.append("  starting with`, `to standard error`, `nothing to standard output`, `exits with status N`, `with standard input`, where \\n is a line break)")
     return "\n".join(L)
 
 # ---------- the code directory ----------

@@ -1,9 +1,10 @@
 """Checks grounded in the specification itself.
 
 1. examples(): the spec's own worked examples become assertions written by the harness, not the model, so they are sound by construction.
-   Two phrasings are recognised, both exact and unambiguous:
+   Two kinds are recognised, both exact and unambiguous:
      `slugify("Hello World")` is `"hello-world"`          (also: returns / gives / equals / ==, and "`f(1)` and `f(2)` are `True`", and raises `ValueError`)
-     `calc 2 + 3` prints `5`                               (a command line and its standard output)
+     `calc 2 + 3` prints `5`                               (a command line and its standard output; more in _command_example: a message on standard
+                                                            error, "nothing to standard output", "exits with status N", "with standard input `...`")
    A call needs the function's module, read from "`textutil.py` provides `slugify(...)`"; a command needs a program the sandbox can run: python3 / python,
    a ./path, or a program the spec says how to build ("`go build -o calc .`"), in which case the build command runs first as its own assertion.
 2. screen(): model-written assertions are dropped when they cannot hold for a program that follows the spec: they contradict themselves, a spec example
@@ -24,6 +25,16 @@ PY = ("python", "python3")
 SHELL_WORDS = {"echo", "printf", "cat", "bash", "sh", "|", "||", "&&", ";", "<", ">", ">>", "2>&1", "<<<"}
 
 PAREN = re.compile(r"^\s*\(\s*$")
+
+# A command example is read up to the end of its sentence (or the next command): its code spans become \x00k\x01 and these clauses are picked out.
+SENTENCE_END = re.compile(r"[.;](?:\s|$)")
+STDIN_C = re.compile(r"\b(?:with|given)\s+(?:the\s+)?(?:standard input|stdin)\s+\x00(\d+)\x01")
+PRINT_C = re.compile(r"\bprints\s+(a\s+(?:message|line)\s+(?:starting|beginning)\s+with\s+)?\x00(\d+)\x01(\s+(?:to|on)\s+(?:standard (?:error|output)|stderr|stdout))?")
+NOTHING_C = re.compile(r"\bnothing\s+(?:to|on)\s+(?:standard output|stdout)\b|\bprints\s+nothing\b(?!\s+(?:to|on)\s+(?:standard error|stderr))")
+EXITS_C = re.compile(r"\bexits?\s+with\s+(?:status|code)\s+(\d+)\b")
+ESC = re.compile(r"\\([nt\\])")
+
+def _unescape(s): return ESC.sub(lambda m: {"n": "\n", "t": "\t", "\\": "\\"}[m.group(1)], s)
 
 def spans(text):
     """[(code, text_before)] for every `code` span, text_before = the plain text since the previous span."""
@@ -107,6 +118,41 @@ def _program(argv0, prog):
     if prog and argv0 == prog: return "./" + prog
     return None
 
+def _runnable(code, prog):
+    try: argv = shlex.split(code)
+    except ValueError: return None
+    return _program(argv[0], prog) and argv if argv else None
+
+def _command_example(item, i, prog):
+    """(run assertion, index of the span after it, whether it needs the build) for a command example starting at code span i of item, or None:
+         `calc 2 + 3` prints `5`
+         `calc 1 / 0` prints `error: division by zero` to standard error, nothing to standard output, and exits with status 1
+         `calc 2 +` prints a message starting with `error:` to standard error and exits with status 2
+         `calc` with standard input `2 + 3\\n\\n1 / 0` prints `5\\nerror: division by zero` and exits with status 0
+    With standard input, \\n in the input and the output is a line break (and the input ends with one). "Starting with" is checked as "contains"."""
+    ms = list(SPAN.finditer(item)); argv = _runnable(ms[i].group(1), prog)
+    if not argv: return None
+    p = _program(argv[0], prog); parts, pos, k = [], ms[i].end(), i + 1
+    while True:                                      # the example's text: up to the end of its sentence or the next command, spans as \x00k\x01
+        gap = item[pos:ms[k].start() if k < len(ms) else len(item)]; end = SENTENCE_END.search(gap)
+        if end: parts.append(gap[:end.start()]); break
+        parts.append(gap)
+        if k >= len(ms) or _runnable(ms[k].group(1), prog): break
+        parts.append(f"\x00{k}\x01"); pos = ms[k].end(); k += 1
+    text, val = "".join(parts), lambda n: ms[int(n)].group(1)
+    a = {"type": "run", "argv": [p, *argv[1:]]}
+    m = STDIN_C.search(text); lines = bool(m)
+    if m: s = _unescape(val(m.group(1))); a["stdin"] = s if s.endswith("\n") else s + "\n"
+    for m in PRINT_C.finditer(text):
+        v = _unescape(val(m.group(2))) if lines else val(m.group(2)); err = bool(m.group(3)) and "err" in m.group(3)
+        if m.group(1) or err: a.setdefault("stderr_contains" if err else "stdout_contains", []).append(v)
+        else: a["stdout"] = v
+    if not (set(a) & {"stdout", "stdout_contains"}) and NOTHING_C.search(text): a["stdout"] = ""
+    m = EXITS_C.search(text)
+    if m: a["exit"] = int(m.group(1))
+    if not set(a) & {"stdout", "stdout_contains", "stderr_contains", "exit"}: return None
+    return a, k, prog is not None and p == "./" + prog
+
 def examples(spec, item):
     """Assertions for the worked examples in one requirement (item) of the spec. The build step, if any, comes first."""
     mods, (build, prog) = modules(spec), build_step(spec)
@@ -132,13 +178,9 @@ def examples(spec, item):
         if nxt and PAREN.match(nxt[1]) and _after(item, i + 1).lstrip().startswith(")") and _call(code):     # "`is_prime(1_000_000_007)` (`True`)"
             call_assert(code, nxt[0]); i += 2; continue
         if nxt and RAISES.match(nxt[1]) and re.fullmatch(r"[A-Z]\w*(?:Error|Exception)", nxt[0].strip()): call_assert(code, None, nxt[0].strip()); i += 2; continue
-        if nxt and PRINTS.match(nxt[1]):
-            try: argv = shlex.split(code)
-            except ValueError: argv = []
-            p = _program(argv[0], prog) if argv else None
-            if p:
-                add({"type": "run", "argv": [p, *argv[1:]], "stdout": nxt[0]}); need_build = need_build or (prog is not None and p == "./" + prog)
-            i += 2; continue
+        ce = _command_example(item, i, prog)
+        if ce: add(ce[0]); need_build = need_build or ce[2]; i = ce[1]; continue
+        if nxt and PRINTS.match(nxt[1]): i += 2; continue                 # the output of a command the sandbox cannot run
         # "`f(1)`, `f(2)` and `f(3)` are `False`": a run of call spans joined by commas/"and", then "are" + value
         j = i
         while j + 1 < len(sp) and JOIN.match(sp[j + 1][1]) and _call(sp[j + 1][0]): j += 1

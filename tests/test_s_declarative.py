@@ -53,6 +53,13 @@ class TestRunner(RunnerCase):
         self.write_code("n.py", "def f(): return 2\ndef g(): return True\ndef h(): return 0.1 + 0.2\n")
         rc, out = self.run_spec([{"type": "call", "module": "n", "func": "f", "expect": 2.0}, {"type": "call", "module": "n", "func": "h", "expect": 0.3}]); self.assertEqual(rc, 0, out)
         rc, out = self.run_spec([{"type": "call", "module": "n", "func": "g", "expect": 1}]); self.assertEqual(rc, 1, out)
+    def test_standard_error_and_standard_input_in_run_checks(self):
+        self.write_code("err.py", "import sys\nline = sys.stdin.readline().strip()\nsys.stderr.write('error: ' + line + '\\n')\nsys.exit(1)\n")
+        ok = {"type": "run", "argv": ["python3", "err.py"], "stdin": "bad\n", "stderr_contains": ["error: bad"], "stdout": "", "exit": 1}
+        rc, out = self.run_spec([ok]); self.assertEqual(rc, 0, out)
+        rc, out = self.run_spec([{**ok, "stderr_contains": ["error: good"]}]); self.assertEqual(rc, 1, out)
+        self.assertIn("python3 err.py with standard input 'bad\\n' printed 'error: bad' on standard error, expected 'error: good' there", out)
+        rc, out = self.run_spec([{**ok, "stderr_contains": 3}]); self.assertEqual(rc, 2, out)
     def test_a_crash_shows_its_message_and_paths_inside_the_code_dir_are_relative(self):
         # 2026-10-20 calc_go: a Go panic's message is its first line and each frame names the code dir; the last 150 characters showed neither
         here = os.path.realpath(self.code)
@@ -352,6 +359,17 @@ class TestGrounding(Sandboxed):
         self.assertEqual(G.examples(CALC_SPEC, items[0]), [BUILD, {"type": "run", "argv": ["./calc", "2", "+", "3"], "stdout": "5"}, {"type": "run", "argv": ["./calc", "7"], "stdout": "7"}])
         self.assertEqual(G.examples(CALC_SPEC, items[1])[1:], [{"type": "run", "argv": ["./calc", "6", "x", "7"], "stdout": "42"}])
         self.assertEqual(G.examples(CALC_SPEC, items[2]), [])                       # prose rules are left to the planner
+    def test_errors_exit_statuses_and_standard_input_can_be_examples(self):
+        # 2026-10-21: a calculator built from the calc spec failed only rules the spec had no example for (exit status 1 for a division by zero,
+        # inf/NaN, the standard-input mode), and the example syntax could not show them
+        spec = ("Build with `go build -o calc .`.\n\n1. `calc 1 / 0` prints `error: division by zero` to standard error, nothing to standard output, and exits "
+                "with status 1. `calc 2 +` prints a message starting with `error:` to standard error and exits with status 2. `calc inf` exits with status 2.\n\n"
+                "2. `calc` with standard input `2 + 3\\n\\n1 / 0` prints `5\\nerror: division by zero` and exits with status 0. `calc 6 x 7` prints `42`, `calc 7` prints `7`.\n")
+        run = lambda argv, **kw: {"type": "run", "argv": ["./calc", *argv], **kw}
+        got = G.all_examples(spec)
+        self.assertEqual(got, [BUILD, run(["1", "/", "0"], stderr_contains=["error: division by zero"], stdout="", exit=1), run(["2", "+"], stderr_contains=["error:"], exit=2),
+                               run(["inf"], exit=2), run([], stdin="2 + 3\n\n1 / 0\n", stdout="5\nerror: division by zero", exit=0), run(["6", "x", "7"], stdout="42"), run(["7"], stdout="7")])
+        self.assertIsNone(A.validate(got))
     def test_call_examples_need_a_module_and_a_declared_function(self):
         items = specdoc.item_texts(PY_SPEC)
         self.assertEqual(G.examples(PY_SPEC, items[0]), [{"type": "call", "module": "textutil", "func": "slugify", "args": ["Hello World"], "expect": "hello-world"},

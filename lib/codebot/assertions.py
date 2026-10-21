@@ -15,7 +15,7 @@ PY = ("python", "python3")
 # type -> (required fields, optional fields); the JSON schema offered to the model is derived from this table (checkspec.assert_schema)
 TYPES = {
     "call": ({"module", "func"}, {"args", "kwargs", "expect", "raises"}),
-    "run": ({"argv"}, {"stdin", "exit", "stdout", "stdout_contains", "stdout_json"}),
+    "run": ({"argv"}, {"stdin", "exit", "stdout", "stdout_contains", "stdout_json", "stderr_contains"}),     # stderr_contains: spec examples only (not offered to the planner)
     "file_exists": ({"path"}, set()),
     "file_contains": ({"path", "text"}, set()),
     "file_not_contains": ({"path", "text"}, set()),
@@ -23,7 +23,7 @@ TYPES = {
 
 # Field names a 9B planner leaked into the DATA (real runs: "args": ["", "expect"] whenever the expected value was "", argv ending in "stdout_contains").
 # No real input is exactly one of these words, and a check carrying one can never pass, so it is a spec error rather than a failing test.
-LEAKED = {"expect", "raises", "args", "kwargs", "argv", "stdin", "stdout", "stdout_contains", "stdout_json"}
+LEAKED = {"expect", "raises", "args", "kwargs", "argv", "stdin", "stdout", "stdout_contains", "stdout_json", "stderr_contains"}
 
 def _leaked(values):
     return next((v for v in values if isinstance(v, str) and v in LEAKED), None)
@@ -57,8 +57,11 @@ def validate(asserts):
         elif t == "run":
             av = a["argv"]
             if not (isinstance(av, list) and av and all(isinstance(x, str) for x in av)): return f"assertion {i}: argv is a list of strings, e.g. [\"python3\", \"cli.py\", \"slug\", \"Hello World\"]"
-            if not (set(a) & {"exit", "stdout", "stdout_contains", "stdout_json"}): return f"assertion {i}: run needs at least one of exit, stdout, stdout_contains, stdout_json"
+            if not (set(a) & {"exit", "stdout", "stdout_contains", "stdout_json", "stderr_contains"}): return f"assertion {i}: run needs at least one of exit, stdout, stdout_contains, stdout_json"
             if "exit" in a and not isinstance(a["exit"], int): return f"assertion {i}: exit must be an integer"
+            ec = a.get("stderr_contains", [])
+            if not (isinstance(ec, str) or (isinstance(ec, list) and all(isinstance(x, str) for x in ec))): return f"assertion {i}: stderr_contains is a string or a list of strings"
+            if "stdin" in a and not isinstance(a["stdin"], str): return f"assertion {i}: stdin must be a string"
             w = _leaked(av[1:])
             if w: return f"assertion {i}: the field name {w!r} is inside argv; argv holds only the command and its arguments"
             code = _python_c(av)
@@ -111,7 +114,8 @@ def _run(a):
         c = a["argv"][0]                          # the sandbox does not have, which can never pass (the guard rejects it as broken)
         return f"{c} does not exist yet" if "/" in c else f"command not available in the sandbox: {c}"
     except subprocess.TimeoutExpired: return f"{' '.join(a['argv'])} timed out after 60 s"
-    cmd = " ".join(a["argv"]); out = p.stdout.strip(); want_exit = a.get("exit", 0)
+    cmd = " ".join(a["argv"]) + (f" with standard input {_short(a['stdin'], 200)}" if isinstance(a.get("stdin"), str) else "")
+    out = p.stdout.strip(); want_exit = a.get("exit", 0)
     if p.returncode != want_exit: return f"{cmd} exited {p.returncode}, expected {want_exit}" + (f" (stderr: {_err(p.stderr)})" if p.stderr.strip() else "")
     if "stdout" in a and out != a["stdout"].strip(): return f"{cmd} printed {_short(out)}, expected {_short(a['stdout'].strip())}"
     for s in ([a["stdout_contains"]] if isinstance(a.get("stdout_contains"), str) else a.get("stdout_contains", [])):
@@ -120,6 +124,8 @@ def _run(a):
         try: got = json.loads(out)
         except ValueError: return f"{cmd} did not print JSON (got {_short(out)})"
         if not _same(got, a["stdout_json"]): return f"{cmd} printed JSON {_short(got)}, expected {_short(a['stdout_json'])}"
+    for s in ([a["stderr_contains"]] if isinstance(a.get("stderr_contains"), str) else a.get("stderr_contains", [])):
+        if s not in p.stderr: return f"{cmd} printed {_short(_err(p.stderr)) if p.stderr.strip() else 'nothing'} on standard error, expected {_short(s)} there"
     return None
 
 def _file(a):
