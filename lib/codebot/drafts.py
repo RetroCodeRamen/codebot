@@ -297,6 +297,25 @@ def _reset_ws(ws, base):
         shutil.rmtree(p) if os.path.isdir(p) and not os.path.islink(p) else os.remove(p)
     shutil.copytree(base, ws, dirs_exist_ok=True, symlinks=True)
 
+LOC = re.compile(r"^(?:\./)?([\w.-]+\.\w+):(\d+)(?::\d+)?:", re.M)
+
+def quote_lines(out, ws, limit=10):
+    """The source lines a compiler message names but does not show, for the feedback. Go prints only `./main.go:119:28: invalid operation:
+    division by zero`: in a calculator build (2026-10-21) 17 of 21 rounds failed to compile on an infinity check written `1/0`, and no repair
+    removed it. Lines the output already shows (gcc, rustc and Python quote them) are left out."""
+    rows, seen = [], set()
+    for m in LOC.finditer(out):
+        f, n = m.group(1), int(m.group(2))
+        if (f, n) in seen or not SAFE.match(f): continue
+        seen.add((f, n))
+        try:
+            with open(os.path.join(ws, f), encoding="utf-8", errors="replace") as fh: lines = fh.read().split("\n")
+        except OSError: continue
+        text = lines[n - 1].strip() if 1 <= n <= len(lines) else ""
+        if text and text not in out: rows.append(f"{f}:{n}: {text[:200]}")
+        if len(rows) >= limit: break
+    return "\nThe lines it names:\n```\n" + "\n".join(rows) + "\n```" if rows else ""
+
 def evaluate(proj, st, files):
     """(built, examples passed, declared names defined, feedback) for one version, judged in a fresh copy of the baseline: missing files, then
     compiling (Python is compiled and its names read on the host: that runs none of the model's code), then the spec's build command and its examples
@@ -315,7 +334,7 @@ def evaluate(proj, st, files):
     env = _env(st, ws)
     if st.get("build"):
         rc, out, _ = sandbox.execute(_at(proj, ws), st["build"], timeout=300, rw=[ws], cwd=ws, env=env)
-        if rc: return False, 0, 0, f"`{' '.join(st['build'])}` failed:\n```\n{out.strip()[-2000:]}\n```"
+        if rc: return False, 0, 0, f"`{' '.join(st['build'])}` failed:\n```\n{out.strip()[-2000:]}\n```" + quote_lines(out.strip()[-2000:], ws)
     checks = _checks(proj); total = len(checks); failed, out = run_examples(proj, ws, checks, env) if total else (0, "")
     names = len(decl) - len(gone)
     if not failed:

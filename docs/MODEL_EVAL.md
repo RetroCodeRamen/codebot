@@ -44,7 +44,7 @@ attempts, tool calls, generated tokens, regressions caught, thermal pause time, 
 **End to end**: correct requirements (all hidden tests of the requirement pass) per 10 hours of machine time; falsely verified requirements
 (codebot says done, the hidden tests disagree) reported separately and treated as worse than unfinished work; blocked tasks; thermal load.
 
-## Candidates (pulled 2026-10-16)
+## Candidates (pulled 2026-10-16; all but the control deleted 2026-10-21 to free 57 GB: pull them again to rerun the evaluation)
 
 | model (Ollama name) | size | intended role | notes |
 |---|---|---|---|

@@ -246,6 +246,16 @@ class TestLoopWatch(unittest.TestCase):
         self.assertIsNone(self.feed("```python\n" + mod + "```\n"))
         self.assertIsNotNone(self.feed("```python\n" + body * 4 + "```\n"))      # the check alone, over and over, is a loop
 
+class TestQuoteLines(unittest.TestCase):
+    def test_a_compiler_error_gets_the_line_it_names(self):
+        # 2026-10-21: Go showed only `./main.go:119:28: invalid operation: division by zero`, and no repair removed the `1/0` in 17 of 21 rounds
+        import tempfile; d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "main.go"), "w") as f: f.write("package main\n\nfunc isNum(f float64) bool {\n\treturn !(f == 1/0)\n}\n")
+        out = "# calc\n./main.go:4:15: invalid operation: division by zero\n./main.go:4:15: invalid operation: division by zero\n./gone.go:9:1: x\n"
+        self.assertEqual(D.quote_lines(out, d), "\nThe lines it names:\n```\nmain.go:4: return !(f == 1/0)\n```")
+        self.assertEqual(D.quote_lines("main.go:4:15: error\n    return !(f == 1/0)\n", d), "")       # a compiler that shows the line itself
+        self.assertEqual(D.quote_lines("../secret.go:1:1: x\n/etc/passwd:1: x\n", d), "")            # only files in the code dir
+
 class TestJudgingParity(Proj):
     """evaluate() gives bare_py.evaluate()'s verdict and feedback, word for word, on level_01."""
     spec = read(os.path.join(CAT, "level_01", "SPEC.md"))

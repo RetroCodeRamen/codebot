@@ -6,7 +6,9 @@ tokens per second. The ornith baseline and its Ollama backend stay as they are; 
 
 Labels: **[M]** measured on this laptop, **[U]** upstream documentation or listings (checked 2026-10-20), **[E]** estimate.
 Scripts and launch configurations: `bench/bigmodel/` (`launch.sh`, `screen.py`, `compare.sh`, `checkpoints.py`, the prompts, the Modelfile);
-raw results stay local in `bench/results/bigmodel/`.
+raw results stay local in `bench/results/bigmodel/`. To free disk (2026-10-21) the downloaded GGUF (`models/gguf/`) and the llama.cpp b11755
+build (`tools/llama.cpp/`) were deleted; the Ollama model `coder30b-iq3` keeps its own copy. To rerun a screen, download them again (the
+revisions and sha256 sums are below).
 
 ## 1. The machine (normal operating conditions: the user's Windows VM, browser and desktop keep running)
 
