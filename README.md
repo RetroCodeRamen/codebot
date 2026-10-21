@@ -9,12 +9,13 @@ Most agent harnesses assume a frontier model and fall apart on a 9B one. codebot
   the worked examples written in your spec in an offline Docker sandbox, and tells the model what failed. A draft that stops improving is dropped
   and a fresh one starts; the best version so far is committed. No planner, no tools, no tests written by the model. This is the simpler of the
   two and, measured on three projects, the better one.
-- **Tasks** (`codebot plan`, the original pipeline): the harness plans the work in small tasks, each with an acceptance check the model cannot
-  change, packs the context, validates every edit, re-checks finished work for regressions and escalates when a task is stuck.
+- **Tasks** (`codebot plan`, the original pipeline, kept working but no longer developed): the harness plans the work in small tasks, each
+  with an acceptance check the model cannot change, packs the context, validates every edit, re-checks finished work for regressions and
+  escalates when a task is stuck.
 
 Both run unattended, checkpoint in git, and write you a report in the morning.
 
-**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (523 tests), but it is slow by design, and how
+**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (536 tests), but it is slow by design, and how
 far it gets is limited by the worked examples in your spec (drafts) or by how good a 9B model is at writing tests for its own work (tasks).
 Nothing leaves your machine unless you turn notifications on.
 
@@ -35,7 +36,10 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
   (`bench/baselines/`) scored 63 and 60, 22, 6 and 22, and 58 and 63. The level 3 runs lost rounds to a bug in the loop stop, fixed since and
   not yet re-measured; single runs still vary a lot (calc_go has ranged from 1 to 22 across versions and seeds).
 - The task pipeline's weak spot is the model writing impossible or weak acceptance tests for itself (`docs/dev/ROADMAP.md`).
-- Which local model to use: `docs/MODEL_EVAL.md`.
+- Which local model to use: `docs/MODEL_EVAL.md`. On this laptop (16 GB RAM, 4 GB GPU) a 30B mixture-of-experts coder, Qwen3-Coder-30B-A3B at
+  3 bits, did better than the 9B default on every task it ran (calc_go 26 and 26 against 23 and 21, level 3 75 against 64, in a fraction of
+  the time), at the cost of memory and heat: `docs/LARGE_MODELS.md`. All numbers here come from the same three tasks codebot was tuned
+  on; how far they carry to other projects is not measured yet (`docs/dev/REVIEW-2026-10-21.md`).
 
 ## Requirements
 
@@ -92,11 +96,15 @@ used by the benchmark; a `codebot plan-auto` command for your own projects is pl
 **Drafts** (`lib/codebot/drafts.py`). Write a `SPEC.md` with numbered requirements and worked examples in a form codebot can run:
 `` `slugify("Hello World")` is `"hello-world"` `` (a call of a function, with "`textutil.py` provides `slugify(text)`" saying where it lives),
 `` `parse("")` raises `ValueError` ``, or `` `calc 2 + 3` prints `5` `` (a command line; "`go build -o calc .`" says how to build it).
+A command example can also say what goes to standard error and how the program exits, and give it standard input (`\n` is a line break):
+`` `calc 1 / 0` prints `error: division by zero` to standard error, nothing to standard output, and exits with status 1 ``,
+`` `calc 2 +` prints a message starting with `error:` to standard error and exits with status 2 ``,
+`` `calc` with standard input `2 + 3\n\n1 / 0` prints `5\nerror: division by zero` and exits with status 0 ``.
 `codebot new` copies the spec and prints which requirements have no examples. Each round the model gets the spec (and, when it is repairing,
 the current code and what failed) and replies with every file whole. The harness compiles it and runs the examples in the sandbox; in Python
 every function the spec declares (and, for a one-module spec, every exception it names) must also exist. A repair that does not improve the
 draft ends it (`DRAFTS_PATIENCE`) and the next round starts fresh from the spec; a repair reply may be at most 3 times as long as the longest
-complete reply so far (at least 3000 tokens), which stops runaway replies early. Each new best version (it builds, then the most checks pass)
+complete reply so far (at least 3000 tokens), and a reply that starts repeating itself is stopped as it streams. Each new best version (it builds, then the most checks pass)
 is committed to the branch `codebot/<project>`. The run stops when every check passes or after `DRAFTS_MINUTES`. Limits: it only knows what the examples show, and it sends the whole code in every prompt, so it is for programs up to about
 60 KB of spec and code.
 

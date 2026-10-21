@@ -1,6 +1,13 @@
 # codebot: handoff (read this first in a new session)
 
-Last updated: 2026-10-19, after the baselines showed a plain whole-program loop beating the task pipeline and the user chose to rebuild around it: **drafts mode** (`codebot new`, `lib/codebot/drafts.py`, section "Drafts mode" below) is now the recommended way; the task pipeline stays as it was. Everything described here is committed (`git log` in this repo).
+**Current state (2026-10-21).** Drafts mode (`codebot new`, then `codebot start`) is the way codebot works; the task pipeline (`codebot plan`)
+is kept working but no longer developed. This machine runs `coder30b-iq3` (Qwen3-Coder-30B-A3B, 3-bit) through the private Ollama
+(`config/local.env`; `docs/LARGE_MODELS.md`), the shipped default is still ornith:9b. A spec's worked examples are the only thing drafts mode
+can check, and since 66ae7b8 they can also show error output, exit statuses and standard input. **Read `docs/dev/REVIEW-2026-10-21.md`
+before tuning anything:** every drafts-mode rule was chosen and measured on the same three tasks (level_01, level_03, calc_go), so the next
+changes must be judged on held-out tasks with several seeds. The sections below are the history in order (oldest first in each section).
+
+Last updated before that: 2026-10-19, after the baselines showed a plain whole-program loop beating the task pipeline and the user chose to rebuild around it: **drafts mode** (`codebot new`, `lib/codebot/drafts.py`, section "Drafts mode" below) is now the recommended way; the task pipeline stays as it was. Everything described here is committed (`git log` in this repo).
 This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/dev/ROADMAP.md` has
 the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
 
@@ -101,6 +108,17 @@ Done since the last handoff (details and numbers in `docs/dev/ROADMAP.md`): NVID
 
 ## 6. Next steps, in order (copy-paste)
 
+Current (2026-10-21; drafts mode):
+```
+codebot setup                                     # starts the private Ollama (with LLAMA_ARG_CACHE_RAM=0)
+tests/run.sh                                      # full suite, about 7 min; it can reach the real model server, so never while a model job runs
+codebot bench --preflight                         # must say PREFLIGHT OK for the configured model
+codebot check-spec SPEC.md                        # which requirements have examples
+codebot new NAME SPEC.md ~/code/NAME && codebot start NAME     # a project; review with codebot diff NAME
+codebot bench run --level 2 --mode drafts --task-minutes 60 --seed 1 --repeats 3   # held-out tasks need examples first (REVIEW-2026-10-21)
+```
+
+Older (2026-10-15/16, the task pipeline):
 ```
 cd ~/Documents/Development/codebot        # your checkout
 codebot setup                      # starts the private Ollama (the model is unloaded after a reboot; the first request reloads it)
