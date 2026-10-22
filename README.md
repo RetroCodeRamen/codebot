@@ -64,6 +64,7 @@ The installer never uses sudo; it asks before adding a `codebot` symlink to `~/.
 ## Quick start
 
 ```
+codebot gui --open                       # the window (127.0.0.1 only): describe what you want, answer a few questions, read the plan, build
 codebot                                  # the guided menu: pick or create a project, plan, start, watch live
 codebot check-spec SPEC.md               # which requirements have worked examples (only those are checked in drafts mode)
 codebot new myapp SPEC.md ~/code/myapp   # a drafts project: the whole program from SPEC.md, judged by its own examples
@@ -90,6 +91,13 @@ codebot eval gate MODEL                  # model evaluation: speed/compatibility
 Your code is never edited in place: for an existing git repo codebot works in a separate worktree (`workspaces/<project>/`, branch
 `codebot/<project>`), and `codebot diff` shows how to merge the result. The unattended planner (spec in, plan out, no interview) is currently
 used by the benchmark; a `codebot plan-auto` command for your own projects is planned.
+
+**The window (`codebot gui`).** A local web page on `127.0.0.1:8765` (`--port N` for another). Its front door is a short design conversation:
+you describe the program in your own words, the model asks at most two rounds of questions, then writes a plan and a spec with worked examples
+(`lib/codebot/shape.py`). A plan with no runnable example is not built, because nothing could check it. Build turns the design into a drafts
+project and starts the usual loop; when it stops, the loop runs a closing review (the model reads the code for security and basic defects; its
+notes are opinions, not checks). Everything else (rounds, files, logs, benchmarks, models, settings) is one link away. Closing the window never
+stops a run, and only one model job runs at a time across the window, the menu and the CLI.
 
 ## How a run works
 
@@ -137,6 +145,10 @@ is committed to the branch `codebot/<project>`. The run stops when every check p
   tries to reach the internet from inside the sandbox to show that it fails.
 - Notifications (ntfy) are **off by default**. If you turn them on in `config/local.env`, treat the topic name like a password: anyone who knows
   it can read your pushes, and with `PHONE_CONTROL=1` pause or stop your runs and answer blocked questions, which the model then reads.
+- The window (`codebot gui`) listens on 127.0.0.1 only, accepts changes only from its own page (a custom header, its own Origin and Host), runs
+  no inline script (Content-Security-Policy) and shows files, prompts and logs as text, never as markup. Settings it writes are limited to known
+  codebot keys and to values bash cannot expand. Its **Run** button runs the built program on this machine outside the sandbox, as you would
+  by hand: read the code first if it matters.
 - Honest limits: the `docker` group is root-equivalent (the harness holds it, the model does not); the engine and worker processes are trusted code
   outside the container; the audit log is tamper-evident, not tamper-proof. More in `SECURITY.md`.
 

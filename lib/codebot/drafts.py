@@ -124,7 +124,8 @@ def coverage(spec):
     names = spec_files(spec); decl = declared(spec, names); reqs = []
     for i, it in enumerate(items or [spec], 1):
         first = re.sub(r"^\s*\d+[.)]\s*", "", it.strip().splitlines()[0]) if it.strip() else ""
-        reqs.append({"n": i, "title": first[:70] + ("..." if len(first) > 70 else ""), "examples": len([a for a in grounding.examples(spec, it) if a != step]),
+        reqs.append({"n": i, "title": first[:70] + ("..." if len(first) > 70 else ""), "text": first,
+                     "examples": len([a for a in grounding.examples(spec, it) if a != step]),
                      "names": [n for n in decl if n in grounding._declared(it) or n in EXC.findall(it)]})
     return {"numbered": bool(items), "requirements": reqs, "uncovered": [r["n"] for r in reqs if not r["examples"]], "examples": len(ex), "declared": list(decl),
             "build": " ".join(build) if build else None, "files": names, "language": language(spec, names, [])}

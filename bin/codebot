@@ -58,7 +58,7 @@ notify() { # title message priority tags [buttons=1]
     acts=(-H "Actions: http, Pause, $r, method=POST, body=pause, clear=false; http, Resume, $r, method=POST, body=resume, clear=false; http, Status, $r, method=POST, body=status, clear=false")
   fi
   if curl -s -m 15 -H "$(ntfy_auth)" -H "Title: $1" -H "Priority: ${3:-default}" -H "Tags: ${4:-robot}" "${acts[@]}" \
-    -d "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1; then egress_log notification; else echo "(ntfy send failed)" >&2; egress_log notification false; fi
+    --data-raw "$2" "$NTFY_SERVER/$NTFY_TOPIC" >/dev/null 2>&1; then egress_log notification; else echo "(ntfy send failed)" >&2; egress_log notification false; fi
 }
 
 # phone control: poll <topic>-reply. words pause/resume/stop/status act on the loop; anything else answers a BLOCKED question.
@@ -113,7 +113,7 @@ progress_text() { if [[ "${WORKFLOW:-}" == drafts ]]; then eng status --short 2>
 tasks_left() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[ \]' "$S/PLAN.md" 2>/dev/null || true; }
 tasks_done() { grep -cE '^[^[:alnum:]]{0,3}[-*][[:space:]]+\[[xX]\]' "$S/PLAN.md" 2>/dev/null || true; }
 
-cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy topic: $NTFY_SERVER/$NTFY_TOPIC"; }
+cmd_setup() { ensure_ollama; echo "ollama up on :$OLLAMA_PORT"; "$OLLAMA_BIN" list; echo "ntfy: $NTFY_SERVER (topic in config/local.env, not shown)"; }
 
 cmd_plan() {
   local name="" wd_arg="" mode="" a style="${PLAN_STYLE:-grill}" targets=() want_t=0
@@ -155,6 +155,7 @@ cmd_check_spec() { [[ -n "${1:-}" ]] || die "usage: codebot check-spec <spec.md>
 
 cmd_start() {
   load_proj "${1:-}"
+  if [[ "${WORKFLOW:-}" == shape ]]; then die "$NAME is still a design. Answer the questions, read the plan, then build it from the window (codebot gui)."; fi
   if [[ "${WORKFLOW:-}" == drafts ]]; then
     [[ -s "$S/SPEC.md" ]] || die "no SPEC.md in $S (create the project with: codebot new $NAME <spec.md>)"
     jq -e '.finished' "$S/drafts/state.json" >/dev/null 2>&1 && die "$NAME has finished: $(eng status --short). Review: codebot diff $NAME. A new run needs a new project (codebot new)"
@@ -302,10 +303,26 @@ loop_engine() {
   done
 }
 
+# A project that started as a design (shape.json) gets its closing review here, inside the loop, so it still runs and the person is still told when the window is closed.
+_close_drafts() { # title body tag
+  local note
+  if [[ -f "$S/shape.json" ]]; then
+    echo "[review] $(date '+%T') reading the code" >> "$S/loop.log"
+    note="$(PYTHONPATH="$CODEBOT_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m codebot.shape review "$NAME" --home "$CODEBOT_HOME" 2>>"$S/loop.log")" \
+      || note="The build finished. The closing review did not finish; the log has the reason."
+    [[ -n "$note" ]] || note="$2"
+    notify "codebot: $NAME is ready" "$note" high white_check_mark
+  else
+    notify "$1" "$2" high "$3"
+  fi
+  send_report; finished=1; rm -f "$S/.active"
+}
+
 # supervisor for drafts projects: one round (one model call, one judged version) per engine step; the engine keeps the state between steps
 loop_drafts() {
   local ev kind pid rc out="$S/.step.out" timeouts=0
-  notify "codebot: $NAME started" "Writing the whole program from SPEC.md, judged by the spec's own examples. $(eng status --short 2>/dev/null). Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
+  if [[ -f "$S/shape.json" ]]; then notify "codebot: $NAME started" "Building it now. You will be told when it is ready." low rocket 1
+  else notify "codebot: $NAME started" "Writing the whole program from SPEC.md, judged by the spec's own examples. $(eng status --short 2>/dev/null). Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1; fi
   while [[ $finished == 0 ]]; do
     if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
     iter=$((iter+1)); echo "$iter" > "$S/iter.count"
@@ -324,10 +341,8 @@ loop_drafts() {
       model_error) sleep 30 ;;          # the engine counts these and ends the run after five in a row
       timeout) timeouts=$((timeouts+1))
         if (( timeouts >= 3 )); then notify "codebot: $NAME stopped" "Three rounds in a row ran past $(( (ITER_TIMEOUT + 1800) / 60 )) min. $(eng status --short 2>/dev/null)" high warning; finished=1; rm -f "$S/.active"; fi ;;
-      all_done) notify "codebot: $NAME COMPLETE" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" high white_check_mark
-        send_report; finished=1; rm -f "$S/.active" ;;
-      finished_incomplete) notify "codebot: $NAME finished (not every example passes)" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" high warning
-        send_report; finished=1; rm -f "$S/.active" ;;
+      all_done) _close_drafts "codebot: $NAME COMPLETE" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" white_check_mark ;;
+      finished_incomplete) _close_drafts "codebot: $NAME finished (not every example passes)" "$(eng report --short 2>/dev/null) Branch codebot/$NAME in $RUNDIR. Review: codebot diff $NAME" warning ;;
       *) notify "codebot: $NAME engine error" "$(jq -r '.error // "unexpected output (see codebot log)"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
     esac
   done
@@ -422,6 +437,7 @@ cmd_log() { load_proj "${1:-}"; tail -n "${2:-60}" -f "$S/loop.log"; }
 cmd_list() { for d in "$CODEBOT_HOME"/projects/*/; do [[ -f "$d/project.env" ]] || continue; n=$(basename "$d"); cmd_status "$n"; done; }
 cmd_status() { [[ -n "${1:-}" ]] || { cmd_list; return; }; load_proj "$1"; local s=stopped
   alive "$S/loop.pid" && { s=running; [[ -f "$S/PAUSE" ]] && s=PAUSED; }
+  if [[ "${WORKFLOW:-}" == shape ]]; then echo "$NAME: designing (open it with codebot gui)"; return; fi
   if [[ "${WORKFLOW:-}" == drafts ]]; then echo "$NAME: $s | $(eng status --short 2>/dev/null) | $WORKDIR"; return; fi
   local eng=""; [[ -f "$S/tasks.json" ]] && eng=" [engine: $(jq -r '[.tasks[]|.status]|group_by(.)|map("\(.[0]) \(length)")|join(", ")' "$S/tasks.json" 2>/dev/null)]"
   echo "$NAME: $s | done $(tasks_done) / left $(tasks_left)$eng | status: $(head -c 120 "$S/STATUS" 2>/dev/null || true) | $WORKDIR"; }
@@ -485,7 +501,7 @@ cmd_diff() { load_proj "${1:-}"; git -C "$RUNDIR" log --oneline "codebot/$NAME" 
   echo; echo "merge when happy:  git -C $WORKDIR merge codebot/$NAME     (worktree: $RUNDIR)"; }
 cmd_notify() { # <title> <message> [priority] [tags]: push through the same ntfy path (and egress log) the loops use; honours NTFY_ENABLED
   [[ -n "${2:-}" ]] || die "usage: codebot notify <title> <message> [priority] [tags]"; notify "$1" "$2" "${3:-default}" "${4:-robot}"; }
-cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_mark; echo "sent to $NTFY_SERVER/$NTFY_TOPIC"; }
+cmd_notify_test() { notify "codebot test" "ntfy is working" default white_check_mark; echo "sent to $NTFY_SERVER (topic not shown)"; }
 
 [[ $# -eq 0 && -t 0 ]] && exec "$CODEBOT_HOME/bin/codebot-ui"
 c="${1:-help}"; shift || true
@@ -502,6 +518,7 @@ case "$c" in
   re-config) cmd_re_config;;
   install-service) cmd_install_service;;
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
+  gui) PYTHONPATH="$CODEBOT_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m codebot.gui --home "$CODEBOT_HOME" "$@";;
   *) cat <<'USAGE'
 codebot - local-only autonomous coding agent for small offline models (run with no arguments for the menu)
   new <name> <spec.md> [dir]   a project from a spec (recommended): the model writes the whole program, judged by the spec's own examples;
@@ -532,6 +549,7 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)
   eval mutants|gate|planner   model evaluation: mutant sets, a speed/compatibility gate per model, scored planner probes (docs/MODEL_EVAL.md)
   doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
+  gui [--port N] [--open]  the local window, on this machine only (describe a project, answer a few questions, then build)
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)
