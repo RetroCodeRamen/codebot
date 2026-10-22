@@ -15,7 +15,7 @@ Most agent harnesses assume a frontier model and fall apart on a 9B one. codebot
 
 Both run unattended, checkpoint in git, and write you a report in the morning.
 
-**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (536 tests), but it is slow by design, and how
+**Status: research project, Linux only, honest numbers below.** It works end to end and is tested (570 tests), but it is slow by design, and how
 far it gets is limited by the worked examples in your spec (drafts) or by how good a 9B model is at writing tests for its own work (tasks).
 Nothing leaves your machine unless you turn notifications on.
 
@@ -36,7 +36,7 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
   (`bench/baselines/`) scored 63 and 60, 22, 6 and 22, and 58 and 63. The level 3 runs lost rounds to a bug in the loop stop, fixed since and
   not yet re-measured; single runs still vary a lot (calc_go has ranged from 1 to 22 across versions and seeds).
 - The task pipeline's weak spot is the model writing impossible or weak acceptance tests for itself (`docs/dev/ROADMAP.md`).
-- Which local model to use: `docs/MODEL_EVAL.md`. On this laptop (16 GB RAM, 4 GB GPU) a 30B mixture-of-experts coder, Qwen3-Coder-30B-A3B at
+- Which local model to use: `docs/MODEL_EVAL.md`. On this same laptop a 30B mixture-of-experts coder, Qwen3-Coder-30B-A3B at
   3 bits, did better than the 9B default on every task it ran (calc_go 26 and 26 against 23 and 21, level 3 75 against 64, in a fraction of
   the time), at the cost of memory and heat: `docs/LARGE_MODELS.md`. All numbers here come from the same three tasks codebot was tuned
   on; how far they carry to other projects is not measured yet (`docs/dev/REVIEW-2026-10-21.md`).
@@ -44,7 +44,7 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
 ## Requirements
 
 - Linux on x86_64 (arm64 should work, untested). Ubuntu 24.04 is what it is developed on.
-- 15 GB RAM recommended, about 15 GB free disk (the model is 5.6 GB). A GPU is optional: with an NVIDIA driver Ollama offloads part of the
+- 15 GB RAM recommended, about 15 GB free disk (the default model is 5.6 GB; the 30B coder in `docs/LARGE_MODELS.md` is 12.85 GB). A GPU is optional: with an NVIDIA driver Ollama offloads part of the
   model (about 35% on a 4 GB card, about 9 tokens/s); without one it runs on the CPU, slower.
 - python3 3.10+, git, curl, jq, zstd, and Docker usable by your user (every command the model runs is sandboxed in a container).
 - Optional: Node/npm for opencode (only for the `codebot plan` interview planner), systemd for the watchdog.
@@ -52,8 +52,9 @@ which the agent never sees. Small samples (2-3 runs per project); details and ca
 ## Install
 
 ```
-git clone <this repo> codebot && cd codebot
-./install.sh          # pinned private Ollama in tools/, the model in models/, your settings in config/local.env; asks before big downloads
+git clone https://github.com/RetroCodeRamen/codebot codebot && cd codebot
+./install.sh                 # pinned private Ollama in tools/, the model in models/, your settings in config/local.env; asks before big downloads
+./install.sh --with-opencode # also install opencode, only needed for `codebot plan`
 codebot doctor        # (or bin/codebot doctor) checks everything and says how to fix what is missing
 tests/run.sh          # the harness tests against a fake model, about 6 minutes, no model needed
 ```
@@ -97,7 +98,8 @@ you describe the program in your own words, the model asks at most two rounds of
 (`lib/codebot/shape.py`). A plan with no runnable example is not built, because nothing could check it. Build turns the design into a drafts
 project and starts the usual loop; when it stops, the loop runs a closing review (the model reads the code for security and basic defects; its
 notes are opinions, not checks). Everything else (rounds, files, logs, benchmarks, models, settings) is one link away. Closing the window never
-stops a run, and only one model job runs at a time across the window, the menu and the CLI.
+stops a run. The window will not start a model job while one is already going, including a loop started from the menu or the CLI. The CLI
+does not yet refuse a second `codebot start`; those loops share the model one call at a time.
 
 ## How a run works
 
@@ -163,16 +165,25 @@ it), `KEEP_ALIVE`, `THINK`. Planning: `PLAN_STYLE=grill|quick`, `CHECK_BASELINE_
 still passes), `PLAN_PER_ITEM` (one planner call per numbered spec item). Per-role models: `PLANNER_MODEL`, `PLANNER_THINK`, `SPLITTER_MODEL`,
 `SPLITTER_THINK`, `WORKER_THINK`, `THINK_BUDGET` (`docs/MODEL_EVAL.md`). Worker: `WORKER=native`, `CONTEXT_BUDGET`, `WORKER_MAX_TURNS`,
 `WORKER_CONTEXT_TOKENS`, `WORKER_TEMPERATURE`, `RUN_TIMEOUT`. Ladder/budgets: `LADDER_TRIES`, `ALT_TEMPERATURE`, `ESCALATE_MODEL`,
-`TASK_MAX_ATTEMPTS`, `STUCK_SAME_FAILURE`, `STUCK_NO_PROGRESS`, `PINGPONG_WINDOW`, `MAX_ITERATIONS`, `PROJECT_MAX_MINUTES`. Notifications:
+`TASK_MAX_ATTEMPTS`, `STUCK_SAME_FAILURE`, `STUCK_NO_PROGRESS`, `PINGPONG_WINDOW`, `MAX_ITERATIONS`, `PROJECT_MAX_MINUTES`, `SPLIT_MAX_DEPTH`,
+`REDERIVE_MAX`. Notifications:
 `NTFY_ENABLED`, `NTFY_SERVER`, `NTFY_TOPIC`, `NTFY_TOKEN` (protected topics), `PHONE_CONTROL`, `NOTIFY_EACH_TASK`. Safety: `SANDBOX=auto|docker|none`,
 `SANDBOX_IMAGE`, `SANDBOX_MEMORY`, `SANDBOX_RO`, `SANDBOX_PIDS`. Heat: `THERMAL_GUARD`, `THERMAL_MAX`, `THERMAL_RESUME`, `THERMAL_MAX_WAIT`. Legacy
 opencode loop only: `ITER_TIMEOUT`, `STALL_LIMIT`, `LESSONS_MAX`. Less common: `CHECK_TIMEOUT`, `WORKER_MAX_TOKENS`, `WORKER_CMD` (replace the native
-worker, used by tests), `IDLE_POLL`.
+worker, used by tests), `SPLIT_CMD` (replace the task splitter), `ALLOW_UNCHECKED`, `IDLE_POLL`.
+
+## Per-project files
+
+State for a project lives in `projects/<name>/` (not tracked by git). The code does not: an existing git repo is worked on in a worktree at
+`workspaces/<name>/`, branch `codebot/<name>`. `project.env` holds this project's settings and wins over `config/local.env`; `codebot new`
+writes `WORKFLOW="drafts"` and copies the spec to `SPEC.md`. A drafts run keeps its rounds under `drafts/`. A task project has `PLAN.md` and,
+after `codebot start`, a frozen `tasks.json`. `audit.jsonl` is the hash-chained log, `loop.log` is the supervisor log, and `codebot report`
+writes `report-*.md`.
 
 ## Heat and speed
 
 A laptop running a 9B model for hours gets hot (85-96 C here). The thermal guard pauses model calls at `THERMAL_MAX` (92 C) and resumes at
-`THERMAL_RESUME`; one model job runs at a time; `codebot pause` unloads the model. `codebot bench --thermal` measures thread counts, power profiles
+`THERMAL_RESUME`; model calls run one at a time; `codebot pause` unloads the model. `codebot bench --thermal` measures thread counts, power profiles
 and GPU offload for sustained speed against heat on your machine. A cooling pad helps more than any setting.
 
 ## Modes
@@ -194,6 +205,9 @@ whether it passed, and lessons that correlate with failure are pruned (`codebot 
 |---|---|
 | `docs/BENCHMARK.md` | the Capability Ladder Benchmark: levels, the time rule, metrics, results |
 | `docs/MODEL_EVAL.md` | choosing local models: planner, worker and end-to-end scores, candidates, commands |
+| `docs/LARGE_MODELS.md` | running a larger model on this laptop: memory, heat, and the 30B results |
+| `docs/dev/REVIEW-2026-10-21.md` | what was tuned on the three measured tasks, and what has not been measured |
+| `docs/dev/GUI_PLAN.md` | design checklist for the window: what to show, what to control, where it comes from |
 | `modes/README.md` | the mode format |
 | `memory/README.md` | the lesson store |
 | `docs/dev/HANDOFF.md` | maintainer notes: current state, file map, gotchas (written to let a person or an AI agent pick the work up cold) |
