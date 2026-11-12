@@ -1,15 +1,18 @@
 # codebot: handoff (read this first in a new session)
 
-**Current state (2026-10-21).** Drafts mode (`codebot new`, then `codebot start`) is the way codebot works; the task pipeline (`codebot plan`)
-is kept working but no longer developed. This machine runs `coder30b-iq3` (Qwen3-Coder-30B-A3B, 3-bit) through the private Ollama
-(`config/local.env`; `docs/LARGE_MODELS.md`), the shipped default is still ornith:9b. A spec's worked examples are the only thing drafts mode
-can check, and since 66ae7b8 they can also show error output, exit statuses and standard input. **Read `docs/dev/REVIEW-2026-10-21.md`
-before tuning anything:** every drafts-mode rule was chosen and measured on the same three tasks (level_01, level_03, calc_go), so the next
-changes must be judged on held-out tasks with several seeds. The sections below are the history in order (oldest first in each section).
+**Current state (2026-11-11).** Drafts mode (`codebot new` → `codebot start`) is still the **default recommended** way to build. On top of that, **modular team pipelines** (`WORKFLOW=pipeline`) are implemented, tested with a fake model, committed, and pushed to GitHub (`https://github.com/RetroCodeRamen/codebot`, `main` @ `ae2116b`). The legacy task pipeline (`codebot plan`) is kept working but not developed.
 
-Last updated before that: 2026-10-19, after the baselines showed a plain whole-program loop beating the task pipeline and the user chose to rebuild around it: **drafts mode** (`codebot new`, `lib/codebot/drafts.py`, section "Drafts mode" below) is now the recommended way; the task pipeline stays as it was. Everything described here is committed (`git log` in this repo).
-This file is the single place that says what the project is, what state it is in, what is in flight, and what to do next. `docs/dev/ROADMAP.md` has
-the long design record (decisions, per-step learnings, real-model results). `README.md` is the user-facing description.
+This machine runs `coder30b-iq3` (Qwen3-Coder-30B-A3B, 3-bit) through the private Ollama (`config/local.env`; `docs/LARGE_MODELS.md`); the shipped default is still ornith:9b. Spec worked examples are the only drafts judge (errors / exit / stdin since 66ae7b8). **Read `docs/dev/REVIEW-2026-10-21.md` before tuning drafts:** rules were measured on level_01 / level_03 / calc_go — judge new changes on held-out tasks with several seeds.
+
+This file is the single place for project state, what is in flight, and what to do next. `docs/dev/ROADMAP.md` = long design record. `README.md` = user-facing. `docs/architecture/modular-agent-orchestration.md` = pipeline architecture.
+
+### Cold start for the next agent (2026-11-11)
+
+1. Repo: `~/Documents/Development/codebot`, branch `main`, tracking `origin/main` (public GitHub). Working tree should be clean after the pipeline commits.
+2. Constraints (never move): local only; one model inference at a time (`jobs.Hold` + `logs/model.lock`); harness owns pass/fail; **do not replace drafts as the default**; extend before rewrite; ask before destructive / out-of-tree work.
+3. Recent work (Cursor session): modular agent graphs — JSON + SVG connections GUI, Elephant/Goldfish templates, sequential scheduler, mailbox Q&A, scopes, nested teams, approve gates, drafts bridge. Fake-model acceptance A–D green. **Not done:** Scratch/Blockly; **real-model A/B success-rate** drafts vs pipeline (the original Elephant–Goldfish measurement goal).
+4. Quick verify: `cd tests && PYTHONPATH=../lib:. python3 -m unittest test_pipeline_config test_pipeline_runtime test_gui.PipelineGuiCase` then `PYTHONPATH=../lib python3 -m codebot.pipeline validate ../pipelines/templates/projects/*.json`.
+5. Try a pipeline project: `codebot pipeline init NAME --template solo` (or GUI project **More → Upgrade to pipeline…** / `#/pipeline/<name>`), then `codebot start NAME` when `WORKFLOW=pipeline`.
 
 ## 1. What codebot is
 
@@ -28,7 +31,7 @@ Repo: the codebot checkout (here `~/Documents/Development/codebot`) (git, branch
 
 | path | what |
 |---|---|
-| `bin/codebot` | bash CLI + supervisor loops (legacy loop, `loop_engine`, `loop_drafts`), `new` / `check-spec` (drafts projects), notify/ntfy, phone control, watchdog install. Dispatch is the `case` at the bottom. |
+| `bin/codebot` | bash CLI + supervisor loops (legacy loop, `loop_engine`, `loop_drafts`, **`loop_pipeline`**), `new` / `check-spec`, `pipeline …`, notify/ntfy, phone control, watchdog. Dispatch is the `case` at the bottom. |
 | `bin/codebot-engine` | python CLI over the engine: freeze, step, status, render (re-render PLAN.md from tasks.json), answer, audit, report, check-plan, check-spec (a spec file: which items have examples), modes, mode-info, prompt-template, sizing, split, memory, plan-op, reset. For a drafts project step/status/report go to `drafts` |
 | `bin/codebot-ui` | the interactive menu (`codebot` with no args) |
 | `bin/codebot-bench` | `codebot bench ...` (preflight, suites, thermal sweep; the subcommands `list/run/status/report/resume/cancel/validate/coverage` go to `lib/codebot/capbench/`, see `docs/BENCHMARK.md`) |
@@ -36,11 +39,11 @@ Repo: the codebot checkout (here `~/Documents/Development/codebot`) (git, branch
 | `lib/codebot/*.py` | the engine (python stdlib only): `drafts` (drafts mode: one whole-program round per step, restarts, best version delivered and committed, coverage of spec items by examples; the prompts are bench/baselines/bare_py.py's text), `engine` (step state machine), `tasks` (tasks.json store + integrity), `checks` (freeze/lock/tamper/run), `guard` (baseline guard), `planparse`, `planops` (add/split/reorder only), `gitops` (baseline commit, checkpoints, reset), `budgets` (stuck signals), `ladder`, `sizing` (split + stats), `splitter` (model-driven task splitter, the default SPLIT_CMD with the native worker; emits declarative assertions), `assertions` (declarative checks: the trusted assertion runner, copied into every project's `checks/` as `assert_runner.py`; exit 0 holds / 1 real failure / 2 unusable spec), `checkspec` (assertion JSON schema, spec files, check command, PLAN.md rendering), `planner` (native unattended planner: one constrained call + harness-driven repair rounds, used by `codebot bench --plan auto`), `worker` (native worker), `packer` (context), `specdoc` (the spec as a task sees it: the introduction plus the requirement the task implements, from `spec_items.json`, which the planner writes), `grounding` (checks grounded in the spec: its worked examples become harness-written assertions; `screen` drops model assertions that cannot hold for a program following the spec), `rederive` (before a split: assertions that failed in every attempt are judged against the spec and may be replaced, `checks.replace_check`), `ollama` (client), `tokens` (calibrated estimate), `thermal`, `taskclock` (per-task wall-clock budgets: one persisted budget per root task, enforced by killing the worker's process group; see ROADMAP), `proc` (run a shell command and kill its whole process tree on timeout), `sandbox` (Docker + policy), `audit` (hash chain), `memory` (evidence-backed lessons), `modes`, `report`, `preflight`, `bench`, `thermalbench`, `config` |
 | `lib/codebot/gui/` + `shape`, `projstate`, `jobs` | the window, `codebot gui` (`docs/dev/GUI_PLAN.md`): `gui/server.py` (127.0.0.1 only; POST needs header `X-Codebot: 1`, its own Origin and Host; CSP), `gui/api.py` (JSON API; every action runs the `codebot` CLI with an argument array; demo mode refuses every POST but check-spec), `gui/settings.py` (layered settings; writes only known keys, never a value bash would expand), `gui/runner.py` (the Run button: the built program on a pty, **not sandboxed**), `gui/actions.py` (detached long actions), `gui/sysinfo.py`, `gui/static/` (vanilla ES modules, text nodes only). `shape` (the design conversation: describe, questions, plan + spec, Build; refuses a plan without examples; the closing review that `loop_drafts` runs via `python3 -m codebot.shape review`), `projstate` (one project's state for every interface), `jobs` (one model job at a time: flock on `logs/model-job.lock`; **not yet taken by `bin/codebot`**, so `current()` also counts loops and benchmark runners found by pid file). Tests: `tests/test_gui.py`, `tests/test_shape.py`, `tests/test_runner.py` |
 | `lib/codebot/capbench/` + `bench/ladder/catalog/` | Capability Ladder Benchmark (12 levels + growing notes project, hidden reference tests, per-task 90 min budget via `taskclock` setting `TASK_MAX_MINUTES`, resumable runs in `bench/results/ladder/`). Modules: `manifests`, `reference`/`refrun` (hidden-test oracle), `workspace`, `runner`, `results`, `metrics`, `classify`, `reports`, `notify`, `cli`. Tests `tests/test_v_capbench.py`, `tests/test_u_taskclock.py`. Docs: `docs/BENCHMARK.md` |
-| `lib/codebot/pipeline/` + `pipelines/templates/` | Modular multi-agent orchestration (`codebot.pipeline/v1`): validate/load, sequential scheduler, mailbox Q&A, artifacts, `sees`, Team Designer, drafts bridge, SVG canvas GUI. Templates include solo, reviewers, debate, small-pods. Docs: `docs/architecture/modular-agent-orchestration.md`. Tests: `tests/test_pipeline_config.py`, `tests/test_pipeline_runtime.py`, GUI cases in `tests/test_gui.py`. |
+| `lib/codebot/pipeline/` + `pipelines/templates/` | Modular multi-agent orchestration (`codebot.pipeline/v1`). Modules: `validate`, `load` (incl. nested-team expand), `schedule` (one step / one inference, drafts bridge, cancel, approve), `mailbox`, `artifacts`, `scope`, `context` (memory policies + lessons for project/persistent), `invoke`, `design` (Team Designer + `init` + template install into `$HOME/pipelines/templates`), `runtime`, `__main__`. Templates: solo, architect-reviewers, debate, small-pods, nested-pods. GUI: `#/pipeline/<name>` (`pipeline.js`, `pipeline-canvas.js`). Docs: `docs/architecture/modular-agent-orchestration.md`. Tests: `tests/test_pipeline_config.py`, `tests/test_pipeline_runtime.py`, `PipelineGuiCase` in `tests/test_gui.py`. `.gitignore` uses `/projects/` so `pipelines/templates/projects/` is tracked. |
 | `modes/<name>/` | `code` (default) and `re` (reverse engineering with REA, `extends` code). `mode.json` + prompts (`plan.md`, `plan-quick.md`, `plan-auto.md`, `plan-repair.md`, `work.md`) + `worker.md` + notes + `verifiers/` |
 | `config/codebot.env` | all settings (documented inline). `config/Modelfile` (num_ctx 32768), `config/opencode.json`, `config/opencode-re.json` (generated) |
 | `memory/` | `expertise.md` (user-edited), `lessons.raw.jsonl` (append-only), `lessons.status.json`, generated `lessons.md`, `sizing.json`. Shared by all projects unless a project sets `MEMORY_DIR` (benchmark trials do: `projects/<trial>/memory`). Committed to git but rewritten at run time, so runs leave it modified |
-| `tests/` | ~597 test methods (`tests/run.sh [file]`, about 7 min for all, almost no CPU). `test_z_drafts.py` covers drafts mode; `test_pipeline_*.py` cover modular teams. `fake_ollama.py` is the scripted fake model server. Files `test_a_...` to `test_q_...` follow the roadmap steps; `test_p_regressions.py` holds bugs found by real-model runs; `test_u_taskclock.py` and `test_v_capbench.py` cover the benchmark |
+| `tests/` | ~607 test methods (`tests/run.sh [file]`, about 7 min for all, almost no CPU). `test_z_drafts.py` = drafts; `test_pipeline_*.py` + GUI pipeline cases = modular teams. `fake_ollama.py` = scripted fake model. `test_a_…`–`test_q_…` = roadmap; `test_p_regressions.py` = real-model bugs; `test_u_taskclock.py` / `test_v_capbench.py` = benchmark |
 | `bench/suite/pyutils` (easy, 5 tasks) and `bench/suite/pyhard` (hard, 5 tasks, one needs a human) | each has `spec.md`, `seed/`, `checks/`, `plan.md`, `reference/` (proven-correct solution used by tests) |
 | `projects/<name>/` | per-project state (see README "Per-project files"). `workspaces/<name>/` = git worktrees (code dirs must NOT be inside the state dir) |
 
@@ -62,7 +65,9 @@ sandbox, and keeps the round's record in `projects/<name>/drafts/`. A draft that
 best version is written to the code dir and committed. It stops when every example passes, at `DRAFTS_MINUTES` of round time or at
 `DRAFTS_MAX_ROUNDS`. Pause/resume/stop, phone control, the watchdog, `status`, `report` and `diff` work as for task projects.
 
-**Task (engine) mode**, in one paragraph:
+**Pipeline mode** (`WORKFLOW="pipeline"`; opt-in). Config lives in `projects/<name>/pipeline/project.json` (resolved bundle: agents + team + workflow). Scheduler (`lib/codebot/pipeline/schedule.py`) advances one harness decision per `step`, at most one Ollama call, under `jobs.Hold` kind `pipeline`. Agents talk via `messages.jsonl` (blocking QUESTION → WAITING). `sees` is enforced on writes. `action: drafts` bridges into `drafts.step` for solo builds. Gates use SPEC examples / tests / human **approve** (`PIPELINE_AUTO_APPROVE=0` → `WAITING_APPROVAL`; `codebot pipeline approve NAME`). CLI: `validate|init|design|step|run|status|cancel|approve`. Bash `loop_pipeline` from `codebot start`. GUI: project **Pipeline…** / **Upgrade to pipeline…**, route `#/pipeline/<name>` (team links agent|both|repository, workflow view, JSON, monitor). Templates under `pipelines/templates/` (also copied into `$CODEBOT_HOME/pipelines/templates` on init/design).
+
+**Task (engine) mode**, in one paragraph (legacy):
 
 `codebot plan` (interactive "grill me" planner via opencode TUI) writes `PLAN.md` where every task has `check:` / `files:` / `size:`. `codebot start` freezes it:
 the **baseline guard** rejects checks that already pass, are broken, or have prose after the backticks; checks and fixtures are sha256-locked; `tasks.json` is
@@ -93,9 +98,18 @@ Real-model (ornith:9b) evidence so far (details in ROADMAP "Real-model results")
 
 ## 5. In flight / not done (the honest list)
 
-**Pipeline graph / modular teams (2026-11-11).** Implemented: `codebot.pipeline/v1` JSON, sequential scheduler (one inference + `jobs.Hold`), WAITING/Q&A mailbox, artifacts, enforced `sees`, Team Designer, `pipeline init` (upgrade drafts→pipeline), drafts bridge, debate/small-pods/nested templates, nested-team expansion (`parent-child` ids), pod RESULT to managers, link kinds agent/repository/both, cancel, CLI (`validate|init|design|step|run|status|cancel`), `loop_pipeline`, GUI `#/pipeline/<name>`. Docs: `docs/architecture/modular-agent-orchestration.md`. Still later: Scratch/Blockly, real-model A/B vs drafts. Drafts remains the default.
+### Pipeline / modular teams — shipped core; measurement pending (2026-11-11)
 
-**The window (2026-10-22).** Built and reviewed; open items in order: (1) `bin/codebot` does not hold `logs/model-job.lock` yet (fd 9 in `__loop`, `jobs check` in `cmd_start`, `9>&-` for `ollama serve`, the benchmark runner's Hold); once it does, the closing review must run under the loop's lock instead of taking its own `jobs.Hold`. (2) Run executes the model's program unsandboxed on the host (a terminal program could run in the Docker sandbox; a windowed one needs the display). (3) The closing review is the model's opinion and has been confidently wrong (a Chip-8 XOR "serious" finding); label it or turn findings into examples. (4) No way to change a finished build ("a new run needs a new project"). (5) The design flow has never been measured on held-out ideas.
+**Done (fake-model tested, on `main`):** schema `codebot.pipeline/v1`; load/validate; sequential scheduler; mailbox Q&A + nested A→B→C; artifacts; `sees`; memory policies (`none`…`persistent`, lessons packed for project/persistent); Team Designer + `init`; drafts bridge; cancel + human approve; link kinds agent/repository/both (GUI + runtime); pods + nested-team expand (child ids like `math-impl`); templates solo / reviewers / debate / small-pods / nested-pods; CLI + `loop_pipeline` + GUI canvas/monitor; drafts remains default.
+
+**Acceptance (fake model):** A solo+drafts bridge; B small-pods run; C architect+reviewers fan-out; D goldfish debate Q&A — see tests + architecture §7b.
+
+**Next for whoever picks this up (priority order):**
+1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).
+2. Optional: shape Build → install pipeline template instead of only drafts; richer workflow canvas editing; Scratch/Blockly only if still wanted after SVG+JSON.
+3. Honesty gaps: CLI does not yet refuse a second `codebot start` via `jobs.Hold` the way the GUI/API do (same long-standing jobs note below); pipeline runs still share that.
+
+**The window (2026-10-22).** Built and reviewed; open items in order: (1) `bin/codebot` does not hold `logs/model-job.lock` yet (fd 9 in `__loop`, `jobs check` in `cmd_start`, `9>&-` for `ollama serve`, the benchmark runner's Hold); once it does, the closing review must run under the loop's lock instead of taking its own `jobs.Hold`. (2) Run executes the model's program unsandboxed on the host (a terminal program could run in the Docker sandbox; a windowed one needs the display). (3) The closing review is the model's opinion and has been confidently wrong (a Chip-8 XOR "serious" finding); label it or turn findings into examples. (4) No way to change a finished build ("a new run needs a new project"). (5) The design flow has never been measured on held-out ideas. GUI chrome was also tightened toward a human/workshop/tools split (projects-first nav); keep that language consistent if you touch the window.
 
 **Capability Ladder Benchmark (`docs/BENCHMARK.md`): built, validated, smoke-tested once.** Catalog of 12 levels + 8-stage growing project, all oracles validated (`codebot bench validate`). Smoke run (level 1, 4 min per task): hidden tests 41/64. **First full-budget run** (level 1, 90 min, 3 trials, `20261015-180429-l1-full`): hidden tests 78% / 47% / 73% (median 73%, below the 80% bar), 0 timeouts, 7 VERIFICATION_GAP; the planner's assertions (impossible `"expect"` args, weak coverage) decided the score. Details in `docs/BENCHMARK.md`. Done 2026-10-16 (`assertions.validate`, so the guard sees exit 2 = broken and the planner repair round / splitter drop them): a schema field name (`expect`, `raises`, `stdout_contains` ...) inside `args`/`kwargs`/`argv`, and `python3 -c` code that does not compile. These would have caught all three impossible checks of trial 2. Not done: an arity-consistency rule (a function legitimately takes optional arguments, so differing argument counts are not evidence; the leaked-field rule covers the case seen). Also 2026-10-16: 23 of the 65 failed hidden tests of that run were regressions (a later task broke a verified one; nothing re-ran earlier checks), so the engine now has a regression gate (`REGRESSION_GATE=1`: done only when every done task still passes), A planner-prompt change asking for one assertion per stated rule (4-12 per task) was REVERTED the same day: with it ornith packed items 1 and 2 into one 12-assertion task and ended the plan (5 of 6 first rounds on 2026-10-16 had 1 task; trials 1-2 of run 20261016-065138-l1-gate failed planning) and it copied the expected value into args (`slugify(123, "TypeError")`). Coverage needs another route that does not touch the task structure, e.g. a separate per-task assertion pass. Planning rounds now log their reason and keep the reply (`plan.reply.<n>.json`). Splits: a split child whose check already passes (that part is done) or is broken is now dropped and the rest of the split kept; before, one such child rejected the whole split (run 20261016-073141-l1-gate3, T2 `truncate`: split rejected, then blocked; run cancelled at the user's request to fix it). Known planner flake: ornith sometimes returns a 1-task plan for an 8-item spec (3 of 6 first rounds with the 2026-10-15 prompt); the repair rounds have recovered so far. Candidate fix: set the plan schema's minItems to the spec's item count. **Cancel race (found and fixed 2026-10-16):** a cancel that lands right after a trial's planning lets its loop survive: `drive_loop` starts the loop, sees the cancel, runs `codebot stop` before the loop has written `loop.pid`, and `stop` says "not running". The orphan loop of run 20261016-072308-l1-gate2 ran 07:33-10:02, shared the model with run 20261016-073141-l1-gate3 (its timings are not clean) and held `logs/model.lock` so run 20261016-095343-l1-gate4 waited 8 min (not charged to any task budget). Fix: check cancel before starting the loop and confirm the loop is dead after stop. Since the review on 2026-10-15 each trial has a private memory (`MEMORY_DIR`); the smoke run and every earlier bench run wrote into the shared `memory/` (the user chose to keep that data: it is 48 real tasks, committed in `memory/sizing.json` and `memory/lessons.status.json`).
 
@@ -114,14 +128,33 @@ Done since the last handoff (details and numbers in `docs/dev/ROADMAP.md`): NVID
 
 ## 6. Next steps, in order (copy-paste)
 
-Current (2026-10-21; drafts mode):
+Current (2026-11-11; pipeline follow-through + drafts still default):
 ```
-codebot setup                                     # starts the private Ollama (with LLAMA_ARG_CACHE_RAM=0)
-tests/run.sh                                      # full suite, about 7 min; it can reach the real model server, so never while a model job runs
-codebot bench --preflight                         # must say PREFLIGHT OK for the configured model
-codebot check-spec SPEC.md                        # which requirements have examples
-codebot new NAME SPEC.md ~/code/NAME && codebot start NAME     # a project; review with codebot diff NAME
-codebot bench run --level 2 --mode drafts --task-minutes 60 --seed 1 --repeats 3   # held-out tasks need examples first (REVIEW-2026-10-21)
+# sanity (no model)
+cd ~/Documents/Development/codebot
+PYTHONPATH=lib python3 -m codebot.pipeline validate pipelines/templates/projects/*.json
+cd tests && PYTHONPATH=../lib:. python3 -m unittest test_pipeline_config test_pipeline_runtime test_gui.PipelineGuiCase
+
+# drafts path (default)
+codebot setup                                     # private Ollama (LLAMA_ARG_CACHE_RAM=0)
+tests/run.sh                                      # full suite ~7 min; never while a model job runs
+codebot bench --preflight                         # must say PREFLIGHT OK
+codebot check-spec SPEC.md
+codebot new NAME SPEC.md ~/code/NAME && codebot start NAME
+
+# pipeline path (opt-in)
+codebot pipeline init NAME --template solo        # or debate|architect-reviewers|small-team|nested
+codebot pipeline status NAME
+codebot start NAME                                # loop_pipeline
+# GUI: codebot gui → project → Pipeline… / Upgrade to pipeline…
+
+# measurement the user cares about next (ask before long overnight runs)
+# same SPEC, drafts vs pipeline, several seeds; record results in ROADMAP; do not claim win without numbers
+```
+
+Still useful (2026-10-21 drafts / ladder):
+```
+codebot bench run --level 2 --mode drafts --task-minutes 60 --seed 1 --repeats 3   # held-out; need examples first (REVIEW-2026-10-21)
 ```
 
 Older (2026-10-15/16, the task pipeline):
