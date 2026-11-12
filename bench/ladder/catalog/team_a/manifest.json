@@ -1,0 +1,18 @@
+{
+  "id": "team_a", "level": null, "title": "Shop pricing library (three cooperating modules)", "version": "1.0.0",
+  "difficulty": "easy: three small modules, each building on the one before",
+  "primary_challenge": "Several files that must agree: written 2026-11-12 for the drafts-against-team comparison and never used for tuning",
+  "spec": "SPEC.md", "seed": "seed", "reference_solution": "reference_solution", "reference_tests": "reference_tests",
+  "expected_tasks": 8,
+  "planner": {"max_tasks": 10, "num_predict": 6000},
+  "requirements": [
+    {"id": "R1", "title": "parse_price", "keywords": ["parse_price"]},
+    {"id": "R2", "title": "format_price", "keywords": ["format_price"]},
+    {"id": "R3", "title": "parse_catalog", "keywords": ["parse_catalog"]},
+    {"id": "R4", "title": "lookup", "keywords": ["lookup"]},
+    {"id": "R5", "title": "parse_items", "keywords": ["parse_items"]},
+    {"id": "R6", "title": "subtotal", "keywords": ["subtotal"]},
+    {"id": "R7", "title": "discount", "keywords": ["discount"]},
+    {"id": "R8", "title": "receipt", "keywords": ["receipt"]}
+  ]
+}

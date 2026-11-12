@@ -143,6 +143,15 @@ minutes on this machine); how a file too long for one reply (4,000 tokens) gets 
 can ask; a snapshot of the team/workflow at run start and a reset/retry command (editing a node id mid-run fails the run with "missing node");
 how a reviewer's finding becomes something checkable; `fail` is open to every agent.
 
+**Drafts against a designed team, held-out (2026-11-12; `bench/teams/README.md` has the table and the caveats).** Two new three-module tasks
+(`bench/ladder/catalog/team_a`, `team_b`: written for this, validated before any model saw them, never used for tuning), three seeds, 20 minutes
+per trial, coder30b-iq3. Hidden tests, drafts then team: team_a 69, 69, 69 against 68, 67, 66 of 70; team_b 54, 56, 57 against 39, 39, 54 of 67.
+Drafts was ahead in all six pairs with 3 to 7 model calls against 42 to 67 and about a fifteenth of the prompt tokens; one of six team runs ended
+with a passing gate, four hit the time cap. Limits: the cap binds for both arms on team_b; agents still do not finish after a passing check
+(15 three-refusals stops in six runs), which a fix would shorten; both tasks fit in one reply, so the case a team is for (a program that does
+not) is untested. On this evidence a team does not help at this size on this machine: do not build the block editor, monitor or the rest of
+the multi-agent list before a task that drafts cannot do in one reply shows a team doing better.
+
 **Next for whoever picks this up (priority order):**
 1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).
 2. Optional: shape Build → install pipeline template instead of only drafts; richer workflow canvas editing; Scratch/Blockly only if still wanted after SVG+JSON.
