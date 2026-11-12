@@ -7,7 +7,7 @@
   "description": "One agent that implements a small program from SPEC.md, judged by the spec's examples (today's drafts loop).",
   "goal": "Write the whole program so every worked example in SPEC.md passes.",
   "instructions": "Follow SPEC.md. Reply with every source file whole. Do not invent acceptance checks; the harness runs the examples.",
-  "model": {"name": "codebot-model"},
+  "tools": ["read", "list", "check", "run"],
   "memory": "task",
   "sees": {
     "read": ["SPEC.md", "**"],

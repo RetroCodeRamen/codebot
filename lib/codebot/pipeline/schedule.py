@@ -1,6 +1,6 @@
 """Harness-owned sequential scheduler. At most one model invocation per step() call."""
 import json, os
-from . import artifacts, gates, mailbox, scope, invoke, runtime as R
+from . import artifacts, gates, mailbox, scope, invoke, tools, runtime as R
 from .context import member_agent, may_talk
 from .validate import ValidationError
 
@@ -51,6 +51,11 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
     act = action.get("action")
     ev = {"member": member_id, "action": act, "node": node.get("id")}
 
+    if act == "list": ev["result"] = tools.listing(ws, agent); return ev
+    if act == "read": ev["result"] = tools.read(ws, rd, agent, action.get("path")); ev["path"] = action.get("path"); return ev
+    if act == "check": ev["result"] = tools.check(proj, ws, agent); return ev
+    if act == "run": ev["result"] = tools.run(proj, ws, agent, member_id, action.get("command")); return ev
+
     if act in ("ask", "escalate"):
         to = action.get("to")
         if act == "escalate" and not to:
@@ -64,6 +69,7 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
         run["active"] = to
         # queue the asker to resume later via answer
         ev["question_id"] = msg["id"]; ev["to"] = to
+        ev["result"] = f"asked {to}; the answer will be in your inbox"
         return ev
 
     if act == "answer":
@@ -109,6 +115,7 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
         else:
             scope.write_text(ws, agent, path, content)
             ev["path"] = path
+        ev["result"] = f"wrote {path} ({len(content)} characters)"
         return ev
 
     if act == "finish":
@@ -258,6 +265,9 @@ def step(proj, *, chat_fn=None, bundle=None):
         if typ == "approve":
             run["approved"] = False  # consume one-shot approval for a later approve node
         run["last_gate"] = when
+        if typ == "gate":           # what the check showed goes to whoever the fail edge sends the work back to (_task_text)
+            if when == "fail": run["feedback"] = {"gate": cursor, "detail": detail[:3000]}
+            else: run.pop("feedback", None)
         nxt = _advance(bundle, run, cursor, when=when)
         fails = run.get("gates", {}).get(cursor, {}).get("fails", 0)
         if when == "fail" and (not nxt or fails > int(node.get("max_retries", GATE_RETRIES))):
@@ -299,6 +309,7 @@ def step(proj, *, chat_fn=None, bundle=None):
 def _activate_run_node(bundle, run, node):
     mid = node.get("agent")
     _set_member(run, mid, state="READY", node=node["id"])
+    run["members"][mid]["visit"] = int(run["members"][mid].get("visit") or 0) + 1      # its turns (tools.history) start again with each visit
     run["active"] = mid
     run["cursor"] = node["id"]
 
@@ -356,7 +367,13 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         run["members"][member_id]["steps"] = int(run["members"][member_id].get("steps") or 0) + 1
         R.save_run(proj, run)
         return _drafts_bridge(proj, run, member_id, node)
-    task, extra = _task_text(bundle, proj, node, agent)
+    task, extra = _task_text(bundle, proj, node, agent, run)
+    visit = int(run["members"][member_id].get("visit") or 0)
+    asked = [m for m in mailbox.inbox(rd, member_id) if m.get("type") == "QUESTION" and m.get("state") != "read"]
+    acts = tools.actions(agent, has_question=bool(asked))
+    limit = int((agent.get("limits") or {}).get("max_turns") or tools.MAX_TURNS)
+    stuck = tools.refused_in_a_row(rd, member_id, visit) and not asked
+    spent = stuck or (len(tools.turns(rd, member_id, visit)) >= limit and not asked)
     run["members"][member_id]["state"] = "RUNNING"
     run["members"][member_id]["steps"] = int(run["members"][member_id].get("steps") or 0) + 1
     R.save_run(proj, run)
@@ -368,8 +385,32 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         R.save_run(proj, run)
         return {"status": "BUSY", "owner": e.owner, "run": run}
     try:
-        action, agent, raw = invoke.invoke(bundle, rd, member_id, task, proj=proj, chat_fn=chat_fn, extra_files=extra or None)
-        ev = apply_action(bundle, proj, run, member_id, agent, action, node)
+        if spent:                # no model call: the node ends here and whatever checks the work (a gate) decides
+            why = "was stopped after 3 refused turns in a row" if stuck else f"used all {limit} turns"
+            action = {"action": "finish", "reason": f"{why} without finishing"}
+            run.setdefault("warnings", []).append(f"{member_id} {why} on node {node.get('id')} without finishing")
+        else:
+            try:
+                action, agent, raw = invoke.invoke(bundle, rd, member_id, task, proj=proj, chat_fn=chat_fn, extra_files=extra or None, acts=acts,
+                                                   history=tools.history(rd, member_id, visit, agent.get("memory") or "task"))
+            except invoke.InvokeError as e:
+                action = {"action": "invalid"}; problem = f"your reply could not be used: {e}"
+        # A request the harness cannot carry out is the agent's to correct on its next turn, not the end of the run.
+        ev = {"member": member_id, "action": action.get("action"), "node": node.get("id")}
+        sha = None if spent else tools.fingerprint(R.workspace_of(proj, bundle), agent, action)
+        same = None if spent else tools.unchanged(rd, R.workspace_of(proj, bundle), agent, member_id, visit, action, sha)
+        if action["action"] == "invalid": ev["error"] = problem
+        elif not spent and action["action"] not in acts and action["action"] != "noop":
+            ev["error"] = f"you may not use {action['action']!r} here; your actions are: {', '.join(acts)}"
+        elif same: ev["error"] = same
+        elif tools.repeated(rd, member_id, visit, action):
+            ev["error"] = "you ran exactly this on your previous turn and its output is above; do something else, or finish"
+        else:
+            try: ev = apply_action(bundle, proj, run, member_id, agent, action, node)
+            except (ScheduleError, ValidationError, tools.ToolError, OSError) as e:
+                ev["error"] = "; ".join(e.errors) if isinstance(e, ValidationError) else str(e)
+        tools.record(rd, member_id, visit, node.get("id"), action, ev.get("result") or ("error: " + ev["error"] if ev.get("error") else ""), sha=sha)
+        if len(ev.get("result") or "") > 600: ev["result"] = ev["result"][:600] + " ... (whole in turns.jsonl)"
     except Exception as e:
         hold.release()
         run["members"][member_id]["state"] = "FAILED"
@@ -385,8 +426,8 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         pass
     elif run["members"][member_id]["state"] == "WAITING":
         pass
-    elif action.get("action") in ("write", "noop") and run["members"][member_id]["state"] == "RUNNING":
-        # keep READY for another turn on same node until finish
+    elif run["members"][member_id]["state"] == "RUNNING":
+        # anything but finish / findings / a question: another turn on the same node
         run["members"][member_id]["state"] = "READY"
         run["active"] = member_id
     R.save_run(proj, run)
@@ -394,7 +435,7 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         run["status"] = "FAILED"; run["error"] = "deadlock"; R.save_run(proj, run)
     return {"status": run["status"], "event": "invoke", "result": ev, "run": run}
 
-def _task_text(bundle, proj, node, agent):
+def _task_text(bundle, proj, node, agent, run=None):
     bits = [f"Workflow node `{node.get('id')}` action={node.get('action') or 'work'}."]
     if node.get("description"): bits.append(str(node["description"]))
     bits.append(f"Your goal: {agent.get('goal') or ''}")
@@ -408,6 +449,12 @@ def _task_text(bundle, proj, node, agent):
                 extra["SPEC.md"] = scope.read_text(ws, agent, "SPEC.md", limit=20000)
         except ValidationError:
             pass
+    sees = agent.get("sees") or {}
+    if sees.get("write"): bits.append("You may write: " + ", ".join(sees["write"]) + ".")
+    if sees.get("read") and os.path.isdir(ws): bits.append("Files in the code directory:\n" + tools.listing(ws, agent, limit=40))
+    fb = (run or {}).get("feedback")
+    if fb and sees.get("write"):
+        bits.append(f"The harness checked the result (gate `{fb['gate']}`) and it FAILED. Fix this:\n{fb['detail']}")
     rd = run_dir(proj)
     qs = [m for m in mailbox.inbox(rd, agent["member_id"]) if m.get("type") == "QUESTION" and m.get("state") != "read"]
     if qs:

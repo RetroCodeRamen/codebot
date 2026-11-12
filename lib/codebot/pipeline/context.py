@@ -51,14 +51,17 @@ def escalate_target(bundle, member_id):
     talks = agent.get("can_talk_to") or []
     return talks[0] if talks else None
 
-def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, proj=None):
+def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, proj=None, acts=None, history=""):
     """Return OpenAI-style messages for one invocation. Memory policy controls history."""
     agent = member_agent(bundle, member_id)
     if not agent: raise KeyError(member_id)
     mem = agent.get("memory") or "task"
     system = (agent.get("instructions") or agent.get("goal") or "").strip()
     system += f"\n\nYou are member `{member_id}` ({agent.get('name') or agent.get('role') or 'agent'})."
-    system += "\nReply with a single JSON object matching the action schema. Only one action per turn."
+    if acts:
+        from . import tools
+        system += "\n\n" + tools.guide(acts)
+    else: system += "\nReply with a single JSON object matching the action schema. Only one action per turn."
     if agent.get("can_talk_to"):
         system += f"\nYou may message: {', '.join(agent['can_talk_to'])}."
     mgr = manager_of(bundle, member_id)
@@ -72,7 +75,8 @@ def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, p
     # recent inbox (always: current task needs unanswered questions)
     inbox = mailbox.inbox(run_dir, member_id)[-12:]
     if mem == "none":
-        inbox = [m for m in inbox if m.get("type") in ("TASK", "QUESTION") and m.get("state") != "read"][-4:]
+        # no one else's findings or chat; the answer to its own question is not history, it is what it is waiting for
+        inbox = [m for m in inbox if m.get("type") in ("TASK", "QUESTION", "ANSWER") and m.get("state") != "read"][-4:]
     elif mem == "invocation":
         inbox = inbox[-2:]
     elif mem in ("task", "project", "persistent"):
@@ -93,6 +97,7 @@ def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, p
                 body.append("Lessons:\n" + "\n".join(f"- {L.get('text') or L}" for L in lessons))
         except Exception:
             pass
+    if history: body.append(history)          # last: what it did most recently is what it acts on next
     msgs.append({"role": "user", "content": "\n\n".join(body)})
     return msgs, agent
 

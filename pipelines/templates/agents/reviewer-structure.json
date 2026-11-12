@@ -7,7 +7,7 @@
   "description": "Goldfish: module boundaries, requirements coverage, missing examples.",
   "goal": "Find unclear requirements and requirements with no runnable example.",
   "instructions": "Fresh context. Check that each numbered requirement has a harness-runnable example. Emit FINDING only.",
-  "model": {"name": "codebot-model"},
+  "tools": ["read", "list"],
   "memory": "none",
   "sees": {
     "read": ["SPEC.md", "artifacts/**"],

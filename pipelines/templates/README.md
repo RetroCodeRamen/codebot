@@ -19,4 +19,6 @@ PYTHONPATH=lib python3 -m codebot.pipeline validate pipelines/templates/projects
 
 Gate nodes (`"type": "gate"`) take `"check"`: `examples` (run the spec's examples against the code), `tests` (run `verify.sh`), `spec-examples` (the spec has runnable examples), `approve`. Optional `"max_retries"` (default 2) bounds how often a `when: fail` edge is taken.
 
+Agents take `"tools"`: a list of `read`, `list`, `check` (run the spec's examples), `run` (a sandboxed shell command); the default is `read`, `list`, `check`. The shipped agents name no model, so they use the machine's configured one (`CODEBOT_MODEL`). `codebot pipeline design <name>` asks the model who should write which files and builds the team from the answer (`lib/codebot/pipeline/teamgen.py`).
+
 Install onto a project: `codebot pipeline init <name> --template solo|architect-reviewers|debate|small-team`. GUI: `#/pipeline/<name>`. See `docs/architecture/modular-agent-orchestration.md`.

@@ -3,6 +3,7 @@ import re
 from . import schema as S
 
 SCHEMA = S.SCHEMA
+AGENT_TOOLS = ("read", "list", "check", "run")                      # what each one does: tools.py
 GATE_CHECKS = ("examples", "tests", "spec-examples", "approve")      # what each one runs: gates.py
 _ID = re.compile(S.ID)
 _PATH = re.compile(S.PATH_GLOB)
@@ -68,6 +69,9 @@ def validate_agent(doc, where="agent"):
         for m in msgs or []:
             if m not in S.MESSAGE: err.append(f"{where}.messages: unknown type {m!r}")
     if "limits" in doc and not isinstance(doc["limits"], dict): err.append(f"{where}.limits: must be an object")
+    if doc.get("tools") is not None:
+        if not isinstance(doc["tools"], list): err.append(f"{where}.tools: must be a list")
+        else: err += [f"{where}.tools: unknown tool {t!r} (known: {', '.join(AGENT_TOOLS)})" for t in doc["tools"] if t not in AGENT_TOOLS]
     if "model" in doc and doc["model"] is not None and not isinstance(doc["model"], (str, dict)):
         err.append(f"{where}.model: string or object")
     return err

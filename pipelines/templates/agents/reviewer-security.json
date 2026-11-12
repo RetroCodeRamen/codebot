@@ -7,7 +7,7 @@
   "description": "Goldfish: fresh context, security-only findings on SPEC and referenced scope.",
   "goal": "List concrete security gaps and missing examples for threat-relevant behavior.",
   "instructions": "You see only SPEC.md and allowed paths. No prior design chat. Emit FINDING messages; do not rewrite the whole SPEC.",
-  "model": {"name": "codebot-model"},
+  "tools": ["read", "list"],
   "memory": "none",
   "sees": {
     "read": ["SPEC.md", "artifacts/**"],

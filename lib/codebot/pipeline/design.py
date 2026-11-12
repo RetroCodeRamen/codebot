@@ -2,7 +2,7 @@
 import json, os, shutil
 from .load import load_project
 from .validate import validate_project, ValidationError
-from . import invoke
+from . import invoke, teamgen
 
 TEMPLATES = {
     "solo": "projects/basic-calculator.json",
@@ -10,17 +10,6 @@ TEMPLATES = {
     "debate": "projects/spec-debate.json",
     "small-team": "projects/small-pods.json",
     "nested": "projects/nested-pods.json",
-}
-
-DESIGN_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["summary", "template"],
-    "properties": {
-        "summary": {"type": "string"},
-        "template": {"type": "string", "enum": ["solo", "architect-reviewers", "debate", "small-team", "nested"]},
-        "notes": {"type": "string"}
-    }
 }
 
 def templates_dir(home=None):
@@ -58,17 +47,15 @@ def propose(home, spec_text, *, chat_fn=None, proj=None, template=None):
     elif chat_fn is None and proj is None:
         choice = {"summary": "heuristic", "template": "solo" if len(spec_text or "") < 4000 else "architect-reviewers"}
     else:
-        messages = [
-            {"role": "system", "content":
-             "You design the smallest AI team that can implement the SPEC. "
-             "Pick template 'solo' for a small clear program with examples; "
-             "'architect-reviewers' when the SPEC needs independent review; "
-             "'debate' when reviewers should be able to question each other; "
-             "'small-team' for coordinated math/UI-style pods. Prefer solo when unsure."},
-            {"role": "user", "content": "SPEC:\n" + (spec_text or "")[:12000]}
-        ]
-        out = invoke.call_model(proj, messages, DESIGN_SCHEMA, temperature=0.1, num_predict=400, chat_fn=chat_fn)
-        choice = json.loads(out.get("content") or "{}")
+        # The model says who writes which files (teamgen.TEAM_SCHEMA); the harness writes the agents, team and workflow from that.
+        out = invoke.call_model(proj, teamgen.prompt(spec_text, proj), teamgen.TEAM_SCHEMA, temperature=0.1, num_predict=1200, chat_fn=chat_fn)
+        try: proposal = json.loads(out.get("content") or "{}")
+        except ValueError: proposal = {}
+        try: bundle, meta = teamgen.compile_team(proposal if isinstance(proposal, dict) else {}, spec_text or "")
+        except ValidationError as e: bundle, meta = None, {"summary": "", "notes": [f"the proposal did not make a valid team: {x}" for x in e.errors]}
+        meta["proposal"] = proposal
+        if bundle is not None: return bundle, meta
+        choice = {"summary": meta.get("summary") or meta.get("reason") or "", "template": "solo", "designed": meta}
     name = choice.get("template") or "solo"
     if name not in TEMPLATES:
         name = "solo"
@@ -77,6 +64,7 @@ def propose(home, spec_text, *, chat_fn=None, proj=None, template=None):
         path = os.path.join(ensure_templates(home), TEMPLATES[name])
     bundle = load_project(path)
     meta = {"template": name, "summary": choice.get("summary") or "", "notes": choice.get("notes") or "", "path": path}
+    if choice.get("designed"): meta.update({k: v for k, v in choice["designed"].items() if k in ("notes", "reason", "proposal", "workers")})
     validate_project(bundle)
     return bundle, meta
 

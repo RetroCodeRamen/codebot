@@ -104,6 +104,28 @@ Real-model (ornith:9b) evidence so far (details in ROADMAP "Real-model results")
 
 **Acceptance (fake model):** A solo+drafts bridge; B small-pods run; C architect+reviewers fan-out; D goldfish debate Q&A — see tests + architecture §7b.
 
+**Agents can work, and the Team Designer writes a team (2026-11-11, after an audit of the build against the original prompt).** Before this an
+agent could only talk and write blind: no reading a file but SPEC.md, no running anything, no memory of its own turns (after a `write` it was
+asked again with the same context), and the designer only picked one of five templates. Now (`pipeline/tools.py`, `teamgen.py`, architecture
+doc section 5b): actions `list`, `read`, `check` (the spec's examples; for a worker that writes only some of the spec's files, the examples for
+those files), `run` (sandboxed, per agent `"tools"`); the schema offered to the model has only the actions that agent may take; every turn and
+its result is in `pipeline/turns.jsonl` and shown in the agent's next prompt; a request that cannot be done is an error turn, not a failed run;
+`limits.max_turns` (16) ends a node; a failed gate's output goes to the agent the fail edge returns to; the shipped agents no longer name
+`codebot-model`, so they use the configured model. `codebot pipeline design NAME` asks who writes which files and the harness builds the team
+(workers in dependency order, optional coordinator and QA, an integrator, the examples gate with a fail edge back to the integrator); one
+worker or nothing usable is the solo template.
+Real model (coder30b-iq3, ONE spec, ONE seed each: the first four requirements of level_01, two modules, 19 examples; projects `smoke-team`,
+`smoke-team2`): the designer proposed two workers, one per file, in 54 s. Run 1: both files right on each worker's first write and the gate
+passed 19/19, but in 52 model calls and 7 min: all three agents used every turn re-reading their file and re-running the check (the first
+worker's check said 0 of 19 because the other worker's file did not exist yet). Fixes: a worker's check covers its own files; a read, list or
+check that would show nothing new since the same one earlier in the visit is refused, as is writing a file its current text; three refused
+turns in a row end the node. Run 2: 19/19 in 23 calls and 2 min 45 s; one worker finished by itself, the other and the integrator were stopped
+by the three-refusals rule after a passing check. Not done: an agent does not finish by itself reliably once its check passes (ending the node
+on a passing check would save about three calls per agent; not added on one run's evidence); nothing here is a success-rate claim, level_01 is
+a tuning task, and drafts mode builds this spec in one call. Still missing from the prompt: see the audit list in the session of 2026-11-11
+(agent limits other than max_turns unread, no retry or per-agent timeout, TASK/DECISION/ARTIFACT/ERROR messages never produced, memory policies
+nearly identical, no block editor, read-only workflow canvas, thin monitor, no frozen spec, scenario B never run).
+
 **Next for whoever picks this up (priority order):**
 1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).
 2. Optional: shape Build → install pipeline template instead of only drafts; richer workflow canvas editing; Scratch/Blockly only if still wanted after SVG+JSON.

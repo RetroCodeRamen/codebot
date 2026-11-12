@@ -89,6 +89,37 @@ Layout-only GUI fields (`x`, `y`, `color`) live under `"ui": {...}` and must rou
 
 Validators (stdlib, no JSON Schema library): duplicate IDs, missing refs, talk-to not in team, write∉read, unbounded loops, unreachable nodes, schema version.
 
+## 5b. What an agent can do in one turn (`pipeline/tools.py`, `invoke.py`)
+
+One turn is one model call that returns one JSON action. The schema offered to the model lists only the actions that agent may take at that
+moment, and the system prompt explains each of them.
+
+| Action | Who has it | What the harness does |
+|---|---|---|
+| `list`, `read` | `sees.read` and the tool (default) | the files it may read; one file, or an artifact (`artifacts/NAME`), cut at 12,000 characters |
+| `write` | `sees.write` | replaces one file inside its write globs (whole text, one file per turn) |
+| `check` | the tool (default) | runs the spec's worked examples on a copy of the workspace: the examples gate's own judgement |
+| `run` | `"tools"` lists `run` | one shell command in the workspace, in the sandbox, under the worker's command policy |
+| `ask`, `escalate`, `answer` | `can_talk_to` / a pending question | blocking question and its answer (section 6) |
+| `findings`, `finish`, `fail` | everyone | end the agent's part; `fail` stops the run |
+
+An agent's `"tools"` is a list of `read`, `list`, `check`, `run`; without it the agent gets `read`, `list`, `check`.
+
+**Turn memory.** A context is rebuilt for every call, so every action and its result is appended to `pipeline/turns.jsonl` and the agent's own
+turns of the current visit of its node are shown at the end of its next prompt (the last three results whole, older ones shortened; `project`
+and `persistent` memory add one line per turn of earlier visits). A request that cannot be carried out (a path outside `sees`, a missing file,
+an action it has no right to, a command the policy denies, a reply that is not JSON or was cut off, the same action twice in a row) is a turn
+whose result is the error, not a failed run. After `limits.max_turns` turns (default 16) on one visit the node ends without a model call, the
+run records a warning, and whatever checks the work decides. When a gate fails, the agent the fail edge returns to is shown the check's output.
+
+**Team Designer** (`design.propose`, `teamgen.py`). The model answers one constrained question: the workers, the files each writes, which
+workers each builds on, whether a coordinator and a QA reviewer are needed. The harness writes the agents, team and workflow from the answer, so
+the result is always valid: ids are repaired, a file has one owner, a file the spec names that nobody took gets one, a worker with no file is
+dropped. Two or more workers become `start → [coordinator writes PLAN.md] → each worker in dependency order → [QA findings] → integrator → examples
+gate (fail → integrator, twice) → end`; a spec without runnable examples ends in an approval instead. One usable worker, or nothing usable, is
+the solo template (the drafts loop). Every agent uses the machine's configured model; the designer does not assign models, and it is one model
+call, not a member of the team that messages others.
+
 ## 6. Execution lifecycle (later milestones)
 
 States: `READY | RUNNING | WAITING | SUSPENDED | COMPLETED | FAILED | CANCELLED`.
@@ -128,7 +159,7 @@ Scratch/Blockly remains deferred; JSON is still the source of truth.
 2. **Sequential scheduler** — done (one lock, checkpoints, restart)  
 3. **Messaging + memory policies** — done (QUESTION/ANSWER, nested A-B-C, none/task/project/persistent)  
 4. **Workspaces + artifacts** — done (`sees`, artifact refs)  
-5. **Planning + Team Designer** — done (`pipeline design|init`, templates)  
+5. **Planning + Team Designer** — done (`pipeline design|init`, templates; since 2026-11-11 the designer writes a team from the spec, section 5b)  
 6. **Visual editor** — done (SVG team/workflow canvas + JSON; Scratch deferred)  
 7. **Monitor + full GUI integration** — done (live status, cancel, approve)  
 

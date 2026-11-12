@@ -26,12 +26,18 @@ def _scratch(proj, ws):
     shutil.copytree(ws, base, symlinks=True, ignore=IGNORE)
     return q
 
-def examples(proj, ws):
+def examples(proj, ws, only=None):
+    """only = the spec's files one worker writes: then just the examples that call into those files are run (and just those files must exist), so
+    a worker is not told its part fails because another worker's file is not written yet. Only for specs whose examples are all function calls."""
     spec = _spec(proj, ws)
     if not spec.strip(): return "fail", "there is no SPEC.md in the workspace"
     build, checks = drafts.examples(spec)
     if not checks: return "fail", "SPEC.md has no example codebot can run, so there is nothing to judge the code by (codebot check-spec SPEC.md)"
-    names = drafts.spec_files(spec); decl = drafts.declared(spec, names)
+    names = drafts.spec_files(spec); decl = drafts.declared(spec, names); part = ""
+    if only is not None and not build and all(a["type"] == "call" and a.get("module") for a in checks):
+        names = [n for n in names if n in only]; decl = {k: v for k, v in decl.items() if v in only}
+        checks = [a for a in checks if a["module"] + ".py" in only]; part = f" for your files ({', '.join(only)})"
+        if not checks: return "pass", f"no example in SPEC.md calls into your files ({', '.join(only)}), so there is nothing to run"
     q = _scratch(proj, ws); cdir = drafts.dpath(q, "checks"); os.makedirs(cdir, exist_ok=True)
     shutil.copyfile(A.__file__, os.path.join(cdir, K.RUNNER))
     with open(os.path.join(cdir, "checks.json"), "w") as f: json.dump({"asserts": checks}, f, indent=1)
@@ -42,7 +48,7 @@ def examples(proj, ws):
     st = {"names": names, "language": drafts.language(spec, names, sorted(os.listdir(ws))), "build": build, "declared": decl}
     built, passed, defined, feedback = drafts.evaluate(q, st, files)
     ok = built and passed == len(checks) and defined == len(decl)
-    head = f"{passed} of {len(checks)} spec examples pass" + (f", {defined} of {len(decl)} declared names defined" if decl else "")
+    head = f"{passed} of {len(checks)} spec examples{part} pass" + (f", {defined} of {len(decl)} declared names defined" if decl else "")
     return ("pass" if ok else "fail"), (head if ok else f"{head}\n{feedback}".strip())
 
 def tests(proj, ws):

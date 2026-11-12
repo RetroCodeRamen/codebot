@@ -7,7 +7,7 @@
   "description": "Holds the brief and SPEC; merges reviewer findings. Elephant role in the Elephant/Goldfish pattern.",
   "goal": "Produce a SPEC.md with numbered requirements and runnable worked examples the harness can judge.",
   "instructions": "Write and revise SPEC.md only. Every checkable requirement needs an example in codebot's forms. Do not write application source.",
-  "model": {"name": "codebot-model"},
+  "tools": ["read", "list"],
   "memory": "project",
   "sees": {
     "read": ["SPEC.md", "docs/**", "artifacts/**"],
