@@ -17,4 +17,6 @@ PYTHONPATH=lib python3 -m codebot.pipeline validate pipelines/templates/projects
 | `projects/small-pods.json` | Coordinator + math/UI pods (scenario B shape) |
 | `projects/nested-pods.json` | Coordinator with a nested team expanded to `math-impl` / `math-check` |
 
+Gate nodes (`"type": "gate"`) take `"check"`: `examples` (run the spec's examples against the code), `tests` (run `verify.sh`), `spec-examples` (the spec has runnable examples), `approve`. Optional `"max_retries"` (default 2) bounds how often a `when: fail` edge is taken.
+
 Install onto a project: `codebot pipeline init <name> --template solo|architect-reviewers|debate|small-team`. GUI: `#/pipeline/<name>`. See `docs/architecture/modular-agent-orchestration.md`.

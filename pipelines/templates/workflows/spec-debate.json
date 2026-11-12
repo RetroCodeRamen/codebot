@@ -15,7 +15,7 @@
     {"id": "revise", "type": "run", "agent": "elephant", "action": "merge_findings"},
     {"id": "again", "type": "loop", "max_iterations": 2},
     {"id": "approve", "type": "approve"},
-    {"id": "gate", "type": "gate", "check": "examples"},
+    {"id": "gate", "type": "gate", "check": "spec-examples"},
     {"id": "done", "type": "end"}
   ],
   "edges": [

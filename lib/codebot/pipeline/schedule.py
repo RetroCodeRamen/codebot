@@ -1,6 +1,6 @@
 """Harness-owned sequential scheduler. At most one model invocation per step() call."""
 import json, os
-from . import artifacts, mailbox, scope, invoke, runtime as R
+from . import artifacts, gates, mailbox, scope, invoke, runtime as R
 from .context import member_agent, may_talk
 from .validate import ValidationError
 
@@ -19,7 +19,8 @@ def _deadlock(run):
     return True
 
 def _advance(bundle, run, from_id, when="pass"):
-    edges = R.edges_from(bundle, from_id, when=when) or R.edges_from(bundle, from_id)
+    # a failed gate follows only an edge that says so: falling back to every edge would take its "pass" edge
+    edges = R.edges_from(bundle, from_id, when=when) or ([] if when == "fail" else R.edges_from(bundle, from_id))
     if not edges:
         run["status"] = "COMPLETED"; run["cursor"] = from_id; return None
     # fan_out: enqueue all targets
@@ -134,22 +135,15 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
 
     raise ScheduleError(f"unknown action {act}")
 
-def _gate(bundle, proj, node):
-    check = node.get("check") or "approve"
-    ws = R.workspace_of(proj, bundle)
-    if check == "approve":
-        # auto-approve unless APPROVE=0 in project env for tests that want blocking
-        return "pass" if proj.get("PIPELINE_AUTO_APPROVE", "1") != "0" else "fail"
-    if check == "examples":
-        spec_path = os.path.join(ws, "SPEC.md")
-        if not os.path.isfile(spec_path): return "fail"
-        from codebot import drafts
-        with open(spec_path, encoding="utf-8") as f: spec = f.read()
-        cov = drafts.coverage(spec)
-        return "pass" if cov.get("examples", 0) > 0 else "fail"
-    if check == "tests":
-        return "pass" if os.path.isfile(os.path.join(ws, "verify.sh")) else "fail"
-    return "pass"
+GATE_RETRIES = 2          # a gate may send the run back this many times (a node's "max_retries" overrides it)
+
+def _gate(bundle, proj, run, node):
+    """Run the gate's check (pipeline/gates.py) and keep what it showed in run["gates"]."""
+    when, detail = gates.run(proj, bundle, node)
+    rec = run.setdefault("gates", {}).setdefault(node["id"], {"fails": 0})
+    rec.update(check=node.get("check") or "approve", result=when, detail=detail[:4000])
+    if when == "fail": rec["fails"] += 1
+    return when, detail
 
 def _join_ready(bundle, run, join_id):
     """True when every immediate run predecessor of join is listed in completed_nodes."""
@@ -260,20 +254,23 @@ def step(proj, *, chat_fn=None, bundle=None):
             run["approve_node"] = cursor
             R.save_run(proj, run)
             return {"status": "WAITING_APPROVAL", "event": "approve", "node": cursor, "run": run}
-        when = _gate(bundle, proj, node) if typ == "gate" else "pass"
+        when, detail = _gate(bundle, proj, run, node) if typ == "gate" else ("pass", "")
         if typ == "approve":
             run["approved"] = False  # consume one-shot approval for a later approve node
         run["last_gate"] = when
         nxt = _advance(bundle, run, cursor, when=when)
-        if not nxt and when == "fail":
-            run["status"] = "FAILED"; run["error"] = f"gate {cursor} failed"
+        fails = run.get("gates", {}).get(cursor, {}).get("fails", 0)
+        if when == "fail" and (not nxt or fails > int(node.get("max_retries", GATE_RETRIES))):
+            first = detail.splitlines()[0] if detail else ""
+            run["status"] = "FAILED"; run["error"] = f"gate {cursor} failed" + (f" {fails} times" if nxt else "") + (f": {first}" if first else "")
+            nxt = None
         else:
             run["cursor"] = nxt or cursor
             if typ == "approve" and when == "pass":
                 run["status"] = "RUNNING" if run.get("status") == "WAITING_APPROVAL" else run.get("status") or "RUNNING"
                 run.pop("approve_node", None)
         run["step_count"] += 1; R.save_run(proj, run)
-        return {"status": run["status"], "event": "gate" if typ == "gate" else "approve", "when": when, "next": nxt, "run": run}
+        return {"status": run["status"], "event": "gate" if typ == "gate" else "approve", "when": when, "detail": detail[:2000], "next": nxt, "run": run}
 
     if typ == "run":
         # if this run node finished, advance

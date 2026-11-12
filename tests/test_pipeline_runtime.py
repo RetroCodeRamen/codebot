@@ -19,14 +19,17 @@ def _home():
         f.write('CODEBOT_MODEL="fake"\nOLLAMA_PORT=1\nTHERMAL_GUARD=0\n')
     return d
 
-def _proj(home, name, bundle_path, spec=""):
+def _proj(home, name, bundle_path, spec="", check=None):
     pd = os.path.join(home, "projects", name); os.makedirs(pd)
     code = os.path.join(home, "code", name); os.makedirs(code)
     if spec:
         with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(spec)
     with open(os.path.join(pd, "project.env"), "w") as f:
         f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\nWORKFLOW="pipeline"\nPIPELINE="pipeline/project.json"\nPIPELINE_AUTO_APPROVE=1\n')
-    design.write_project_pipeline(Project(name, home), load_project(bundle_path), template_meta={"template": "test"})
+    bundle = load_project(bundle_path)
+    for n in bundle["workflow"]["nodes"]:
+        if check and n.get("type") == "gate": n["check"] = check
+    design.write_project_pipeline(Project(name, home), bundle, template_meta={"template": "test"})
     return Project(name, home)
 
 SPEC = """# Calc
@@ -54,7 +57,7 @@ class Script:
             sys_msg = messages[0]["content"]
             member = None
             for mid in list(self.plan):
-                if f"`{mid}`" in sys_msg: member = mid; break
+                if f"You are member `{mid}`" in sys_msg: member = mid; break          # not any mention: a worker's prompt names its manager too
             if member is None:
                 member = next(iter(self.plan))
             self.calls.append(member)
@@ -451,6 +454,73 @@ class TestApproveGate(unittest.TestCase):
             self.assertEqual(run2["status"], "COMPLETED", (ev, events2[-10:]))
         finally:
             shutil.rmtree(home, ignore_errors=True)
+
+class TestGatesRunTheChecks(unittest.TestCase):
+    """A gate passes on what the harness ran, never on a file being there or on an agent saying it is done."""
+    CALC = ("pipelines", "templates", "projects", "basic-calculator.json")      # build -> gate, the gate's fail edge goes back to build
+    PODS = ("pipelines", "templates", "projects", "small-pods.json")            # the gate has a pass edge only
+
+    def _run(self, name, tpl, dev, check=None, files=None, spec=SPEC):
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        proj = _proj(home, name, os.path.join(home, *tpl), spec, check=check)
+        for n, text in (files or {}).items():
+            with open(os.path.join(proj.workdir, n), "w") as f: f.write(text)
+        script = Script({"dev": dev, "sync": [{"action": "finish"}], "math-dev": dev, "ui-dev": [{"action": "finish"}]})
+        run, events = schedule.run_until_idle(proj, chat_fn=script, max_steps=80)
+        return proj, run, events
+
+    def test_examples_gate_passes_code_that_does_what_the_spec_shows(self):
+        proj, run, events = self._run("g1", self.CALC, [{"action": "write", "path": "mathx.py", "content": "def add(a, b): return a + b\n"}, {"action": "finish"}])
+        self.assertEqual(run["status"], "COMPLETED", events)
+        g = run["gates"]["check"]
+        self.assertEqual((g["check"], g["result"], g["fails"]), ("examples", "pass", 0))
+        self.assertIn("1 of 1 spec examples pass", g["detail"])
+        self.assertEqual(sorted(os.listdir(proj.workdir)), ["SPEC.md", "mathx.py"])           # judged on a copy: nothing is left in the code dir
+
+    def test_examples_gate_fails_wrong_code_and_stops_after_its_retries(self):
+        proj, run, events = self._run("g2", self.CALC, [{"action": "write", "path": "mathx.py", "content": "def add(a, b): return a - b\n"}, {"action": "finish"}])
+        self.assertEqual(run["status"], "FAILED", events)
+        self.assertIn("gate check failed 3 times: 0 of 1 spec examples pass", run["error"])
+        self.assertIn("add(2, 3)", run["gates"]["check"]["detail"])
+        self.assertEqual([e.get("when") for e in events if e.get("event") == "gate"], ["fail"] * 3)
+
+    def test_examples_gate_fails_when_no_code_was_written(self):
+        proj, run, events = self._run("g3", self.CALC, [{"action": "finish", "reason": "all done, everything works"}])
+        self.assertEqual(run["status"], "FAILED", events)
+        self.assertIn("mathx.py", run["gates"]["check"]["detail"])
+
+    def test_a_failed_gate_never_takes_its_pass_edge(self):
+        proj, run, events = self._run("g4", self.PODS, [{"action": "write", "path": "mathx.py", "content": "def add(a, b): return 0\n"}, {"action": "finish"}])
+        self.assertEqual(run["status"], "FAILED", events[-10:])
+        self.assertTrue(run["error"].startswith("gate gate failed: 0 of 1 spec examples pass"), run["error"])
+
+    def test_examples_gate_fails_a_spec_without_examples(self):
+        proj, run, events = self._run("g5", self.PODS, [{"action": "finish"}], spec="# Calc\n\n## Requirements\n\n1. Add two numbers.\n")
+        self.assertEqual(run["status"], "FAILED", events[-10:])
+        self.assertIn("no example codebot can run", run["error"])
+
+    def test_tests_gate_runs_verify_sh(self):
+        ok = {"verify.sh": "python3 -c 'import mathx; assert mathx.add(2, 3) == 5'\n"}
+        code = lambda body: [{"action": "write", "path": "mathx.py", "content": f"def add(a, b): return {body}\n"}, {"action": "finish"}]
+        proj, run, events = self._run("t1", self.PODS, code("a + b"), check="tests", files=ok)
+        self.assertEqual(run["status"], "COMPLETED", events[-10:])
+        self.assertEqual(run["gates"]["gate"]["detail"], "verify.sh exited with status 0")
+        proj, run, events = self._run("t2", self.PODS, code("a * b"), check="tests", files=ok)
+        self.assertEqual(run["status"], "FAILED", events[-10:])
+        self.assertIn("verify.sh exited with status 1", run["error"])
+        self.assertIn("AssertionError", run["gates"]["gate"]["detail"])
+        proj, run, events = self._run("t3", self.PODS, code("a + b"), check="tests")
+        self.assertEqual(run["status"], "FAILED", events[-10:])
+        self.assertIn("no verify.sh", run["error"])
+
+    def test_an_unknown_check_is_refused_and_would_fail(self):
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        bundle = load_project(os.path.join(home, *self.PODS))
+        next(n for n in bundle["workflow"]["nodes"] if n["type"] == "gate")["check"] = "vibes"
+        with self.assertRaises(ValidationError): validate_project(bundle)
+        from codebot.pipeline import gates
+        proj = _proj(home, "u1", os.path.join(home, *self.PODS), SPEC)
+        self.assertEqual(gates.run(proj, bundle, {"id": "gate", "check": "vibes"})[0], "fail")
 
 class TestPersistentMemory(unittest.TestCase):
     def test_project_memory_packs_lessons(self):

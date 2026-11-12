@@ -20,7 +20,7 @@
       "description": "optional second review round with fresh goldfish memory"
     },
     {"id": "approve", "type": "approve", "description": "human or mechanical check-spec coverage gate"},
-    {"id": "gate", "type": "gate", "check": "examples"},
+    {"id": "gate", "type": "gate", "check": "spec-examples"},
     {"id": "done", "type": "end"}
   ],
   "edges": [

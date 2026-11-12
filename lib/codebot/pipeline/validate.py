@@ -3,6 +3,7 @@ import re
 from . import schema as S
 
 SCHEMA = S.SCHEMA
+GATE_CHECKS = ("examples", "tests", "spec-examples", "approve")      # what each one runs: gates.py
 _ID = re.compile(S.ID)
 _PATH = re.compile(S.PATH_GLOB)
 
@@ -147,8 +148,8 @@ def validate_workflow(doc, member_ids=None, where="workflow"):
             lim = (n.get("limits") or {}).get("max_iterations") if isinstance(n.get("limits"), dict) else n.get("max_iterations")
             if lim is None: err.append(f"{w}: loop needs max_iterations")
             elif not isinstance(lim, int) or lim < 1: err.append(f"{w}: max_iterations must be a positive int")
-        if n.get("type") == "gate" and not n.get("check"):
-            err.append(f"{w}: gate needs check (e.g. examples|tests|approve)")
+        if n.get("type") == "gate" and n.get("check") not in GATE_CHECKS:
+            err.append(f"{w}: gate needs check, one of {'|'.join(GATE_CHECKS)} (got {n.get('check')!r})")
     if len(starts) != 1: err.append(f"{where}: need exactly one start node, found {len(starts)}")
     if not ends: err.append(f"{where}: need at least one end node")
     for i, e in enumerate(edges):

@@ -65,7 +65,7 @@ lib/codebot/ollama.py         # unchanged call shape; caller passes model/params
 2. Scheduler loads workflow, puts start node’s agent in READY.
 3. At most one agent is RUNNING: harness builds that agent’s context from identity + task + allowed messages + `sees` paths, calls Ollama, expects a **structured action** (edit artifact, ask, finish, fail).
 4. Blocking QUESTION → agent WAITING, message queued, recipient READY; inference lock free between calls.
-5. Mechanical gates (examples, tests, user approve) decide advance / retry / stop.
+5. Mechanical gates decide advance / retry / stop. The harness runs them itself on a scratch copy of the workspace (`lib/codebot/pipeline/gates.py`): `examples` (the spec's build command and worked examples, judged as drafts mode judges a version), `tests` (`verify.sh` in the sandbox, exit status 0), `spec-examples` (the spec has runnable examples; for spec-writing workflows, before code exists), `approve` (the user). A failed gate follows only a `when: fail` edge, at most `max_retries` times (default 2); otherwise the run is FAILED with the check's output in `run.json` under `gates`. A check that is unknown or cannot be run fails.
 6. On crash: `run.json` + message log restore; completed step IDs are not replayed.
 
 ## 5. Configuration format (Milestone 1)
