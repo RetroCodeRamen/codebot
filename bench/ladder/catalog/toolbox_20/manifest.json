@@ -1,0 +1,159 @@
+{
+ "id": "toolbox_20",
+ "level": null,
+ "title": "Toolbox: 20 command-line text tools",
+ "version": "1.0.0",
+ "difficulty": "20 small tools with exact output formats; the size is the point (20 tools)",
+ "primary_challenge": "The same kind of work at a growing size: where one context window stops being enough. Expected outputs are the real tools'",
+ "spec": "SPEC.md",
+ "seed": "seed",
+ "reference_solution": "reference_solution",
+ "reference_tests": "reference_tests",
+ "expected_tasks": 20,
+ "planner": {
+  "max_tasks": 40,
+  "num_predict": 6000
+ },
+ "requirements": [
+  {
+   "id": "R1",
+   "title": "wc",
+   "keywords": [
+    "wc"
+   ]
+  },
+  {
+   "id": "R2",
+   "title": "cut",
+   "keywords": [
+    "cut"
+   ]
+  },
+  {
+   "id": "R3",
+   "title": "uniq",
+   "keywords": [
+    "uniq"
+   ]
+  },
+  {
+   "id": "R4",
+   "title": "seq",
+   "keywords": [
+    "seq"
+   ]
+  },
+  {
+   "id": "R5",
+   "title": "head",
+   "keywords": [
+    "head"
+   ]
+  },
+  {
+   "id": "R6",
+   "title": "tail",
+   "keywords": [
+    "tail"
+   ]
+  },
+  {
+   "id": "R7",
+   "title": "sort",
+   "keywords": [
+    "sort"
+   ]
+  },
+  {
+   "id": "R8",
+   "title": "tr",
+   "keywords": [
+    "tr"
+   ]
+  },
+  {
+   "id": "R9",
+   "title": "grep",
+   "keywords": [
+    "grep"
+   ]
+  },
+  {
+   "id": "R10",
+   "title": "cat",
+   "keywords": [
+    "cat"
+   ]
+  },
+  {
+   "id": "R11",
+   "title": "nl",
+   "keywords": [
+    "nl"
+   ]
+  },
+  {
+   "id": "R12",
+   "title": "paste",
+   "keywords": [
+    "paste"
+   ]
+  },
+  {
+   "id": "R13",
+   "title": "comm",
+   "keywords": [
+    "comm"
+   ]
+  },
+  {
+   "id": "R14",
+   "title": "fold",
+   "keywords": [
+    "fold"
+   ]
+  },
+  {
+   "id": "R15",
+   "title": "basename",
+   "keywords": [
+    "basename"
+   ]
+  },
+  {
+   "id": "R16",
+   "title": "dirname",
+   "keywords": [
+    "dirname"
+   ]
+  },
+  {
+   "id": "R17",
+   "title": "tac",
+   "keywords": [
+    "tac"
+   ]
+  },
+  {
+   "id": "R18",
+   "title": "rev",
+   "keywords": [
+    "rev"
+   ]
+  },
+  {
+   "id": "R19",
+   "title": "expand",
+   "keywords": [
+    "expand"
+   ]
+  },
+  {
+   "id": "R20",
+   "title": "b64",
+   "keywords": [
+    "b64"
+   ]
+  }
+ ]
+}

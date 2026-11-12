@@ -21,6 +21,10 @@ Nothing leaves your machine unless you turn notifications on.
 
 ## What it can do today
 
+These numbers are history, not a goal: the Capability Ladder's specs and hidden tests were written by an AI assistant, and since 2026-11-12
+codebot is judged on benchmarks whose expected outcome is known independently (`bench/toolbox/README.md`: clean-room copies of command-line tools,
+checked against what the real tools print).
+
 Measured on one laptop (i7-11375H, 15 GB RAM, RTX 3050 Ti 4 GB) with the hidden tests of the Capability Ladder Benchmark (`docs/BENCHMARK.md`),
 which the agent never sees. Small samples (2-3 runs per project); details and caveats in `docs/MODEL_EVAL.md`.
 

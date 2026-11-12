@@ -112,13 +112,24 @@ an action it has no right to, a command the policy denies, a reply that is not J
 whose result is the error, not a failed run. After `limits.max_turns` turns (default 16) on one visit the node ends without a model call, the
 run records a warning, and whatever checks the work decides. When a gate fails, the agent the fail edge returns to is shown the check's output.
 
-**Team Designer** (`design.propose`, `teamgen.py`). The model answers one constrained question: the workers, the files each writes, which
-workers each builds on, whether a coordinator and a QA reviewer are needed. The harness writes the agents, team and workflow from the answer, so
-the result is always valid: ids are repaired, a file has one owner, a file the spec names that nobody took gets one, a worker with no file is
-dropped. Two or more workers become `start → [coordinator writes PLAN.md] → each worker in dependency order → [QA findings] → integrator → examples
-gate (fail → integrator, twice) → end`; a spec without runnable examples ends in an approval instead. One usable worker, or nothing usable, is
-the solo template (the drafts loop). Every agent uses the machine's configured model; the designer does not assign models, and it is one model
-call, not a member of the team that messages others.
+**Team Designer** (`design.propose`, `teamgen.py`). The rule that sizes a team: a project that fits completely in one agent's context window is
+built best by one agent; a team begins to help only when the context would have to keep shrinking to hold everything. There is always a plan, a
+build and a review. The model answers one constrained question: the parts of the program, the files of each, how many lines each will take,
+which parts build on which. The harness repairs the answer (ids, one owner per file, a part without files dropped) and decides the shape from
+the estimate (`fit`: lines x 11 tokens, at least 25 lines per requirement, against the smaller of the reply limit and half of what the context
+has left after the spec):
+
+- **fits:** `plan → build → review → fix → examples gate (fail → fix)`. Three agents. The planner writes PLAN.md and its step ends there. The
+  builder's build step is the drafts loop, which is shown PLAN.md. The reviewer has a fresh context and no `check`; it must run the code and see
+  a problem fail before it reports it. The fix step is skipped, with no model call, when there is nothing to fix; a fix that breaks an example
+  that passed goes back once and is then set aside (5c).
+- **does not fit (two or more parts):** `plan → contracts (the manager writes INTERFACES.md) → for each team: build, review, fix → integrate
+  (the manager compares what each part sends and expects; findings go to the teams) → each team fixes → manager's review → QA writes qa_tests.py
+  → QA gate (fail → the manager fixes or passes it on; twice, then passed over with a warning) → examples gate → end`. A team is a builder that
+  may write only its own files and its own reviewer. Only QA may write `qa_tests.py` (`project.reserved`).
+
+`PIPELINE_SHAPE=small|large` forces a shape. Every agent uses the machine's configured model; the designer does not assign models, and it is one
+model call, not a member of the team.
 
 ## 5c. What the harness protects (`frozen.py`, `schedule._checkpoint`)
 

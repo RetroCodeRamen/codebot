@@ -1,0 +1,89 @@
+{
+ "id": "toolbox_10",
+ "level": null,
+ "title": "Toolbox: 10 command-line text tools",
+ "version": "1.0.0",
+ "difficulty": "10 small tools with exact output formats; the size is the point (10 tools)",
+ "primary_challenge": "The same kind of work at a growing size: where one context window stops being enough. Expected outputs are the real tools'",
+ "spec": "SPEC.md",
+ "seed": "seed",
+ "reference_solution": "reference_solution",
+ "reference_tests": "reference_tests",
+ "expected_tasks": 10,
+ "planner": {
+  "max_tasks": 40,
+  "num_predict": 6000
+ },
+ "requirements": [
+  {
+   "id": "R1",
+   "title": "wc",
+   "keywords": [
+    "wc"
+   ]
+  },
+  {
+   "id": "R2",
+   "title": "cut",
+   "keywords": [
+    "cut"
+   ]
+  },
+  {
+   "id": "R3",
+   "title": "uniq",
+   "keywords": [
+    "uniq"
+   ]
+  },
+  {
+   "id": "R4",
+   "title": "seq",
+   "keywords": [
+    "seq"
+   ]
+  },
+  {
+   "id": "R5",
+   "title": "head",
+   "keywords": [
+    "head"
+   ]
+  },
+  {
+   "id": "R6",
+   "title": "tail",
+   "keywords": [
+    "tail"
+   ]
+  },
+  {
+   "id": "R7",
+   "title": "sort",
+   "keywords": [
+    "sort"
+   ]
+  },
+  {
+   "id": "R8",
+   "title": "tr",
+   "keywords": [
+    "tr"
+   ]
+  },
+  {
+   "id": "R9",
+   "title": "grep",
+   "keywords": [
+    "grep"
+   ]
+  },
+  {
+   "id": "R10",
+   "title": "cat",
+   "keywords": [
+    "cat"
+   ]
+  }
+ ]
+}

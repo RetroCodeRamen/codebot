@@ -159,7 +159,7 @@ def _listing(root):
         p = os.path.join(root, n)
         if n.startswith(".") or n == "__pycache__": continue
         if os.path.isdir(p): named.append(n + "/"); continue
-        if not (n.endswith(SOURCE_EXT) or n in CONFIG_FILES): named.append(n); continue
+        if not (n.endswith(SOURCE_EXT) or n in CONFIG_FILES or n == "PLAN.md"): named.append(n); continue          # PLAN.md: a pipeline's planner wrote it for the builder
         try:
             with open(p, encoding="utf-8") as f: text = f.read(MAX_FILE + 1)
         except (OSError, UnicodeDecodeError): named.append(n); continue

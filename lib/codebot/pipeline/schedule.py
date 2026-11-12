@@ -96,13 +96,15 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
         return ev
 
     if act == "findings":
-        findings = action.get("findings") or [{"what": action.get("text") or "no details"}]
+        findings = action.get("findings") if isinstance(action.get("findings"), list) else []
+        if not findings and action.get("text"): findings = [{"what": action["text"]}]
         text = json.dumps(findings, indent=2, ensure_ascii=False)
         meta = artifacts.put(rd, f"findings-{member_id}", text, producer=member_id, kind="findings")
         # notify architect-like talk targets with FINDING
         for to in agent.get("can_talk_to") or []:
             mailbox.send(rd, member_id, to, "FINDING", {"findings": findings, "artifact": meta["id"]})
-        ev["artifact"] = meta["id"]
+        ev["artifact"] = meta["id"]; ev["result"] = f"{len(findings)} findings sent"
+        _done_with_inbox(rd, member_id)
         _set_member(run, member_id, state="COMPLETED")
         run["active"] = None
         return ev
@@ -110,6 +112,8 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
     if act == "write":
         path = action.get("path") or action.get("artifact_name") or "ARTIFACT.md"
         content = action.get("content") or action.get("text") or ""
+        owner = ((bundle.get("project") or {}).get("reserved") or {}).get(os.path.normpath(path))
+        if owner and owner != member_id: raise ScheduleError(f"{os.path.normpath(path)} belongs to {owner}; only {owner} may write it")
         if frozen.protected(proj, path):
             raise ScheduleError(f"{os.path.normpath(path)} is frozen: it is what the result is judged by, and no agent may change it. Change the code instead")
         if path.startswith("artifacts/") or action.get("artifact_name"):
@@ -119,9 +123,13 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
             scope.write_text(ws, agent, path, content)
             ev["path"] = path
         ev["result"] = f"wrote {path} ({len(content)} characters)"
+        if node.get("done_after_write") and os.path.normpath(path) == node["done_after_write"]:
+            # the step was to write this one document: it is written (the first real planner rewrote PLAN.md five times until its turns ran out)
+            _done_with_inbox(rd, member_id); _set_member(run, member_id, state="COMPLETED"); run["active"] = None; ev["done"] = True
         return ev
 
     if act == "finish":
+        _done_with_inbox(rd, member_id)
         _set_member(run, member_id, state="COMPLETED")
         run["active"] = None
         ev["reason"] = action.get("reason") or action.get("text") or "done"
@@ -146,6 +154,10 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
     raise ScheduleError(f"unknown action {act}")
 
 GATE_RETRIES = 2          # a gate may send the run back this many times (a node's "max_retries" overrides it)
+
+def _done_with_inbox(rd, member_id):
+    """A member that ends its part has dealt with the findings and results sent to it: its next visit shows only what arrives after."""
+    mailbox.mark_read(rd, [m["id"] for m in mailbox.inbox(rd, member_id) if m.get("type") in ("FINDING", "RESULT") and m.get("state") != "read"])
 
 def _gate(bundle, proj, run, node):
     """Run the gate's check (pipeline/gates.py) and keep what it showed in run["gates"]."""
@@ -277,8 +289,12 @@ def step(proj, *, chat_fn=None, bundle=None):
         if typ == "gate":           # what the check showed goes to whoever the fail edge sends the work back to (_task_text)
             if when == "fail": run["feedback"] = {"gate": cursor, "detail": detail[:3000]}
             else: run.pop("feedback", None)
-        nxt = _advance(bundle, run, cursor, when=when)
         fails = run.get("gates", {}).get(cursor, {}).get("fails", 0)
+        if when == "fail" and fails > int(node.get("max_retries", GATE_RETRIES)) and node.get("on_exhausted") == "pass":
+            first = detail.splitlines()[0] if detail else ""          # an opinion gate (QA's tests): the run goes on and says so
+            run.setdefault("warnings", []).append(f"gate {cursor} still failed after {fails} tries and was passed over: {first}")
+            when = "pass"; run.pop("feedback", None)
+        nxt = _advance(bundle, run, cursor, when=when)
         if when == "fail" and (not nxt or fails > int(node.get("max_retries", GATE_RETRIES))):
             first = detail.splitlines()[0] if detail else ""
             run["status"] = "FAILED"; run["error"] = f"gate {cursor} failed" + (f" {fails} times" if nxt else "") + (f": {first}" if first else "")
@@ -309,6 +325,12 @@ def step(proj, *, chat_fn=None, bundle=None):
             run["step_count"] += 1; R.save_run(proj, run)
             return {"status": run["status"], "event": "run_done", "member": mid, "next": nxt, "run": run}
         if (node.get("action") or "") not in SPEC_WORK: frozen.freeze(proj, R.workspace_of(proj, bundle))      # the build starts: the spec is fixed
+        if node.get("action") == "fix" and not run.get("feedback") and not any(
+                m.get("type") == "FINDING" and m.get("state") != "read" and (m.get("payload") or {}).get("findings") for m in mailbox.inbox(rd, mid)):
+            # nobody found anything for this member to fix: no model call (the first real builder spent 8 calls re-reading a program with no findings)
+            _done_with_inbox(rd, mid); _set_member(run, mid, state="COMPLETED", node=node["id"]); run["active"] = None
+            run.setdefault("skipped", []).append(node["id"]); run["step_count"] += 1; R.save_run(proj, run)
+            return {"status": run["status"], "event": "skip", "node": node["id"], "why": "no findings to fix", "run": run}
         _activate_run_node(bundle, run, node)
         return _invoke_member(bundle, proj, run, mid, node, chat_fn)
 
@@ -430,7 +452,8 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
     asked = [m for m in mailbox.inbox(rd, member_id) if m.get("type") == "QUESTION" and m.get("state") != "read"]
     acts = tools.actions(agent, has_question=bool(asked))
     limit = int((agent.get("limits") or {}).get("max_turns") or tools.MAX_TURNS)
-    stuck = tools.refused_in_a_row(rd, member_id, visit) and not asked
+    checked = tools.done_after_check(rd, member_id, visit) and not asked
+    stuck = (checked or tools.refused_in_a_row(rd, member_id, visit)) and not asked
     spent = stuck or (len(tools.turns(rd, member_id, visit)) >= limit and not asked)
     run["members"][member_id]["state"] = "RUNNING"
     run["members"][member_id]["steps"] = int(run["members"][member_id].get("steps") or 0) + 1
@@ -445,8 +468,8 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
     try:
         if spent:                # no model call: the node ends here and whatever checks the work (a gate) decides
             why = "was stopped after 3 refused turns in a row" if stuck else f"used all {limit} turns"
-            action = {"action": "finish", "reason": f"{why} without finishing"}
-            run.setdefault("warnings", []).append(f"{member_id} {why} on node {node.get('id')} without finishing")
+            action = {"action": "finish", "reason": "its check passed and it had nothing new to look at" if checked else f"{why} without finishing"}
+            if not checked: run.setdefault("warnings", []).append(f"{member_id} {why} on node {node.get('id')} without finishing")
         else:
             try:
                 action, agent, raw = invoke.invoke(bundle, rd, member_id, task, proj=proj, chat_fn=chat_fn, extra_files=extra or None, acts=acts,

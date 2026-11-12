@@ -65,6 +65,6 @@ def invoke(bundle, run_dir, member_id, task_text, *, proj=None, chat_fn=None, ex
     if isinstance(agent.get("model"), dict) and agent["model"].get("num_predict"): cap = int(agent["model"]["num_predict"])
     out = call_model(proj, messages, schema_for(acts), model=model, temperature=temp, num_predict=cap, chat_fn=chat_fn)
     if out.get("done_reason") == "length":
-        raise InvokeError(f"your reply was cut off after {cap} tokens before the JSON object ended; write a shorter file, or split the work over smaller files")
+        raise InvokeError(f"your reply was cut off after {cap} tokens before the JSON object ended; reply with one short action: a shorter command, fewer findings, or a smaller file")
     action = parse_action(out.get("content") or "")
     return action, agent, out.get("content") or ""

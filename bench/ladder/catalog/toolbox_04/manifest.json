@@ -1,0 +1,47 @@
+{
+ "id": "toolbox_04",
+ "level": null,
+ "title": "Toolbox: 4 command-line text tools",
+ "version": "1.0.0",
+ "difficulty": "4 small tools with exact output formats; the size is the point (4 tools)",
+ "primary_challenge": "The same kind of work at a growing size: where one context window stops being enough. Expected outputs are the real tools'",
+ "spec": "SPEC.md",
+ "seed": "seed",
+ "reference_solution": "reference_solution",
+ "reference_tests": "reference_tests",
+ "expected_tasks": 4,
+ "planner": {
+  "max_tasks": 40,
+  "num_predict": 6000
+ },
+ "requirements": [
+  {
+   "id": "R1",
+   "title": "wc",
+   "keywords": [
+    "wc"
+   ]
+  },
+  {
+   "id": "R2",
+   "title": "cut",
+   "keywords": [
+    "cut"
+   ]
+  },
+  {
+   "id": "R3",
+   "title": "uniq",
+   "keywords": [
+    "uniq"
+   ]
+  },
+  {
+   "id": "R4",
+   "title": "seq",
+   "keywords": [
+    "seq"
+   ]
+  }
+ ]
+}

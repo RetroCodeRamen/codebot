@@ -73,7 +73,8 @@ def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, p
         for name, text in extra_files.items():
             body.append(f"\n### file {name}\n{text[:12000]}")
     # recent inbox (always: current task needs unanswered questions)
-    inbox = mailbox.inbox(run_dir, member_id)[-12:]
+    # findings and results a member has already dealt with (it finished after receiving them) are not shown again
+    inbox = [m for m in mailbox.inbox(run_dir, member_id) if not (m.get("type") in ("FINDING", "RESULT") and m.get("state") == "read")][-12:]
     if mem == "none":
         # no one else's findings or chat; the answer to its own question is not history, it is what it is waiting for
         inbox = [m for m in inbox if m.get("type") in ("TASK", "QUESTION", "ANSWER") and m.get("state") != "read"][-4:]
@@ -84,7 +85,7 @@ def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, p
     if inbox:
         lines = []
         for m in inbox:
-            lines.append(f"- [{m.get('type')}] from {m.get('from')} id={m.get('id')}: {json_preview(m.get('payload'))}")
+            lines.append(f"- [{m.get('type')}] from {m.get('from')} id={m.get('id')}: {json_preview(m.get('payload'), 3000 if m.get('type') == 'FINDING' else 500)}")
         body.append("Inbox:\n" + "\n".join(lines))
     arts = artifacts.list_artifacts(run_dir)[-8:]
     if arts and mem != "none":

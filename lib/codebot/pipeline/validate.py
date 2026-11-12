@@ -4,7 +4,7 @@ from . import schema as S
 
 SCHEMA = S.SCHEMA
 AGENT_TOOLS = ("read", "list", "check", "run")                      # what each one does: tools.py
-GATE_CHECKS = ("examples", "tests", "spec-examples", "approve")      # what each one runs: gates.py
+GATE_CHECKS = ("examples", "tests", "spec-examples", "qa", "approve")      # what each one runs: gates.py
 _ID = re.compile(S.ID)
 _PATH = re.compile(S.PATH_GLOB)
 

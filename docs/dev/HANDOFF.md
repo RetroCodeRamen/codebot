@@ -144,13 +144,34 @@ can ask; a snapshot of the team/workflow at run start and a reset/retry command 
 how a reviewer's finding becomes something checkable; `fail` is open to every agent.
 
 **Drafts against a designed team, held-out (2026-11-12; `bench/teams/README.md` has the table and the caveats).** Two new three-module tasks
-(`bench/ladder/catalog/team_a`, `team_b`: written for this, validated before any model saw them, never used for tuning), three seeds, 20 minutes
+(catalog entries `team_a` and `team_b`, removed since: written for this, validated before any model saw them, never used for tuning), three seeds, 20 minutes
 per trial, coder30b-iq3. Hidden tests, drafts then team: team_a 69, 69, 69 against 68, 67, 66 of 70; team_b 54, 56, 57 against 39, 39, 54 of 67.
 Drafts was ahead in all six pairs with 3 to 7 model calls against 42 to 67 and about a fifteenth of the prompt tokens; one of six team runs ended
 with a passing gate, four hit the time cap. Limits: the cap binds for both arms on team_b; agents still do not finish after a passing check
 (15 three-refusals stops in six runs), which a fix would shorten; both tasks fit in one reply, so the case a team is for (a program that does
-not) is untested. On this evidence a team does not help at this size on this machine: do not build the block editor, monitor or the rest of
-the multi-agent list before a task that drafts cannot do in one reply shows a team doing better.
+not) is untested. What it shows is the user's rule (2026-11-12), not a case against teams: a project that fits completely in one agent's context window is
+built best by one agent, and a team can only begin to win once the context would have to shrink to hold everything. Both tasks fit one context.
+The Team Designer is built on that rule since the same day (next entry); whether a team wins on a program that does not fit is still unmeasured.
+
+**The team is sized by context fit; always plan, build, review (2026-11-12, the user's design; `teamgen.py`, architecture doc 5b).** The
+outline bot (`codebot pipeline design`) asks the model for the program's parts, their files and an estimate of their lines; the harness decides
+(`teamgen.fit`): the whole program, as tokens, against what one agent can write in one reply with the spec and the code in its context.
+Fits: `plan -> build -> review -> fix`, three agents (the build step is the drafts loop and sees PLAN.md; the reviewer has a fresh context, no
+`check`, and must run the code and see a problem before reporting it; the fix step is skipped without a model call when there are no findings).
+Does not fit, and two or more parts: planner, a manager who writes INTERFACES.md, one team per part (a builder and its own reviewer: build,
+review, fix), the manager's integration pass whose findings go back to the teams, the manager's review, QA writing `qa_tests.py` (only QA may
+write it), a QA gate whose failures go to the manager (twice, then passed over with a warning: QA's tests are an opinion), and the spec's examples
+as the last gate. `PIPELINE_SHAPE=small|large` forces a shape. Also: a step that is one document ends when it is written (`done_after_write`);
+after a passing check the first refused turn ends an agent's step. Fake-model tests cover both shapes; the large shape has not run with the real
+model, and needs a project that does not fit one context plus an edit action (a file is still one reply).
+
+**Benchmarks with a known outcome only (the user, 2026-11-12).** "the tests were written by an ai that didnt know our current plans its no
+different than you writing them now and arguably worse": the Capability Ladder (levels 1-12, calc_go, the growing project) and the two tasks
+this session wrote (`team_a`, `team_b`, removed) are not goals or yardsticks in any capacity. The ladder stays only as fixtures of the unit
+tests. Decisions are judged on benchmarks whose expected outcome is known independently: `bench/toolbox` (20 clean-room command-line tools in
+three sizes, every expected output printed by the real tool; `bench/toolbox/README.md`). Candidates of the same kind, not built: Python's own
+standard library as the oracle for re-implemented modules; a public conformance suite (CommonMark's examples) for something larger, which needs
+one download. Do not add a benchmark whose expected values a model wrote.
 
 **Next for whoever picks this up (priority order):**
 1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).

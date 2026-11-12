@@ -147,6 +147,17 @@ def unchanged(rd, ws, agent, member, visit, action, sha):
         return f"no file has changed since your check on turn {n}, so the result is the same: {(r.get('result') or '').splitlines()[0][:300]}"
     return None
 
+def done_after_check(rd, member, visit):
+    """True when the agent's check passed, it has written nothing since, and it then asked for something that was refused: its part is done and
+    it is looking again. In the 2026-11-12 series every team run had agents stopped only after three such refusals (15 stops in six runs)."""
+    passed = False; refused = False
+    for r in turns(rd, member, visit):
+        res = r.get("result") or ""
+        if r.get("action") == "check" and res.startswith("The examples pass"): passed, refused = True, False
+        elif r.get("action") == "write" and not res.startswith("error:"): passed = False
+        elif res.startswith("error:"): refused = True
+    return passed and refused
+
 def refused_in_a_row(rd, member, visit, n=3):
     last = turns(rd, member, visit)[-n:]
     return len(last) == n and all((r.get("result") or "").startswith("error:") for r in last)

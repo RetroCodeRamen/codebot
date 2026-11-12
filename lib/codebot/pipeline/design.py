@@ -51,8 +51,12 @@ def propose(home, spec_text, *, chat_fn=None, proj=None, template=None):
         out = invoke.call_model(proj, teamgen.prompt(spec_text, proj), teamgen.TEAM_SCHEMA, temperature=0.1, num_predict=1200, chat_fn=chat_fn)
         try: proposal = json.loads(out.get("content") or "{}")
         except ValueError: proposal = {}
-        try: bundle, meta = teamgen.compile_team(proposal if isinstance(proposal, dict) else {}, spec_text or "")
-        except ValidationError as e: bundle, meta = None, {"summary": "", "notes": [f"the proposal did not make a valid team: {x}" for x in e.errors]}
+        g = proj.get if proj is not None else (lambda k, d=None, cast=str: d)
+        size = dict(num_ctx=g("NUM_CTX", 32768, int), reply_tokens=g("DRAFTS_NUM_PREDICT", 6000, int), shape=g("PIPELINE_SHAPE") or None)
+        try: bundle, meta = teamgen.compile_team(proposal if isinstance(proposal, dict) else {}, spec_text or "", **size)
+        except ValidationError as e:              # the parts did not make a valid large team: the small one needs none of them
+            bundle, meta = teamgen.compile_team({}, spec_text or "", **{**size, "shape": "small"})
+            meta["notes"] += [f"the proposal did not make a valid team: {x}" for x in e.errors]
         meta["proposal"] = proposal
         if bundle is not None: return bundle, meta
         choice = {"summary": meta.get("summary") or meta.get("reason") or "", "template": "solo", "designed": meta}
@@ -96,6 +100,7 @@ def write_project_pipeline(proj, bundle, *, template_meta=None):
         "workflow": bundle.get("workflow"),
         "workspace": (bundle.get("project") or {}).get("workspace") or {"root": "."},
         "limits": (bundle.get("project") or {}).get("limits") or {},
+        "reserved": (bundle.get("project") or {}).get("reserved") or {},
         "ui": bundle.get("ui"),
         "generated": template_meta or {}
     }

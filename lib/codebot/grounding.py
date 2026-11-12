@@ -29,7 +29,7 @@ PAREN = re.compile(r"^\s*\(\s*$")
 # A command example is read up to the end of its sentence (or the next command): its code spans become \x00k\x01 and these clauses are picked out.
 SENTENCE_END = re.compile(r"[.;](?:\s|$)")
 STDIN_C = re.compile(r"\b(?:with|given)\s+(?:the\s+)?(?:standard input|stdin)\s+\x00(\d+)\x01")
-PRINT_C = re.compile(r"\bprints\s+(a\s+(?:message|line)\s+(?:starting|beginning)\s+with\s+)?\x00(\d+)\x01(\s+(?:to|on)\s+(?:standard (?:error|output)|stderr|stdout))?")
+PRINT_C = re.compile(r"\bprints\s+(?:the\s+lines\s+)?(a\s+(?:message|line)\s+(?:starting|beginning)\s+with\s+)?\x00(\d+)\x01(\s+(?:to|on)\s+(?:standard (?:error|output)|stderr|stdout))?")
 NOTHING_C = re.compile(r"\bnothing\s+(?:to|on)\s+(?:standard output|stdout)\b|\bprints\s+nothing\b(?!\s+(?:to|on)\s+(?:standard error|stderr))")
 EXITS_C = re.compile(r"\bexits?\s+with\s+(?:status|code)\s+(\d+)\b")
 ESC = re.compile(r"\\([nt\\])")
@@ -129,7 +129,9 @@ def _command_example(item, i, prog):
          `calc 1 / 0` prints `error: division by zero` to standard error, nothing to standard output, and exits with status 1
          `calc 2 +` prints a message starting with `error:` to standard error and exits with status 2
          `calc` with standard input `2 + 3\\n\\n1 / 0` prints `5\\nerror: division by zero` and exits with status 0
-    With standard input, \\n in the input and the output is a line break (and the input ends with one). "Starting with" is checked as "contains"."""
+         `python3 cut.py -f1 table.csv` prints the lines `name\\npear`
+    With standard input, or after "prints the lines", \\n and \\t in the input and the output are a line break and a tab (and the input ends with a
+    line break). "Starting with" is checked as "contains"."""
     ms = list(SPAN.finditer(item)); argv = _runnable(ms[i].group(1), prog)
     if not argv: return None
     p = _program(argv[0], prog); parts, pos, k = [], ms[i].end(), i + 1
@@ -144,7 +146,7 @@ def _command_example(item, i, prog):
     m = STDIN_C.search(text); lines = bool(m)
     if m: s = _unescape(val(m.group(1))); a["stdin"] = s if s.endswith("\n") else s + "\n"
     for m in PRINT_C.finditer(text):
-        v = _unescape(val(m.group(2))) if lines else val(m.group(2)); err = bool(m.group(3)) and "err" in m.group(3)
+        v = _unescape(val(m.group(2))) if lines or "the lines" in m.group(0) else val(m.group(2)); err = bool(m.group(3)) and "err" in m.group(3)
         if m.group(1) or err: a.setdefault("stderr_contains" if err else "stdout_contains", []).append(v)
         else: a["stdout"] = v
     if not (set(a) & {"stdout", "stdout_contains"}) and NOTHING_C.search(text): a["stdout"] = ""

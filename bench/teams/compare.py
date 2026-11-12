@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Drafts mode against a designed team on the same specs, seeds and time cap, scored by the catalog's hidden tests.
 
-  python3 bench/teams/compare.py --name NAME [--tasks team_a,team_b] [--arms drafts,team] [--seeds 1,2,3] [--minutes 20]
+  python3 bench/teams/compare.py --name NAME [--tasks toolbox_04,toolbox_10] [--arms drafts,team] [--seeds 1,2,3] [--minutes 20]
 
 One trial = one task, one arm, one seed, in its own project (projects/cmp-NAME-...) and code dir (bench/runs/.../code, its own git repo), as
 the ladder benchmark makes them (capbench.workspace). The drafts arm is `codebot new` + `codebot start` in process: drafts.step until it
 finishes. The team arm is `codebot pipeline design` (the model proposes who writes which files) and then schedule.step until the run ends or
-the time cap, which counts the design call too. Both get the same MODEL_SEED / DRAFTS_SEED and the same cap. Trials run one at a time under
+the time cap, which counts the design call too. Both get the same MODEL_SEED / DRAFTS_SEED; the team's build step (the drafts loop, when the
+designer chose plan -> build -> review -> fix) gets --minutes like the drafts arm, and the whole team run --minutes plus --team-extra. The team
+arm is also scored at the commit its build step left (`build_hidden`), so what the review and the fix added or broke can be read off. Trials run one at a time under
 the model lock, seed by seed with the arms next to each other, so a series that is stopped early is still balanced. A finished trial is never
 rerun: results are appended to bench/teams/results/NAME.jsonl and a rerun of the same NAME continues after them.
 """
-import argparse, json, os, sys, time
+import argparse, json, os, shutil, subprocess, sys, tempfile, time
 HOME = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(HOME, "lib"))
 from codebot import drafts as DR, thermal                                       # noqa: E402
@@ -53,22 +55,34 @@ def run_team(proj, spec, cap_s, t0):
         if ev.get("status") == "BUSY": time.sleep(10)
     run = PR.load_run(proj) or {}
     gate = next(iter((run.get("gates") or {}).values()), {})
-    return {"end": run.get("status"), "error": run.get("error"), "template": meta.get("template"), "members": members, "steps": run.get("step_count"),
+    return {"end": run.get("status"), "error": run.get("error"), "template": meta.get("template"), "shape": meta.get("shape"), "fit": meta.get("fit"),
+            "build_commit": next((p.get("commit") for p in run.get("progress") or [] if p["node"] == "build"), None), "members": members, "steps": run.get("step_count"),
             "gate": (gate.get("result"), (gate.get("detail") or "").splitlines()[0][:120] if gate else None), "gate_fails": gate.get("fails"),
             "warnings": run.get("warnings") or [], "regressions": run.get("regressions") or {}, "progress": [(p["node"], p["passed"], p["total"]) for p in run.get("progress") or []],
             "frozen": bool(frozen.info(proj))}
 
-def trial(name, task, arm, seed, minutes):
+def score_commit(m, code, commit):
+    """Hidden tests at an earlier commit of the trial's code dir (the state a step left), without touching the dir."""
+    tmp = tempfile.mkdtemp(prefix="cb-cmp-")
+    try:
+        tar = subprocess.run(["git", "-C", code, "archive", commit], capture_output=True)
+        if tar.returncode: return None
+        subprocess.run(["tar", "-x", "-C", tmp], input=tar.stdout, check=True)
+        return R.verify(m, tmp).get("passed")
+    finally: shutil.rmtree(tmp, ignore_errors=True)
+
+def trial(name, task, arm, seed, minutes, extra_min=0.0):
     m = M.load(HOME, task); spec = M.spec_text(m); pname = f"cmp-{name}-{task}-{arm}-s{seed}".lower().replace("_", "-")
     W.destroy(HOME, pname)
     extra = {"DRAFTS_MINUTES": f"{minutes:g}", "DRAFTS_SEED": str(seed), "WORKFLOW": "drafts" if arm == "drafts" else None}
     proj = W.create(HOME, pname, [M.seed_dir(m)], spec, W.project_settings(HOME, minutes, None, seed, extra=extra))
     t0 = time.time(); temp0 = thermal.read_temp()
-    try: info = run_drafts(proj, minutes * 60) if arm == "drafts" else run_team(proj, spec, minutes * 60, t0)
+    try: info = run_drafts(proj, minutes * 60) if arm == "drafts" else run_team(proj, spec, (minutes + extra_min) * 60, t0)
     except Exception as e: info = {"end": "ERROR", "error": f"{type(e).__name__}: {e}"}
     wall = round(time.time() - t0, 1); proj = Project(pname, HOME)
     ref = R.verify(m, W.code_dir(proj)); ref.pop("tests", None)
-    return {"task": task, "arm": arm, "seed": seed, "project": pname, "minutes_cap": minutes, "wall_s": wall, "hidden": ref.get("passed"), "hidden_total": ref.get("total"),
+    if info.get("build_commit"): info["build_hidden"] = score_commit(m, W.code_dir(proj), info["build_commit"])
+    return {"task": task, "arm": arm, "seed": seed, "project": pname, "minutes_cap": minutes + (extra_min if arm != "drafts" else 0), "wall_s": wall, "hidden": ref.get("passed"), "hidden_total": ref.get("total"),
             "by_requirement": {k: (v.get("passed"), v.get("total")) for k, v in (ref.get("by_requirement") or {}).items()}, **calls(proj), **info,
             "temp_start": temp0, "temp_end": thermal.read_temp(), "finished": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
@@ -77,13 +91,14 @@ def table(rows):
     for task in sorted({r["task"] for r in rows}):
         for arm in sorted({r["arm"] for r in rows}):
             rs = sorted((r for r in rows if r["task"] == task and r["arm"] == arm), key=lambda r: r["seed"])
-            if rs: out.append(f"{task:8} {arm:7} hidden " + ", ".join(f"{r['hidden']}/{r['hidden_total']}" for r in rs) + " | calls " + ", ".join(str(r["calls"]) for r in rs)
+            if rs: out.append(f"{task:8} {arm:7} hidden " + ", ".join(f"{r['hidden']}/{r['hidden_total']}" + (f" (after build {r['build_hidden']})" if r.get("build_hidden") is not None else "") for r in rs) + " | calls " + ", ".join(str(r["calls"]) for r in rs)
                               + " | minutes " + ", ".join(f"{r['wall_s'] / 60:.1f}" for r in rs))
     return "\n".join(out)
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--name", required=True); ap.add_argument("--tasks", default="team_a,team_b"); ap.add_argument("--arms", default="drafts,team")
-    ap.add_argument("--seeds", default="1,2,3"); ap.add_argument("--minutes", type=float, default=20.0); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--name", required=True); ap.add_argument("--tasks", default="toolbox_04,toolbox_10"); ap.add_argument("--arms", default="drafts,team")
+    ap.add_argument("--seeds", default="1,2,3"); ap.add_argument("--minutes", type=float, default=20.0)
+    ap.add_argument("--team-extra", type=float, default=15.0, help="minutes a team run gets on top of --minutes, for its plan, review and fix steps"); a = ap.parse_args()
     out = os.path.join(HOME, "bench", "teams", "results", a.name + ".jsonl"); os.makedirs(os.path.dirname(out), exist_ok=True)
     done = []
     if os.path.isfile(out):
@@ -96,9 +111,9 @@ def main():
         for task, arm, seed in plan:
             if (task, arm, seed) in have: continue
             log(f"== {task} {arm} seed {seed}")
-            r = trial(a.name, task, arm, seed, a.minutes); done.append(r)
+            r = trial(a.name, task, arm, seed, a.minutes, a.team_extra); done.append(r)
             with open(out, "a") as f: f.write(json.dumps(r) + "\n")
-            log(f"   {r['end']}: hidden {r['hidden']}/{r['hidden_total']}, {r['calls']} calls, {r['wall_s'] / 60:.1f} min, {r.get('temp_end')} C" + (f" | {r['error']}" if r.get("error") else ""))
+            log(f"   {r['end']}: hidden {r['hidden']}/{r['hidden_total']}" + (f" (after build {r['build_hidden']})" if r.get("build_hidden") is not None else "") + f", {r['calls']} calls, {r['wall_s'] / 60:.1f} min, {r.get('temp_end')} C" + (f" | {r['error']}" if r.get("error") else ""))
     finally:
         RN.unload_model(HOME)
     print(table(done)); log("done")

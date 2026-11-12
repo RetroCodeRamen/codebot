@@ -605,22 +605,29 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertEqual(len(s.seen), 41)                          # 16 + 16, then the 8 left of the script and its "finish"
 
     def test_looking_again_at_what_has_not_changed_is_refused(self):
-        look = [{"action": "read", "path": "mathx.py"}, {"action": "check"}]
-        proj, run, events, s = self._run("w8", [GOOD] + look + look + [{"action": "list"}, {"action": "list"}, FIN])
+        proj, run, events, s = self._run("w8", [BAD, {"action": "read", "path": "mathx.py"}, {"action": "check"}, {"action": "read", "path": "mathx.py"}, {"action": "check"},
+                                                {"action": "list"}, {"action": "list"}, GOOD, FIN])
         self.assertEqual(run["status"], "COMPLETED", events)
-        self.assertIn("2. read mathx.py\nmathx.py:\n```\ndef add", s.seen[2][2])                # the first read and check are answered
-        self.assertIn("3. check\nThe examples pass", s.seen[3][2])
+        self.assertIn("2. read mathx.py\nmathx.py:\n```\ndef add", s.seen[2][2])                 # the first read and check are answered
+        self.assertIn("3. check\nThe examples do not pass yet", s.seen[3][2])
         self.assertIn("error: you read mathx.py on turn 2 and it has not changed since", s.seen[4][2])
-        self.assertIn("error: no file has changed since your check on turn 3, so the result is the same: The examples pass", s.seen[5][2])
+        self.assertIn("error: no file has changed since your check on turn 3, so the result is the same: The examples do not pass yet", s.seen[5][2])
         self.assertIn("6. list\nSPEC.md", s.seen[6][2])
         self.assertIn("error: no file has changed since you listed them on turn 6", s.seen[7][2])
         self.assertNotIn("warnings", run)
 
-    def test_three_refused_turns_in_a_row_end_the_node_without_another_call(self):
-        proj, run, events, s = self._run("w9", [GOOD, {"action": "check"}] + [{"action": "check"}, GOOD, {"action": "check"}, {"action": "check"}])
+    def test_after_a_passing_check_the_first_refused_turn_ends_the_node(self):
+        proj, run, events, s = self._run("w9", [GOOD, {"action": "check"}, {"action": "read", "path": "SPEC.md"}, {"action": "check"}, {"action": "list"}, FIN])
         self.assertEqual(run["status"], "COMPLETED", events)
-        self.assertEqual(len(s.seen), 5)
-        self.assertEqual(run["warnings"], ["dev was stopped after 3 refused turns in a row on node build without finishing"])
+        self.assertEqual(len(s.seen), 4)                               # write, check, read, the refused check: no fifth call
+        self.assertNotIn("warnings", run)                              # its part was done; nothing to warn about
+        self.assertEqual(events[[e.get("event") for e in events].index("run_done") - 1]["result"]["reason"], "its check passed and it had nothing new to look at")
+
+    def test_three_refused_turns_in_a_row_end_the_node_with_a_warning(self):
+        proj, run, events, s = self._run("w11", [BAD, {"action": "check"}] + [{"action": "check"}] * 5)
+        self.assertEqual(run["status"], "FAILED", events[-4:])
+        self.assertEqual(run["warnings"][0], "dev was stopped after 3 refused turns in a row on node build without finishing")
+        self.assertEqual([m for m, *_ in s.seen[:5]], ["dev"] * 5); self.assertIn("gate check failed", run["error"])
 
     def test_a_workers_check_is_about_its_own_files(self):
         from codebot.pipeline import tools
@@ -632,6 +639,16 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertIn("do not pass yet: 0 of 1 spec examples for your files (ui.py) pass", tools.check(proj, proj.workdir, other))
         self.assertIn("do not pass yet: 0 of 2 spec examples pass", tools.check(proj, proj.workdir, {"sees": {"read": ["**"], "write": ["**"]}}))
 
+    def test_a_workers_check_covers_command_line_tools_by_their_script(self):
+        from codebot.pipeline import tools
+        spec = ("# Tools\n\n## Requirements\n\n1. `up.py` prints its input in upper case. `python3 up.py` with standard input `ab` prints `AB`.\n"
+                "2. `low.py` prints its input in lower case. `python3 low.py` with standard input `AB` prints `ab`.\n")
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        proj = _proj(home, "w12", os.path.join(home, *self.CALC), spec)
+        with open(os.path.join(proj.workdir, "up.py"), "w") as f: f.write("import sys\nprint(sys.stdin.read().strip().upper())\n")
+        self.assertIn("The examples pass: 1 of 1 spec examples for your files (up.py) pass", tools.check(proj, proj.workdir, {"sees": {"read": ["**"], "write": ["up.py"]}}))
+        self.assertIn("do not pass yet: 0 of 1 spec examples for your files (low.py) pass", tools.check(proj, proj.workdir, {"sees": {"read": ["**"], "write": ["low.py"]}}))
+
     def test_a_failed_gate_tells_the_agent_what_failed(self):
         proj, run, events, s = self._run("w7", [BAD, FIN, GOOD, FIN])
         self.assertEqual(run["status"], "COMPLETED", events)
@@ -641,82 +658,158 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertNotIn("Your turns on this task", again)              # a new visit starts clean
         self.assertNotIn("feedback", run)
 
+NONE = [{"action": "findings", "findings": []}]
+PLAN = [{"action": "write", "path": "PLAN.md", "content": "mathx.py: add(a, b)\nui.py: show(x)\n"}]          # the plan step ends when PLAN.md is written
+SOME = [{"action": "findings", "findings": [{"where": "ui.py", "what": "look at show again"}]}]
+UI = {"action": "write", "path": "ui.py", "content": "def show(x): return str(x)\n"}
+
+def _design(case, reply, spec=TWO, **env):
+    """(home, bundle, meta) of the Team Designer's answer to a scripted proposal; env = project settings (NUM_CTX, PIPELINE_SHAPE)."""
+    home = _home(); case.addCleanup(shutil.rmtree, home, ignore_errors=True)
+    class P:
+        def get(self, k, d=None, cast=str): return cast(env[k]) if k in env else d
+    chat = lambda proj, messages, **kw: {"content": reply if isinstance(reply, str) else json.dumps(reply)}
+    bundle, meta = design.propose(home, spec, chat_fn=chat, proj=P() if env else None)
+    return home, bundle, meta
+
+def _project(home, name, bundle, meta, spec=TWO, git=False):
+    import subprocess
+    pd = os.path.join(home, "projects", name); os.makedirs(pd); code = os.path.join(home, "code", name); os.makedirs(code)
+    with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(spec)
+    with open(os.path.join(pd, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\n')
+    if git: subprocess.run(["git", "-C", code, "init", "-q"], check=True); open(os.path.join(pd, ".git-prepped"), "w").close()
+    design.write_project_pipeline(Project(name, home), bundle, template_meta=meta)
+    return Project(name, home)
+
+def W(i, files, lines=40, **kw): return {"id": i, "responsibility": f"write {files}", "files": files, "lines": lines, **kw}
+PAIR = {"summary": "two files", "workers": [W("ui", ["ui.py"], needs=["math"]), W("math", ["mathx.py"])]}
+BIG = {"summary": "two big files", "workers": [W("ui", ["ui.py"], 900, needs=["math"]), W("math", ["mathx.py"], 700)]}
+
 class TestTeamDesigner(unittest.TestCase):
-    """The model says who writes which files; the harness writes a team that is valid and ends in a check."""
-    def _design(self, reply, spec=TWO):
-        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
-        chat = lambda proj, messages, **kw: {"content": reply if isinstance(reply, str) else json.dumps(reply)}
-        bundle, meta = design.propose(home, spec, chat_fn=chat)
-        return home, bundle, meta
+    """The team is sized by whether the program fits one agent's context, and there is always a plan, a build and a review."""
+    def test_a_program_that_fits_one_context_is_plan_build_review_fix(self):
+        home, bundle, meta = _design(self, PAIR)
+        self.assertEqual([m["id"] for m in bundle["team"]["members"]], ["planner", "builder", "reviewer"])
+        self.assertEqual([(n["id"], n.get("action")) for n in bundle["workflow"]["nodes"]],
+                         [("start", None), ("plan", "write_plan"), ("build", "drafts"), ("review", "review"), ("fix", "fix"), ("gate", None), ("done", None)])
+        self.assertIn({"from": "gate", "to": "fix", "kind": "execution", "when": "fail"}, bundle["workflow"]["edges"])
+        self.assertEqual((meta["shape"], meta["fit"]["fits"], meta["fit"]["lines"]), ("plan-build-review-fix", True, 80))
+        self.assertEqual((bundle["agents"]["reviewer"]["memory"], bundle["agents"]["reviewer"]["sees"]["write"]), ("none", []))
 
-    @staticmethod
-    def W(i, files, **kw): return {"id": i, "responsibility": f"write {files}", "files": files, **kw}
-    PAIR = {"summary": "two files", "coordinator": False, "qa": False, "workers": [
-        {"id": "ui", "responsibility": "show numbers", "files": ["ui.py"], "needs": ["math"]}, {"id": "math", "responsibility": "add numbers", "files": ["mathx.py"]}]}
-
-    def test_two_workers_become_a_team_that_runs_to_a_passing_gate(self):
-        home, bundle, meta = self._design(self.PAIR)
-        self.assertEqual(meta["template"], "designed")
-        self.assertEqual([m["id"] for m in bundle["team"]["members"]], ["math", "ui", "integrator"])             # ui needs math, so math is first
-        self.assertEqual(bundle["agents"]["w-math"]["sees"]["write"], ["mathx.py"])
-        wf = bundle["workflow"]
-        self.assertEqual([n["id"] for n in wf["nodes"]], ["start", "build-math", "build-ui", "integrate", "gate", "done"])
-        self.assertIn({"from": "gate", "to": "integrate", "kind": "execution", "when": "fail"}, wf["edges"])
-        pd = os.path.join(home, "projects", "team"); os.makedirs(pd); code = os.path.join(home, "code", "team"); os.makedirs(code)
-        with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(TWO)
-        with open(os.path.join(pd, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\n')
-        design.write_project_pipeline(Project("team", home), bundle, template_meta=meta)
-        proj = Project("team", home)
-        s = Rec({"math": [{"action": "write", "path": "ui.py", "content": "mine now"}, GOOD, FIN],
-                 "ui": [{"action": "read", "path": "mathx.py"}, {"action": "write", "path": "ui.py", "content": "def show(x): return x\n"}, FIN],
-                 "integrator": [{"action": "check"}, FIN, {"action": "write", "path": "ui.py", "content": "def show(x): return str(x)\n"}, {"action": "check"}, FIN]})
+    def test_the_small_team_runs_and_the_builder_gets_the_reviewers_findings(self):
+        home, bundle, meta = _design(self, PAIR); proj = _project(home, "small", bundle, meta)
+        found = [{"action": "run", "command": "python3 -c 'import ui; print(repr(ui.show(5)))'"},
+                 {"action": "findings", "findings": [{"where": "ui.py", "what": "show(5) returns 5, the SPEC requires '5'", "serious": "high"}]}]
+        s = Rec({"planner": PLAN, "builder": [GOOD, {"action": "write", "path": "ui.py", "content": "def show(x): return x\n"}, FIN, UI, {"action": "check"}, FIN],
+                 "reviewer": found})
         run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
-        self.assertEqual(run["status"], "COMPLETED", events[-12:])
-        self.assertEqual(run["gates"]["gate"]["fails"], 1)
-        self.assertIn("error: write denied: ui.py", s.seen[1][2])                    # math may not write ui's file
-        self.assertIn("mathx.py:\n```\ndef add", s.seen[4][2])                       # ui read math's file
-        self.assertIn("You write only: ui.py. math writes mathx.py.", s.seen[3][1])
+        self.assertEqual(run["status"], "COMPLETED", events[-8:])
+        self.assertEqual([m for m, *_ in s.seen], ["planner"] + ["builder"] * 3 + ["reviewer"] * 2 + ["builder"] * 3)
+        self.assertNotIn("check", bundle["agents"]["reviewer"]["tools"])
+        self.assertEqual((bundle["agents"]["reviewer"]["model"], "model" in bundle["agents"]["builder"]), ({"num_predict": 900}, False))
+        self.assertEqual([(p["node"], p["passed"]) for p in run["progress"]], [("plan", 0), ("build", 1), ("fix", 2)])
+        fix = s.seen[6][2]
+        self.assertIn("[FINDING] from reviewer", fix); self.assertIn("show(5) returns 5, the SPEC requires '5'", fix); self.assertIn("PLAN.md", fix)
+        self.assertIn("1. run `python3 -c 'import ui; print(repr(ui.show(5)))'`\nexit status 0\n5", s.seen[5][2])     # the reviewer saw it fail
 
-    def test_a_messy_proposal_is_repaired_not_refused(self):
-        messy = {"summary": "s", "coordinator": True, "qa": True, "workers": [
-            {"id": "Math Dev!", "responsibility": "math", "files": ["`mathx.py`", "../etc/passwd", "SPEC.md"], "needs": ["ghost"]},
-            {"id": "integrator", "responsibility": "ui", "files": ["mathx.py", "./ui.py"]},
-            {"id": "idle", "responsibility": "nothing", "files": []}, "junk"]}
-        home, bundle, meta = self._design(messy)
-        ids = [m["id"] for m in bundle["team"]["members"]]
-        self.assertEqual(ids, ["coordinator", "math-dev", "integrator-2", "qa", "integrator"])
-        self.assertEqual(bundle["agents"]["w-math-dev"]["sees"]["write"], ["mathx.py"])
-        self.assertEqual(bundle["agents"]["w-integrator-2"]["sees"]["write"], ["ui.py"])
-        self.assertEqual(bundle["team"]["pods"], [{"id": "build", "manager": "coordinator", "members": ["math-dev", "integrator-2"]}])
-        self.assertEqual(bundle["agents"]["qa"]["sees"]["write"], [])
-        notes = " | ".join(meta["notes"])
-        for part in ("'../etc/passwd'", "'SPEC.md'", "mathx.py already belongs to math-dev", "idle: dropped"): self.assertIn(part, notes)
+    def test_with_no_findings_the_fix_step_costs_no_model_call(self):
+        home, bundle, meta = _design(self, PAIR); proj = _project(home, "clean", bundle, meta)
+        s = Rec({"planner": PLAN, "builder": [GOOD, UI, FIN], "reviewer": NONE})
+        run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
+        self.assertEqual(run["status"], "COMPLETED", events[-8:])
+        self.assertEqual(([m for m, *_ in s.seen], run["skipped"]), (["planner"] + ["builder"] * 3 + ["reviewer"], ["fix"]))
+
+    def test_findings_already_dealt_with_are_not_shown_again(self):
+        home, bundle, meta = _design(self, PAIR); proj = _project(home, "again", bundle, meta)
+        s = Rec({"planner": PLAN, "builder": [GOOD, FIN, FIN, UI, FIN], "reviewer": [{"action": "findings", "findings": [{"where": "ui.py", "what": "ui.py is missing"}]}]})
+        run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
+        self.assertEqual(run["status"], "COMPLETED", events[-8:])                    # fix finished without ui.py, the gate failed, fix again
+        visits = [u for m, _, u, _ in s.seen if m == "builder"]
+        self.assertIn("ui.py is missing", visits[2]); self.assertNotIn("ui.py is missing", visits[3])
+        self.assertIn("The harness checked the result (gate `gate`) and it FAILED", visits[3])
+
+    def test_a_program_too_big_for_one_context_gets_a_manager_teams_and_qa(self):
+        home, bundle, meta = _design(self, BIG, NUM_CTX=16384)
+        self.assertEqual((meta["shape"], meta["fit"]["fits"], meta["fit"]["lines"], meta["fit"]["budget"]), ("manager-teams-qa", False, 1600, 6000))
+        self.assertEqual([m["id"] for m in bundle["team"]["members"]], ["planner", "manager", "math", "math-review", "ui", "ui-review", "qa"])
+        self.assertEqual([n["id"] for n in bundle["workflow"]["nodes"]],
+                         ["start", "plan", "contracts", "build-math", "review-math", "fix-math", "build-ui", "review-ui", "fix-ui", "integrate", "refix-math", "refix-ui",
+                          "manager-review", "qa-write", "qa-gate", "qa-fix", "gate", "done"])
+        self.assertEqual(bundle["team"]["pods"][0], {"id": "team-math", "manager": "manager", "members": ["math", "math-review"]})
+        self.assertEqual(bundle["agents"]["w-math"]["sees"]["write"], ["mathx.py"]); self.assertEqual(bundle["project"]["reserved"], {"qa_tests.py": "qa"})
         validate_project(bundle)
 
-    def test_a_file_the_spec_names_that_nobody_took_gets_an_owner(self):
-        home, bundle, meta = self._design({"summary": "", "coordinator": False, "qa": False,
-                                           "workers": [self.W("a", ["mathx.py"]), self.W("b", ["extra.py"])]})
-        self.assertEqual(bundle["agents"]["w-b"]["sees"]["write"], ["extra.py", "ui.py"])
+    def test_the_context_window_decides_not_the_number_of_files(self):
+        mid = {"summary": "", "workers": [W("ui", ["ui.py"], 300), W("math", ["mathx.py"], 300)]}                 # 600 lines: 6,600 tokens
+        self.assertEqual(_design(self, mid, NUM_CTX=16384)[2]["shape"], "manager-teams-qa")
+        self.assertEqual(_design(self, mid, NUM_CTX=65536, DRAFTS_NUM_PREDICT=12000)[2]["shape"], "plan-build-review-fix")
+        self.assertEqual(_design(self, BIG, PIPELINE_SHAPE="small")[2]["shape"], "plan-build-review-fix")
+        self.assertEqual(_design(self, PAIR, PIPELINE_SHAPE="large")[2]["shape"], "manager-teams-qa")
+        one = _design(self, {"summary": "", "workers": [W("all", ["mathx.py", "ui.py"], 5000)]}, NUM_CTX=16384)[2]
+        self.assertEqual(one["shape"], "plan-build-review-fix"); self.assertIn("was not split into two or more parts", " ".join(one["notes"]))
 
-    def test_one_worker_or_nothing_usable_is_the_solo_template(self):
-        for reply, why in (({"summary": "small", "coordinator": True, "qa": True, "workers": [self.W("dev", ["mathx.py", "ui.py"])]}, "one worker is enough"),
-                           ("not json at all", "the proposal had no usable worker"), ({"workers": "many"}, "the proposal had no usable worker")):
-            home, bundle, meta = self._design(reply)
-            self.assertEqual((meta["template"], meta["reason"]), ("solo", why))
-            self.assertEqual([m["id"] for m in bundle["team"]["members"]], ["dev"])
+    def test_the_large_team_runs_from_plan_to_qa(self):
+        home, bundle, meta = _design(self, PAIR, PIPELINE_SHAPE="large"); proj = _project(home, "large", bundle, meta)
+        qa_ok = {"action": "write", "path": "qa_tests.py", "content": "import mathx, ui, sys\nprint('add'); sys.exit(0 if mathx.add(2, 2) == 4 and ui.show(7) == '7' else 1)\n"}
+        s = Rec({"planner": PLAN,
+                 "manager": [{"action": "write", "path": "INTERFACES.md", "content": "mathx.add(a, b) -> number\nui.show(x) -> str\n"},                     # contracts
+                             {"action": "check"}, {"action": "findings", "findings": [{"where": "ui.py", "what": "show must return a str"}]},                    # integrate
+                             {"action": "write", "path": "qa_tests.py", "content": "exit(0)"}, FIN],                                                           # manager-review
+                 "math": [GOOD, FIN, FIN], "math-review": NONE,
+                 "ui": [{"action": "write", "path": "mathx.py", "content": "mine"}, {"action": "write", "path": "ui.py", "content": "def show(x): return x\n"}, FIN, UI, FIN],
+                 "ui-review": NONE, "qa": [qa_ok, FIN]})
+        run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=200)
+        self.assertEqual(run["status"], "COMPLETED", events[-10:])
+        who = [m for m, *_ in s.seen]
+        self.assertEqual([w for i, w in enumerate(who) if i == 0 or who[i - 1] != w],
+                         ["planner", "manager", "math", "math-review", "ui", "ui-review", "manager", "math", "ui", "manager", "qa"])
+        self.assertEqual(run["skipped"], ["fix-math", "fix-ui"])                                        # their own reviewers found nothing
+        ui_turns = [u for m, _, u, _ in s.seen if m == "ui"]
+        self.assertIn("error: write denied: mathx.py", ui_turns[1])                                     # a team writes only its own files
+        self.assertIn("show must return a str", ui_turns[3])                                            # the manager's finding reached the team at refix
+        self.assertIn("error: qa_tests.py belongs to qa; only qa may write it", [u for m, _, u, _ in s.seen if m == "manager"][4])
+        self.assertEqual((run["gates"]["qa-gate"]["result"], run["gates"]["gate"]["result"]), ("pass", "pass"))
+
+    def test_failing_qa_tests_go_to_the_manager_and_a_wrong_test_cannot_block_the_build(self):
+        home, bundle, meta = _design(self, PAIR, PIPELINE_SHAPE="large"); proj = _project(home, "qa", bundle, meta)
+        wrong = {"action": "write", "path": "qa_tests.py", "content": "import mathx, sys\nprint('add(2, 2) expected 5, got', mathx.add(2, 2)); sys.exit(1)\n"}
+        s = Rec({"planner": PLAN, "manager": [FIN, {"action": "findings", "findings": []}, FIN, FIN, FIN, FIN], "math": [GOOD, FIN, FIN, FIN], "math-review": NONE,
+                 "ui": [UI, FIN, FIN, FIN], "ui-review": NONE, "qa": [wrong, FIN]})
+        run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=200)
+        self.assertEqual(run["status"], "COMPLETED", events[-10:])                   # the spec's examples pass: QA's wrong test does not fail the run
+        self.assertEqual(run["gates"]["qa-gate"]["fails"], 3)
+        self.assertIn("gate qa-gate still failed after 3 tries and was passed over: QA's tests failed", run["warnings"][0])
+        told = [u for m, _, u, _ in s.seen if m == "manager"][3]
+        self.assertIn("gate `qa-gate`", told); self.assertIn("add(2, 2) expected 5, got 4", told)
+
+    def test_a_messy_proposal_is_repaired_not_refused(self):
+        messy = {"summary": "s", "workers": [
+            {"id": "Math Dev!", "responsibility": "math", "files": ["`mathx.py`", "../etc/passwd", "SPEC.md", "qa_tests.py"], "lines": "many", "needs": ["ghost"]},
+            {"id": "manager", "responsibility": "ui", "files": ["mathx.py", "./ui.py"], "lines": 20},
+            {"id": "idle", "responsibility": "nothing", "files": [], "lines": 5}, "junk"]}
+        home, bundle, meta = _design(self, messy, PIPELINE_SHAPE="large")
+        self.assertEqual([m["id"] for m in bundle["team"]["members"]], ["planner", "manager", "math-dev", "math-dev-review", "manager-2", "manager-2-review", "qa"])
+        self.assertEqual(bundle["agents"]["w-math-dev"]["sees"]["write"], ["mathx.py"]); self.assertEqual(bundle["agents"]["w-manager-2"]["sees"]["write"], ["ui.py"])
+        notes = " | ".join(meta["notes"])
+        for part in ("'../etc/passwd'", "'SPEC.md'", "'qa_tests.py'", "mathx.py already belongs to math-dev", "idle: dropped"): self.assertIn(part, notes)
+
+    def test_nothing_usable_is_still_plan_build_review_fix(self):
+        for reply in ("not json at all", {"workers": "many"}, {}):
+            home, bundle, meta = _design(self, reply)
+            self.assertEqual((meta["shape"], [m["id"] for m in bundle["team"]["members"]]), ("plan-build-review-fix", ["planner", "builder", "reviewer"]))
 
     def test_a_spec_without_examples_ends_in_an_approval_not_a_gate_that_cannot_pass(self):
-        home, bundle, meta = self._design(self.PAIR, spec="# Two\n\n1. `mathx.py` adds.\n2. `ui.py` shows.\n")
+        home, bundle, meta = _design(self, PAIR, spec="# Two\n\n1. `mathx.py` adds.\n2. `ui.py` shows.\n")
         self.assertEqual([n["type"] for n in bundle["workflow"]["nodes"]][-2:], ["approve", "end"])
         self.assertIn("nothing checks the result but your approval", " ".join(meta["notes"]))
 
-    def test_the_designer_is_told_the_files_and_asked_a_constrained_question(self):
+    def test_the_designer_is_asked_for_parts_and_their_size_not_for_a_team(self):
         home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         got = {}
-        def chat(proj, messages, **kw): got.update(user=messages[-1]["content"], schema=kw["schema"]); return {"content": json.dumps(self.PAIR)}
+        def chat(proj, messages, **kw): got.update(system=messages[0]["content"], user=messages[-1]["content"], schema=kw["schema"]); return {"content": json.dumps(PAIR)}
         design.propose(home, TWO, chat_fn=chat)
-        self.assertIn("Source files the SPEC names: mathx.py, ui.py.", got["user"]); self.assertIn("worked examples the harness can run: 2", got["user"])
-        self.assertEqual(got["schema"]["properties"]["workers"]["maxItems"], 6)
+        self.assertIn("Source files the SPEC names: mathx.py, ui.py.", got["user"]); self.assertIn("the harness sizes it from your estimate", got["system"])
+        self.assertIn("lines", got["schema"]["properties"]["workers"]["items"]["required"])
 
 FINDING = [{"action": "findings", "findings": [{"where": "SPEC", "what": "ok", "serious": "low"}]}]
 CALC = ("pipelines", "templates", "projects", "basic-calculator.json")
@@ -771,44 +864,36 @@ class TestTheSpecIsFrozen(unittest.TestCase):
 
 class TestCheckpoints(unittest.TestCase):
     """A member's finished work is committed, and work that breaks examples that passed is sent back once, then set aside."""
-    UI = {"action": "write", "path": "ui.py", "content": "def show(x): return str(x)\n"}
     ZERO = {"action": "write", "path": "mathx.py", "content": "def add(a, b): return 0\n"}
 
-    def _team(self, name, integrator, git=True):
+    def _team(self, name, fix, git=True):
         import subprocess
-        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
-        bundle, meta = design.propose(home, TWO, chat_fn=lambda proj, messages, **kw: {"content": json.dumps(TestTeamDesigner.PAIR)})
-        pd = os.path.join(home, "projects", name); os.makedirs(pd); code = os.path.join(home, "code", name); os.makedirs(code)
-        with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(TWO)
-        with open(os.path.join(pd, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\n')
-        if git:
-            subprocess.run(["git", "-C", code, "init", "-q"], check=True); open(os.path.join(pd, ".git-prepped"), "w").close()
-        design.write_project_pipeline(Project(name, home), bundle, template_meta=meta)
-        proj = Project(name, home); s = Rec({"math": [GOOD, FIN], "ui": [self.UI, FIN], "integrator": integrator})
+        home, bundle, meta = _design(self, PAIR); proj = _project(home, name, bundle, meta, git=git)
+        s = Rec({"planner": PLAN, "builder": [GOOD, UI, FIN] + fix, "reviewer": SOME})
         run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
-        log = subprocess.run(["git", "-C", code, "log", "--format=%s", "--reverse"], capture_output=True, text=True).stdout.splitlines() if git else []
-        with open(os.path.join(code, "mathx.py")) as f: return proj, run, events, s, log, f.read()
+        log = subprocess.run(["git", "-C", proj.workdir, "log", "--format=%s", "--reverse"], capture_output=True, text=True).stdout.splitlines() if git else []
+        with open(os.path.join(proj.workdir, "mathx.py")) as f: return proj, run, events, s, log, f.read()
 
     def test_each_members_finished_work_is_a_commit(self):
         proj, run, events, s, log, math = self._team("c1", [{"action": "check"}, FIN])
         self.assertEqual(run["status"], "COMPLETED", events[-6:])
-        self.assertEqual(log, ["pipeline: math finished build-math (0 of 2 spec examples pass)", "pipeline: ui finished build-ui (2 of 2 spec examples pass)"])
-        self.assertEqual([(p["node"], p["passed"]) for p in run["progress"]], [("build-math", 0), ("build-ui", 2), ("integrate", 2)])
+        self.assertEqual(log, ["pipeline: planner finished plan (0 of 2 spec examples pass)", "pipeline: builder finished build (2 of 2 spec examples pass)"])
+        self.assertEqual([(p["node"], p["passed"]) for p in run["progress"]], [("plan", 0), ("build", 2), ("fix", 2)])
         self.assertNotIn("warnings", run)
 
     def test_work_that_breaks_a_passing_example_goes_back_once_and_can_be_fixed(self):
         proj, run, events, s, log, math = self._team("c2", [BAD, FIN, GOOD, FIN])
         self.assertEqual(run["status"], "COMPLETED", events[-6:])
-        self.assertEqual((run["regressions"], run["gates"]["gate"]["fails"]), ({"integrate": 1}, 0))
-        again = [u for m, _, u, _ in s.seen if m == "integrator"][2]
-        self.assertIn("Your last changes broke examples that passed before. Fix this:\n1 of the spec's examples that passed before integrator's work on `integrate` fail now", again)
+        self.assertEqual((run["regressions"], run["gates"]["gate"]["fails"]), ({"fix": 1}, 0))
+        again = [u for m, _, u, _ in s.seen if m == "builder"][5]
+        self.assertIn("Your last changes broke examples that passed before. Fix this:\n1 of the spec's examples that passed before builder's work on `fix` fail now", again)
         self.assertIn("add(2, 3)", again); self.assertNotIn("warnings", run); self.assertNotIn("feedback", run)
 
     def test_work_that_breaks_them_twice_is_set_aside_and_the_code_goes_back(self):
         proj, run, events, s, log, math = self._team("c3", [BAD, FIN, self.ZERO, FIN])
         self.assertEqual(run["status"], "COMPLETED", events[-6:])                          # the gate judges the checkpoint, which passes
         self.assertEqual(math, GOOD["content"])
-        self.assertEqual(run["warnings"], ["integrator's work on integrate broke passing examples twice and was set aside (artifact set-aside-integrate-v1); "
+        self.assertEqual(run["warnings"], ["builder's work on fix broke passing examples twice and was set aside (artifact set-aside-fix-v1); "
                                            "the code is back at the last checkpoint"])
         from codebot.pipeline import artifacts
         patch = artifacts.read(R.pipeline_dir(proj), [a for a in artifacts.list_artifacts(R.pipeline_dir(proj)) if a["kind"] == "patch"][0])

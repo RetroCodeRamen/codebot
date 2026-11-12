@@ -1,0 +1,23 @@
+# Toolbox: small command-line text tools
+
+Write each tool below as its own Python 3 script in the root of the code directory: the tool's name with .py added, run with python3 as the
+examples show. Standard library only, no third-party packages, no network, and no tool may run another program. The code the tools share
+(reading the inputs, parsing the options) goes in one helper module, `common.py`, which the tools import.
+
+Rules for every tool unless its own text says otherwise:
+- Options come before the other arguments. Options without a value may be combined (`-lc` is `-l -c`); an option's value may be attached or be the next argument (`-n3` or `-n 3`).
+- A FILE argument names a file to read. With no FILE the tool reads standard input.
+- Output goes to standard output exactly as described, byte for byte. All text is ASCII; a line ends with a newline character.
+- The tool exits with status 0 unless its text says otherwise.
+
+The files `fruits.txt`, `nums.txt`, `table.csv`, `left.txt`, `right.txt`, `words.txt` and `empty.txt` in the code directory are test data: leave them as they are.
+
+## Requirements
+
+1. `wc.py [-l] [-w] [-c] [FILE...]` counts lines (newline characters), words (runs of characters separated by spaces, tabs or newlines) and bytes. With no option it prints all three, always in the order lines, words, bytes; with options only the counts asked for, in that same order. Each input gives one line: the counts, then a space and the file name (no name for standard input). With more than one FILE a last line gives the sums with the name `total`. The counts are right-aligned in a common width and separated by one space. The width is the number of digits of the total number of bytes of all the files; for standard input it is 7. The exception: when exactly one count is printed and there is at most one FILE, the number is printed with no padding. A FILE that does not exist is skipped with a message on standard error; the other files and the total are still printed and the exit status is 1. Examples: `python3 wc.py -l fruits.txt` prints `6 fruits.txt`; `python3 wc.py words.txt` prints `  4  23 121 words.txt`; `python3 wc.py -w` with standard input `a b  c\nd` prints `4`; `python3 wc.py` with standard input `one two\nthree` prints `      2       3      14`.
+
+2. `cut.py -f LIST [-d DELIM] [-s] [FILE...]` prints the selected fields of each line; `cut.py -c LIST [FILE...]` prints the selected characters. Fields are separated by the single character DELIM (a tab when `-d` is not given) and are joined by the same character in the output. LIST is one or more ranges separated by commas: `N` (the Nth, counting from 1), `N-M`, `N-` (N to the end) or `-M` (1 to M). What is selected is printed once and in the order of the line, whatever the order of the LIST. With `-f`, a line that does not contain DELIM is printed unchanged, or not at all with `-s`. Fields or characters beyond the end of a line are simply missing. Examples: `python3 cut.py -d, -f1,3 table.csv` prints the lines `name,price\npear,1.20\nfig,0.45\nplain line\nkiwi,0.30`; `python3 cut.py -c 2-4` with standard input `abcdef` prints `bcd`; `python3 cut.py -d : -f 2-` with standard input `a:b:c\nplain` prints `b:c\nplain`.
+
+3. `uniq.py [-c] [-d] [-u] [-i] [FILE]` writes its input with each run of adjacent equal lines reduced to the first line of the run. `-c` puts the length of the run before each line, right-aligned in 7 columns and followed by one space. `-d` prints only runs of two or more lines (one line each); `-u` prints only lines that are not repeated. `-i` ignores the difference between upper and lower case when comparing; the first line of a run is the one printed. Examples: `python3 uniq.py` with standard input `a\na\nb\na` prints `a\nb\na`; `python3 uniq.py -c` with standard input `x\nx\nx\ny` prints `      3 x\n      1 y`; `python3 uniq.py -d` with standard input `a\na\nb\nc\nc` prints `a\nc`.
+
+4. `seq.py [-s SEP] [-w] LAST`, `seq.py [-s SEP] [-w] FIRST LAST` or `seq.py [-s SEP] [-w] FIRST INCREMENT LAST` prints the whole numbers from FIRST (1 when not given) to LAST in steps of INCREMENT (1 when not given; it may be negative, and then the numbers go down to LAST). Nothing is printed when FIRST is already past LAST. The numbers are separated by SEP, a newline when `-s` is not given, and the output ends with one newline (when there is any output). `-w` pads every number with leading zeros to the width of the widest one. The arguments are integers and may be negative. Examples: `python3 seq.py -s , 4` prints `1,2,3,4`; `python3 seq.py -s ' ' 2 3 11` prints `2 5 8 11`; `python3 seq.py -w -s : 8 10` prints `08:09:10`.

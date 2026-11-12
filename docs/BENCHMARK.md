@@ -1,5 +1,7 @@
 # Capability Ladder Benchmark
 
+**Not a goal any more (2026-11-12).** The ladder's specs, reference solutions and hidden tests were written by an AI assistant, so a score on them says how well codebot matches that assistant's reading of its own specs, not whether the result is right. They stay in the repository because the harness's own unit tests use them as fixtures; nothing is tuned to them or judged by them from now on, and the numbers below are history. Design questions are judged on benchmarks whose expected outcome is known independently: `bench/toolbox` (clean-room copies of command-line tools, every expected output printed by the real tool).
+
 Measures what codebot (planner -> worker -> assertion runner -> recovery ladder) can build with the local model, on 12 projects of rising difficulty and on one project that grows over 8 stages. It runs the REAL harness; the benchmark only supplies the spec, the isolated workspace, the clock and the independent scoring. Code: `lib/codebot/capbench/`, catalog: `bench/ladder/catalog/`, results: `bench/results/ladder/` (git-ignored), trial workspaces `bench/runs/` and `projects/cap-*` (git-ignored).
 
 All results in this file come from one laptop (i7-11375H, 15 GB RAM, RTX 3050 Ti 4 GB, thermally limited) and one model unless stated; they are
