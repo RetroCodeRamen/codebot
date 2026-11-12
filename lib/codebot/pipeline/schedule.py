@@ -255,15 +255,25 @@ def step(proj, *, chat_fn=None, bundle=None):
         return {"status": run["status"], "event": "loop", "count": run["loop_counts"].get(cursor), "next": nxt, "run": run}
 
     if typ in ("gate", "approve"):
-        when = _gate(bundle, proj, node) if typ == "gate" else ("pass" if proj.get("PIPELINE_AUTO_APPROVE", "1") != "0" else "fail")
+        if typ == "approve" and proj.get("PIPELINE_AUTO_APPROVE", "1") == "0" and not run.get("approved"):
+            run["status"] = "WAITING_APPROVAL"
+            run["approve_node"] = cursor
+            R.save_run(proj, run)
+            return {"status": "WAITING_APPROVAL", "event": "approve", "node": cursor, "run": run}
+        when = _gate(bundle, proj, node) if typ == "gate" else "pass"
+        if typ == "approve":
+            run["approved"] = False  # consume one-shot approval for a later approve node
         run["last_gate"] = when
         nxt = _advance(bundle, run, cursor, when=when)
         if not nxt and when == "fail":
             run["status"] = "FAILED"; run["error"] = f"gate {cursor} failed"
         else:
             run["cursor"] = nxt or cursor
+            if typ == "approve" and when == "pass":
+                run["status"] = "RUNNING" if run.get("status") == "WAITING_APPROVAL" else run.get("status") or "RUNNING"
+                run.pop("approve_node", None)
         run["step_count"] += 1; R.save_run(proj, run)
-        return {"status": run["status"], "event": "gate", "when": when, "next": nxt, "run": run}
+        return {"status": run["status"], "event": "gate" if typ == "gate" else "approve", "when": when, "next": nxt, "run": run}
 
     if typ == "run":
         # if this run node finished, advance
@@ -434,3 +444,15 @@ def cancel(proj):
             m["state"] = "CANCELLED"
     R.save_run(proj, run)
     return {"status": "CANCELLED", "run": run}
+
+def approve(proj):
+    """Human approval for an approve node (when PIPELINE_AUTO_APPROVE=0)."""
+    run = R.load_run(proj)
+    if not run:
+        return {"status": "idle", "run": None}
+    run["approved"] = True
+    if run.get("status") == "WAITING_APPROVAL":
+        run["status"] = "RUNNING"
+    R.save_run(proj, run)
+    # advance through the approve node immediately
+    return step(proj)

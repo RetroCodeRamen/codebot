@@ -424,3 +424,30 @@ class TestInitPodsNested(unittest.TestCase):
             self.assertEqual(run["status"], "COMPLETED", events[-25:])
         finally:
             shutil.rmtree(home, ignore_errors=True)
+
+class TestApproveGate(unittest.TestCase):
+    def test_waiting_approval_then_approve(self):
+        home = _home()
+        try:
+            proj = _proj(home, "ap", os.path.join(home, "pipelines", "templates", "projects", "spec-with-reviewers.json"), SPEC)
+            # force human approve
+            with open(proj.p("project.env"), "a") as f: f.write('PIPELINE_AUTO_APPROVE="0"\n')
+            proj.cfg["PIPELINE_AUTO_APPROVE"] = "0"
+            script = Script({
+                "elephant": [
+                    {"action": "write", "path": "SPEC.md", "content": SPEC},
+                    {"action": "finish"},
+                    {"action": "finish"},
+                ],
+                "gf-security": [{"action": "findings", "findings": [{"where": "SPEC", "what": "ok", "serious": "low"}]}],
+                "gf-structure": [{"action": "findings", "findings": [{"where": "SPEC", "what": "ok", "serious": "low"}]}],
+                "gf-ui": [{"action": "findings", "findings": [{"where": "SPEC", "what": "ok", "serious": "low"}]}],
+            })
+            run, events = schedule.run_until_idle(proj, chat_fn=script, max_steps=80)
+            self.assertEqual(run["status"], "WAITING_APPROVAL", events[-15:])
+            ev = schedule.approve(proj)
+            # may need more steps after approve to finish gates
+            run2, events2 = schedule.run_until_idle(proj, chat_fn=script, max_steps=40)
+            self.assertEqual(run2["status"], "COMPLETED", (ev, events2[-10:]))
+        finally:
+            shutil.rmtree(home, ignore_errors=True)

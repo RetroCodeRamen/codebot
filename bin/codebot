@@ -339,6 +339,7 @@ loop_pipeline() {
     case "$st" in
       COMPLETED) notify "codebot: $NAME COMPLETE" "Pipeline finished. Review: codebot pipeline status $NAME" default white_check_mark; finished=1; rm -f "$S/.active" ;;
       FAILED) notify "codebot: $NAME failed" "$(jq -r '.error // "pipeline failed"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
+      WAITING_APPROVAL) notify "codebot: $NAME needs approval" "Approve: codebot pipeline approve $NAME (or the Pipeline page)." default hand; sleep 30 ;;
       BUSY) sleep 15 ;;
       CANCELLED) finished=1; rm -f "$S/.active" ;;
       *) : ;;
@@ -581,7 +582,7 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
   gui [--port N] [--open]  the local window, on this machine only (describe a project, answer a few questions, then build)
   pipeline validate <file.json>...   validate modular team/workflow JSON (docs/architecture/modular-agent-orchestration.md)
-  pipeline init|design|step|run|status|cancel <name>   install template / Team Designer / step / run / status / cancel
+  pipeline init|design|step|run|status|cancel|approve <name>   install template / design / step / run / status / cancel / approve
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)

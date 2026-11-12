@@ -701,6 +701,14 @@ def pipeline_init(ctx, body, name):
         raise ApiError("; ".join(e.errors))
     return {"ok": True, "path": path, "meta": meta}
 
+def pipeline_approve(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    from ..config import Project
+    from ..pipeline import schedule, runtime as R
+    ev = schedule.approve(Project(name, ctx.home))
+    return {"ok": True, "status": ev.get("status"), "event": ev.get("event"), "run": ev.get("run") or R.load_run(Project(name, ctx.home))}
+
 def pipeline_templates(ctx, q, name=None):
     from ..pipeline import design
     design.ensure_templates(ctx.home)
@@ -796,6 +804,7 @@ POST = [
     (r"/api/project/([^/]+)/pipeline/run", pipeline_run),
     (r"/api/project/([^/]+)/pipeline/cancel", pipeline_cancel),
     (r"/api/project/([^/]+)/pipeline/init", pipeline_init),
+    (r"/api/project/([^/]+)/pipeline/approve", pipeline_approve),
     (r"/api/pipeline/templates", pipeline_templates),
     (r"/api/project/([^/]+)/delete", project_delete),
     (r"/api/inbox/ack", inbox_ack), (r"/api/bench/start", bench_start), (r"/api/bench/validate", bench_validate),

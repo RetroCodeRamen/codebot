@@ -10,6 +10,7 @@ def main(argv=None):
               "       python3 -m codebot.pipeline run <project> [--home DIR] [--max N]\n"
               "       python3 -m codebot.pipeline status <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline cancel <project> [--home DIR]\n"
+              "       python3 -m codebot.pipeline approve <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline design <project> [--home DIR] [--spec PATH] [--template NAME]", file=sys.stderr)
         return 2
     cmd = argv[0]; args = argv[1:]
@@ -31,7 +32,7 @@ def main(argv=None):
     home = None
     if "--home" in args:
         i = args.index("--home"); home = args[i + 1]; del args[i:i + 2]
-    if cmd in ("step", "run", "status", "design", "cancel", "init"):
+    if cmd in ("step", "run", "status", "design", "cancel", "init", "approve"):
         if not args: return main(["--help"])
         from codebot.config import Project
         name = args[0]
@@ -48,6 +49,11 @@ def main(argv=None):
         if cmd == "cancel":
             from . import schedule
             print(json.dumps(schedule.cancel(proj), default=str)); return 0
+        if cmd == "approve":
+            from . import schedule, runtime as R
+            ev = schedule.approve(proj)
+            out = {k: v for k, v in ev.items() if k != "run"}; out["run"] = ev.get("run") or R.load_run(proj)
+            print(json.dumps(out, default=str)); return 0
         if cmd == "init":
             from . import design
             from .validate import ValidationError
