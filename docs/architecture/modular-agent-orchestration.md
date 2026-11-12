@@ -124,15 +124,15 @@ Scratch/Blockly remains deferred; JSON is still the source of truth.
 
 ## 9. Milestones (dependency order)
 
-1. **Architecture + JSON** (this doc + `lib/codebot/pipeline` + templates + tests) — *now*  
-2. **Sequential scheduler** — two agents, one lock, checkpoints, restart  
-3. **Messaging + memory policies** — blocking QUESTION, nested A-B-C, isolation  
-4. **Workspaces + artifacts** — enforced `sees`, artifact refs  
-5. **Planning + Team Designer** — review rounds + generate team JSON (validated, user edits)  
-6. **Visual editor** — team canvas + simple workflow editor + JSON sync (Scratch-style only if still needed)  
-7. **Monitor + full GUI integration** — live READY/WAITING, pause/cancel  
+1. **Architecture + JSON** — done  
+2. **Sequential scheduler** — done (one lock, checkpoints, restart)  
+3. **Messaging + memory policies** — done (QUESTION/ANSWER, nested A-B-C, none/task/project/persistent)  
+4. **Workspaces + artifacts** — done (`sees`, artifact refs)  
+5. **Planning + Team Designer** — done (`pipeline design|init`, templates)  
+6. **Visual editor** — done (SVG team/workflow canvas + JSON; Scratch deferred)  
+7. **Monitor + full GUI integration** — done (live status, cancel, approve)  
 
-Acceptance scenarios A–D from the outline apply at the end of M5–M7; A (single developer) must pass as soon as M2 can run a one-node pipeline that wraps drafts.
+Acceptance A–D covered by fake-model tests. Real-model success-rate A/B vs drafts is the next measurement step, not a missing feature.
 
 ## 10. Design rules carried from codebot
 

@@ -47,7 +47,7 @@ def model_name(agent, bundle):
 
 def invoke(bundle, run_dir, member_id, task_text, *, proj=None, chat_fn=None, extra_files=None):
     """Run one model call for member_id. Returns (action_dict, agent, raw_content)."""
-    messages, agent = context.build_messages(bundle, run_dir, member_id, task_text, extra_files=extra_files)
+    messages, agent = context.build_messages(bundle, run_dir, member_id, task_text, extra_files=extra_files, proj=proj)
     model = model_name(agent, bundle)
     temp = 0.2
     if isinstance(agent.get("model"), dict) and agent["model"].get("temperature") is not None:

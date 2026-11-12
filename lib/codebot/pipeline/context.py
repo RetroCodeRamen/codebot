@@ -51,7 +51,7 @@ def escalate_target(bundle, member_id):
     talks = agent.get("can_talk_to") or []
     return talks[0] if talks else None
 
-def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None):
+def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None, proj=None):
     """Return OpenAI-style messages for one invocation. Memory policy controls history."""
     agent = member_agent(bundle, member_id)
     if not agent: raise KeyError(member_id)
@@ -85,6 +85,14 @@ def build_messages(bundle, run_dir, member_id, task_text, *, extra_files=None):
     arts = artifacts.list_artifacts(run_dir)[-8:]
     if arts and mem != "none":
         body.append("Artifacts: " + ", ".join(f"{a['id']}({a['kind']})" for a in arts))
+    if mem in ("project", "persistent") and proj is not None:
+        try:
+            from codebot import memory
+            lessons = memory.select(proj, {"title": (task_text or "")[:200], "files": []}, k=3, cap=600)
+            if lessons:
+                body.append("Lessons:\n" + "\n".join(f"- {L.get('text') or L}" for L in lessons))
+        except Exception:
+            pass
     msgs.append({"role": "user", "content": "\n\n".join(body)})
     return msgs, agent
 

@@ -451,3 +451,25 @@ class TestApproveGate(unittest.TestCase):
             self.assertEqual(run2["status"], "COMPLETED", (ev, events2[-10:]))
         finally:
             shutil.rmtree(home, ignore_errors=True)
+
+class TestPersistentMemory(unittest.TestCase):
+    def test_project_memory_packs_lessons(self):
+        from codebot.pipeline import context as C
+        home = _home()
+        try:
+            proj = _proj(home, "mem2", os.path.join(home, "pipelines", "templates", "projects", "basic-calculator.json"), SPEC)
+            md = os.path.join(home, "memory"); os.makedirs(md, exist_ok=True)
+            with open(os.path.join(md, "lessons.raw.jsonl"), "w") as f:
+                f.write(json.dumps({"id": "L1", "text": "always write add with two args", "task": "calc", "project": "x", "ts": 1}) + "\n")
+            with open(os.path.join(md, "lessons.status.json"), "w") as f:
+                json.dump({"lessons": {"L1": {"used": 2, "pass": 2, "pruned": False, "sources": []}}, "baseline": {"n": 2, "pass": 2}}, f)
+            with open(os.path.join(md, "lessons.md"), "w") as f: f.write("# Lessons\n- always write add with two args\n")
+            bundle, _ = R.load_bundle(proj)
+            # architect has memory project; reuse solo agent with override
+            bundle["agents"]["solo-developer"]["memory"] = "persistent"
+            rd = R.pipeline_dir(proj); os.makedirs(rd, exist_ok=True)
+            msgs, _ = C.build_messages(bundle, rd, "dev", "always write the program with examples", proj=proj)
+            self.assertIn("Lessons:", msgs[-1]["content"])
+            self.assertIn("always write", msgs[-1]["content"])
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
