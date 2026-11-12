@@ -8,31 +8,29 @@
 <link rel="stylesheet" href="css/app.css">
 <script type="module" src="js/main.js"></script>
 </head>
-<body>
+<body data-chrome="human">
 <header class="appbar">
-  <a class="brand" href="#/home" aria-label="codebot home"><span class="mark" aria-hidden="true">c▸</span><span class="word">codebot</span></a>
+  <a class="brand" href="#/projects" aria-label="codebot projects"><span class="mark" aria-hidden="true">c▸</span><span class="word">codebot</span></a>
   <nav class="mainnav" aria-label="Main">
-    <a href="#/home" data-nav="home">Home</a>
     <a href="#/projects" data-nav="projects">Projects</a>
-    <a href="#/new" data-nav="new">New project</a>
   </nav>
   <div class="appbar-right">
-    <a href="#/inbox" class="inbox-link" data-nav="inbox">Inbox <span class="count" id="inbox-count" hidden>0</span></a>
+    <a class="btn-new" href="#/new" data-nav="new">New project</a>
     <div class="menu" id="adv">
-      <button type="button" id="adv-btn" aria-haspopup="true" aria-expanded="false">Advanced</button>
+      <button type="button" id="adv-btn" aria-haspopup="true" aria-expanded="false">Tools</button>
       <div class="pop" id="adv-pop" hidden>
-        <a href="#/bench" data-nav="bench">Benchmarks</a>
+        <a href="#/settings" data-nav="settings">Settings</a>
         <a href="#/models" data-nav="models">Models</a>
         <a href="#/machine" data-nav="machine">Machine</a>
-        <a href="#/settings" data-nav="settings">Settings</a>
+        <a href="#/bench" data-nav="bench">Benchmarks</a>
       </div>
     </div>
-    <button type="button" class="theme-btn" id="theme-btn" title="Appearance: follow the system, light or dark">◐</button>
+    <button type="button" class="theme-btn" id="theme-btn" title="Appearance: follow the system, light or dark" aria-label="Change appearance">◐</button>
   </div>
 </header>
-<div class="statusstrip" id="statusstrip" role="status" aria-live="polite"></div>
 <div class="banner" id="banner" hidden></div>
 <main id="view" tabindex="-1"></main>
+<div class="statusstrip" id="statusstrip" role="status" aria-live="polite"></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <dialog id="dialog"></dialog>
 </body>

@@ -98,6 +98,41 @@ def shape_info(state_dir):
     return {"phase": st.get("phase") or "describe", "busy": bool(st.get("busy")), "title": ((st.get("outline") or {}).get("title") or ""),
             "notice": st.get("notice") or ""}
 
+def _spec_heading_and_blurb(state_dir):
+    """(heading, blurb) from SPEC.md: first # heading and first non-empty paragraph."""
+    text = read_text(os.path.join(state_dir, "SPEC.md"), 8000) or ""
+    heading, blurb, para = "", "", []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not heading and s.startswith("#"):
+            heading = s.lstrip("#").strip()
+            continue
+        if heading or s:
+            if not s:
+                if para and not blurb: blurb = " ".join(para); break
+                para = []
+            elif not s.startswith("#") and not s.startswith("```"):
+                para.append(s)
+    if para and not blurb: blurb = " ".join(para)
+    return heading, blurb[:140]
+
+def identity(state_dir, name):
+    """Human-facing title and blurb for lists: shape outline/idea, else SPEC.md, else the slug."""
+    sh = read_json(os.path.join(state_dir, "shape.json")) if os.path.isdir(state_dir) else None
+    outline = (sh or {}).get("outline") if isinstance(sh, dict) else None
+    title = ((outline or {}).get("title") or "").strip() if isinstance(outline, dict) else ""
+    blurb = ""
+    if isinstance(sh, dict):
+        blurb = (sh.get("idea") or "").strip()
+        if not blurb and isinstance(outline, dict): blurb = (outline.get("summary") or "").strip()
+    if not title or not blurb:
+        heading, spec_blurb = _spec_heading_and_blurb(state_dir)
+        title = title or heading
+        blurb = blurb or spec_blurb
+    title = (title or name or "").strip()[:120]
+    blurb = " ".join((blurb or "").split())[:140]
+    return {"title": title, "blurb": blurb}
+
 def thermal(state_dir):
     """The last thermal-guard event of the project: {"cooling": bool, "temp", "since"} (cooling = paused for heat and not resumed yet)."""
     rows = tail_jsonl(os.path.join(state_dir, "thermal.jsonl"), 4096)
@@ -149,7 +184,9 @@ def state(home, name):
     elif wf != "drafts" and not os.path.exists(os.path.join(S, "started.at")): s = "not_started"
     else: s = "stopped"
     blocked = (wf != "drafts" and bool(info.get("blocked"))) or status_txt.startswith("BLOCKED")
-    return {"name": name, "workflow": wf, "mode": env.get("MODE", "code"), "workdir": env.get("WORKDIR", ""), "rundir": env.get("RUNDIR") or env.get("WORKDIR", ""),
+    idn = identity(S, name)
+    return {"name": name, "title": idn["title"], "blurb": idn["blurb"], "workflow": wf, "mode": env.get("MODE", "code"),
+            "workdir": env.get("WORKDIR", ""), "rundir": env.get("RUNDIR") or env.get("WORKDIR", ""),
             "benchmark": name.startswith("cap-"), "state": s, "loop_pid": pid if alive else None, "stale_pid": bool(pid) and not alive,
             "step": {"pid": spid, "started": sstart} if spid else None, "pause_flag": pause, "active_flag": active, "thermal": th,
             "status": status_txt, "blocked": blocked, "started_at": (read_text(os.path.join(S, "started.at"), 32) or "").strip() or None,

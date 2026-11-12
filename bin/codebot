@@ -159,6 +159,8 @@ cmd_start() {
   if [[ "${WORKFLOW:-}" == drafts ]]; then
     [[ -s "$S/SPEC.md" ]] || die "no SPEC.md in $S (create the project with: codebot new $NAME <spec.md>)"
     jq -e '.finished' "$S/drafts/state.json" >/dev/null 2>&1 && die "$NAME has finished: $(eng status --short). Review: codebot diff $NAME. A new run needs a new project (codebot new)"
+  elif [[ "${WORKFLOW:-}" == pipeline ]]; then
+    [[ -f "$S/pipeline/project.json" ]] || die "no pipeline/project.json (run: codebot pipeline design $NAME)"
   else
     [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
   fi
@@ -318,6 +320,32 @@ _close_drafts() { # title body tag
   send_report; finished=1; rm -f "$S/.active"
 }
 
+# supervisor for WORKFLOW=pipeline: one harness step (at most one model call) per iteration
+loop_pipeline() {
+  local ev st pid rc out="$S/.step.out"
+  notify "codebot: $NAME started" "Pipeline run (one model call at a time). status: codebot pipeline status $NAME" low rocket 1
+  while [[ $finished == 0 ]]; do
+    if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
+    iter=$((iter+1)); echo "$iter" > "$S/iter.count"
+    setsid flock "$CODEBOT_HOME/logs/model.lock" timeout $(( ITER_TIMEOUT + 1800 )) \
+      env PYTHONPATH="$CODEBOT_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m codebot.pipeline step "$NAME" --home "$CODEBOT_HOME" > "$out" 2>> "$S/loop.log" < /dev/null &
+    pid=$!; echo $pid > "$S/iter.pid"
+    while kill -0 "$pid" 2>/dev/null; do phone_tick; sleep 3; done
+    wait "$pid" 2>/dev/null; rc=$?; rm -f "$S/iter.pid"
+    [[ $finished == 2 ]] && break
+    if [[ -f "$S/PAUSE" ]]; then iter=$((iter-1)); echo "(pipeline step interrupted by pause)" >> "$S/loop.log"; continue; fi
+    ev="$(tail -n1 "$out" 2>/dev/null)"; st="$(jq -r '.status // "error"' <<< "$ev" 2>/dev/null || echo error)"
+    echo "[pipeline] $(date '+%T') $st $(jq -c 'del(.run)' <<< "$ev" 2>/dev/null)" >> "$S/loop.log"
+    case "$st" in
+      COMPLETED) notify "codebot: $NAME COMPLETE" "Pipeline finished. Review: codebot pipeline status $NAME" default white_check_mark; finished=1; rm -f "$S/.active" ;;
+      FAILED) notify "codebot: $NAME failed" "$(jq -r '.error // "pipeline failed"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
+      BUSY) sleep 15 ;;
+      CANCELLED) finished=1; rm -f "$S/.active" ;;
+      *) : ;;
+    esac
+  done
+}
+
 # supervisor for drafts projects: one round (one model call, one judged version) per engine step; the engine keeps the state between steps
 loop_drafts() {
   local ev kind pid rc out="$S/.step.out" timeouts=0
@@ -357,6 +385,7 @@ cmd___loop() {
   trap 'finished=2' TERM INT
   trap '[[ $finished == 0 ]] && notify "codebot: $NAME loop crashed" "Loop exited unexpectedly. Check codebot log $NAME" high warning; rm -f "$S/loop.pid" "$S/iter.pid"' EXIT
   if [[ "${WORKFLOW:-}" == drafts ]]; then loop_drafts; return; fi      # drafts project: whole-program rounds
+  if [[ "${WORKFLOW:-}" == pipeline ]]; then loop_pipeline; return; fi  # modular team graph (lib/codebot/pipeline)
   if [[ -f "$S/tasks.json" ]]; then loop_engine; return; fi      # frozen project: the engine owns the state machine
   notify "codebot: $NAME started" "$(tasks_left) tasks to do in $RUNDIR. Phone control: publish pause/resume/stop/status to $NTFY_TOPIC-reply" low rocket 1
   while (( iter < MAX_ITERATIONS )) && [[ $finished == 0 ]]; do
@@ -519,6 +548,7 @@ case "$c" in
   install-service) cmd_install_service;;
   ui|menu) exec "$CODEBOT_HOME/bin/codebot-ui";;
   gui) PYTHONPATH="$CODEBOT_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m codebot.gui --home "$CODEBOT_HOME" "$@";;
+  pipeline) PYTHONPATH="$CODEBOT_HOME/lib${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m codebot.pipeline "$@";;
   *) cat <<'USAGE'
 codebot - local-only autonomous coding agent for small offline models (run with no arguments for the menu)
   new <name> <spec.md> [dir]   a project from a spec (recommended): the model writes the whole program, judged by the spec's own examples;
@@ -550,6 +580,8 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   eval mutants|gate|planner   model evaluation: mutant sets, a speed/compatibility gate per model, scored planner probes (docs/MODEL_EVAL.md)
   doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
   gui [--port N] [--open]  the local window, on this machine only (describe a project, answer a few questions, then build)
+  pipeline validate <file.json>...   validate modular team/workflow JSON (docs/architecture/modular-agent-orchestration.md)
+  pipeline design|step|run|status|cancel <name>   Team Designer / step / run until idle / status / cancel
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)

@@ -1,0 +1,19 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "agent",
+  "id": "reviewer-structure",
+  "name": "Structure reviewer",
+  "role": "review",
+  "description": "Goldfish: module boundaries, requirements coverage, missing examples.",
+  "goal": "Find unclear requirements and requirements with no runnable example.",
+  "instructions": "Fresh context. Check that each numbered requirement has a harness-runnable example. Emit FINDING only.",
+  "model": {"name": "codebot-model"},
+  "memory": "none",
+  "sees": {
+    "read": ["SPEC.md", "artifacts/**"],
+    "write": ["artifacts/reviews/**"]
+  },
+  "can_talk_to": [],
+  "messages": ["TASK", "FINDING", "QUESTION", "ANSWER"],
+  "limits": {"max_minutes": 20}
+}

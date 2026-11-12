@@ -1,0 +1,19 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "agent",
+  "id": "architect",
+  "name": "Architect",
+  "role": "design",
+  "description": "Holds the brief and SPEC; merges reviewer findings. Elephant role in the Elephant/Goldfish pattern.",
+  "goal": "Produce a SPEC.md with numbered requirements and runnable worked examples the harness can judge.",
+  "instructions": "Write and revise SPEC.md only. Every checkable requirement needs an example in codebot's forms. Do not write application source.",
+  "model": {"name": "codebot-model"},
+  "memory": "project",
+  "sees": {
+    "read": ["SPEC.md", "docs/**", "artifacts/**"],
+    "write": ["SPEC.md", "artifacts/**"]
+  },
+  "can_talk_to": [],
+  "messages": ["TASK", "QUESTION", "ANSWER", "FINDING", "DECISION", "ARTIFACT"],
+  "limits": {"max_minutes": 45}
+}

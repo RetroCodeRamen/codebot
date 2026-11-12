@@ -1,0 +1,14 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "team",
+  "id": "solo",
+  "name": "Single developer",
+  "description": "One implementer. No managers, reviewers, or pods.",
+  "members": [
+    {
+      "id": "dev",
+      "agent": "solo-developer",
+      "can_talk_to": []
+    }
+  ]
+}

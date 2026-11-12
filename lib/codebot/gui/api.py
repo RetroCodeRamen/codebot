@@ -1,10 +1,12 @@
 """The GUI's JSON API. Reads go through the shared modules (projstate, jobs, drafts, settings); every action runs the same `codebot`
 command a user would type (argument arrays, never a shell), so the GUI, the terminal menu and the CLI cannot disagree. Names and paths are
 checked here, not trusted from the page."""
-import difflib, glob, json, os, re, subprocess, threading, time
+import difflib, glob, json, os, re, shutil, subprocess, threading, time
 from .. import projstate as P, jobs
 from ..config import read_env, home_env
 from . import settings as S, sysinfo, actions
+
+ALIVE_STATES = ("running", "cooling", "paused", "pause_requested")
 
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
 MODEL = re.compile(r"^[\w./:@-]{1,200}$")
@@ -67,7 +69,31 @@ def status(ctx, q):
             "default_model": c.get("CODEBOT_MODEL", "codebot-model"), "inbox": len(inbox_items(ctx))}
 
 # ---------- projects ----------
-def projects(ctx, q): return {"projects": P.projects(ctx.home, include_bench=q.get("bench") == "1")}
+def project_attention(st, acks=None):
+    """Items that need a person on this project (questions, blocked, finished, crashed)."""
+    acks = acks if acks is not None else {}
+    n, out = st["name"], []
+    if st["state"] == "crashed":
+        out.append({"key": f"crash:{n}:{st.get('updated')}", "kind": "crashed", "text": "Interrupted — the loop should be running but is not"})
+    sh = st.get("shape") or {}
+    if st.get("workflow") == "shape" and sh.get("phase") == "questions" and not sh.get("busy"):
+        out.append({"key": f"q:{n}", "kind": "question", "text": "Questions for you before the plan is ready"})
+    if st.get("blocked"):
+        out.append({"key": f"blocked:{n}", "kind": "question", "text": "A question is waiting"})
+    fin = (st.get("drafts") or {}).get("finished")
+    if fin:
+        key = f"fin:{n}:{fin.get('at')}"
+        if key not in acks:
+            notice = sh.get("notice") if sh.get("phase") == "done" and sh.get("notice") else None
+            text = notice or f"Finished ({fin.get('stop')}) after {fin.get('minutes')} min"
+            out.append({"key": key, "kind": "finished", "text": text, "stop": fin.get("stop")})
+    return out
+
+def projects(ctx, q):
+    acks = _acks(ctx)
+    rows = P.projects(ctx.home, include_bench=q.get("bench") == "1")
+    for st in rows: st["attention"] = project_attention(st, acks)
+    return {"projects": rows}
 
 def _versions(ctx, name, st):
     """The versions a drafts project has: spec, best, latest round with code, each round, snapshot, baseline, delivered."""
@@ -79,7 +105,9 @@ def _versions(ctx, name, st):
 
 def project(ctx, q, name):
     d = ctx.proj_dir(name); st = P.state(ctx.home, name)
-    out = {"state": st, "spec": P.read_text(os.path.join(d, "SPEC.md"), 200000), "phase": P.phase(ctx.home, name, st)}
+    st["attention"] = project_attention(st, _acks(ctx))
+    out = {"state": st, "spec": P.read_text(os.path.join(d, "SPEC.md"), 200000), "phase": P.phase(ctx.home, name, st),
+           "title": st.get("title") or name, "blurb": st.get("blurb") or "", "attention": st["attention"]}
     if st["workflow"] == "drafts":
         out["versions"] = _versions(ctx, name, st)
         ds = P.read_json(os.path.join(d, "drafts", "state.json")) or {}
@@ -261,22 +289,36 @@ def log(ctx, q, name):
 def _acks(ctx): return P.read_json(os.path.join(ctx.home, "logs", "gui", "inbox-ack.json")) or {}
 
 def inbox_items(ctx):
+    """Legacy aggregate (status count + ack); UI uses per-project attention. Benchmark notices stay here for Tools → Benchmarks."""
     acks, out = _acks(ctx), []
     for st in P.projects(ctx.home):
-        n = st["name"]
-        if st["state"] == "crashed": out.append({"key": f"crash:{n}:{st.get('updated')}", "kind": "crashed", "project": n, "text": "the loop is not running but should be; the watchdog restarts it within 5 minutes if installed"})
-        fin = (st.get("drafts") or {}).get("finished")
-        if fin:
-            key = f"fin:{n}:{fin.get('at')}"
-            if key not in acks:
-                sh = st.get("shape") or P.shape_info(os.path.join(ctx.home, "projects", n)) or {}
-                text = sh.get("notice") if sh.get("phase") == "done" and sh.get("notice") else f"finished ({fin.get('stop')}) after {fin.get('minutes')} min"
-                out.append({"key": key, "kind": "finished", "project": n, "text": text, "stop": fin.get("stop")})
+        for a in project_attention(st, acks):
+            out.append({**a, "project": st["name"]})
     for r in bench_runs(ctx, {}).get("runs", []):
         if r.get("status") in ("finished", "failed", "cancelled"):
             key = f"bench:{r['run_id']}:{r.get('status')}"
-            if key not in acks: out.append({"key": key, "kind": "benchmark", "run": r["run_id"], "text": f"benchmark run {r.get('status')}"})
-    return [i for i in out if i["kind"] == "crashed" or i["key"] not in acks]
+            if key not in acks: out.append({"key": key, "kind": "benchmark", "run": r["run_id"], "text": f"Benchmark run {r.get('status')}"})
+    return out
+
+def project_delete(ctx, body, name):
+    """Remove projects/<name> only. Never touches the user's WORKDIR. Refuses while a loop is alive."""
+    if not body.get("confirm"): raise ApiError("confirm required")
+    d = ctx.proj_dir(name); st = P.state(ctx.home, name)
+    if st["state"] in ALIVE_STATES: raise ApiError("Stop the project before deleting it", 409)
+    workdir = st.get("workdir") or ""
+    title = st.get("title") or name
+    try: shutil.rmtree(d)
+    except OSError as e: raise ApiError(f"could not delete: {e.strerror or e}")
+    acks = _acks(ctx); changed = False
+    for k in list(acks):
+        if f":{name}:" in k or k.endswith(f":{name}") or k.startswith(f"q:{name}") or k.startswith(f"blocked:{name}") or k.startswith(f"crash:{name}") or k.startswith(f"fin:{name}:"):
+            del acks[k]; changed = True
+    if changed:
+        ad = os.path.join(ctx.home, "logs", "gui"); os.makedirs(ad, exist_ok=True)
+        tmp = os.path.join(ad, "inbox-ack.json.tmp")
+        with open(tmp, "w") as f: json.dump(acks, f)
+        os.replace(tmp, os.path.join(ad, "inbox-ack.json"))
+    return {"ok": True, "name": name, "title": title, "workdir_kept": workdir}
 
 def inbox(ctx, q): return {"items": inbox_items(ctx)}
 
@@ -561,6 +603,90 @@ def bench_validate(ctx, body):
     if lv and not re.fullmatch(r"[\d,\-]+|growing", lv): raise ApiError("levels like 1-3 or growing")
     return {"ok": True, "action": actions.start(ctx.home, "bench validate", [ctx.cli, "bench", "validate", *(["--levels", lv] if lv else [])])}
 
+# ---------- modular pipeline (team graph) ----------
+def pipeline_view(ctx, q, name):
+    ctx.proj_dir(name)
+    from ..config import Project
+    from ..pipeline import runtime as R, mailbox, artifacts
+    from ..pipeline.validate import ValidationError
+    proj = Project(name, ctx.home)
+    out = {"name": name, "workflow": read_env(os.path.join(ctx.proj_dir(name), "project.env")).get("WORKFLOW")}
+    try:
+        bundle, path = R.load_bundle(proj)
+        out["bundle"] = {"project": bundle.get("project"), "team": bundle.get("team"), "workflow": bundle.get("workflow"),
+                         "ui": bundle.get("ui"),
+                         "agents": {k: {"id": v.get("id"), "name": v.get("name"), "role": v.get("role"), "goal": v.get("goal"),
+                                        "memory": v.get("memory"), "sees": v.get("sees")} for k, v in (bundle.get("agents") or {}).items()}}
+        out["path"] = path
+    except ValidationError as e:
+        out["error"] = "; ".join(e.errors)
+    run = R.load_run(proj)
+    out["run"] = run
+    if run:
+        out["messages"] = list(mailbox.iter_messages(R.pipeline_dir(proj)))[-40:]
+        out["artifacts"] = artifacts.list_artifacts(R.pipeline_dir(proj))[-40:]
+    return out
+
+def pipeline_json(ctx, q, name):
+    ctx.proj_dir(name)
+    path = os.path.join(ctx.proj_dir(name), "pipeline", "project.json")
+    if not os.path.isfile(path): raise ApiError("no pipeline/project.json", 404)
+    with open(path, encoding="utf-8") as f: return {"path": path, "json": f.read()}
+
+def pipeline_validate(ctx, body, name=None):
+    from ..pipeline.validate import validate_project, ValidationError
+    import json as _json
+    raw = body.get("json")
+    if raw is None and name:
+        path = os.path.join(ctx.proj_dir(name), "pipeline", "project.json")
+        with open(path, encoding="utf-8") as f: raw = f.read()
+    try: doc = _json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError) as e: raise ApiError(f"bad JSON: {e}")
+    try:
+        validate_project(doc)
+        return {"ok": True}
+    except ValidationError as e: return {"ok": False, "errors": e.errors}
+
+def pipeline_save(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    import json as _json
+    from ..pipeline.validate import validate_project, ValidationError
+    raw = body.get("json")
+    try: doc = _json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError) as e: raise ApiError(f"bad JSON: {e}")
+    try: validate_project(doc)
+    except ValidationError as e: raise ApiError("; ".join(e.errors))
+    d = os.path.join(ctx.proj_dir(name), "pipeline"); os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "project.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f: _json.dump(doc, f, indent=1, ensure_ascii=False)
+    os.replace(tmp, path)
+    return {"ok": True, "path": path}
+
+def pipeline_design(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    return {"ok": True, "action": actions.start(ctx.home, f"pipeline design {name}", [ctx.cli, "pipeline", "design", name, "--home", ctx.home])}
+
+def pipeline_step(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    return {"ok": True, "action": actions.start(ctx.home, f"pipeline step {name}", [ctx.cli, "pipeline", "step", name, "--home", ctx.home])}
+
+def pipeline_run(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    # background via normal start so pause/stop/watchdog work
+    return {"ok": True, "action": actions.start(ctx.home, f"pipeline start {name}", [ctx.cli, "start", name])}
+
+def pipeline_cancel(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    from ..config import Project
+    from ..pipeline import schedule
+    return schedule.cancel(Project(name, ctx.home))
+
 # ---------- a design, then a build ----------
 def _shape(ctx):
     from .. import shape
@@ -582,6 +708,9 @@ def shape_view(ctx, q, name):
     except sh.ShapeError as e: raise ApiError(str(e), e.code)
     from . import runner
     view["terminal"] = runner.describe(ctx.home, name)
+    st = P.state(ctx.home, name)
+    view["attention"] = project_attention(st, _acks(ctx))
+    view["title"] = view.get("title") or st.get("title") or ((view.get("outline") or {}).get("title")) or name
     return view
 
 def program_run(ctx, q, name):
@@ -627,7 +756,8 @@ GET = [
     (r"/api/status", status), (r"/api/projects", projects), (r"/api/project/([^/]+)", project), (r"/api/project/([^/]+)/rounds", rounds),
     (r"/api/project/([^/]+)/round/(\d+)", round_detail), (r"/api/project/([^/]+)/files", files), (r"/api/project/([^/]+)/file", file_view),
     (r"/api/project/([^/]+)/compare", compare), (r"/api/project/([^/]+)/delivered", delivered), (r"/api/project/([^/]+)/report", report),
-    (r"/api/project/([^/]+)/audit", audit), (r"/api/project/([^/]+)/log", log), (r"/api/project/([^/]+)/shape", shape_view), (r"/api/project/([^/]+)/run", program_run),
+    (r"/api/project/([^/]+)/audit", audit), (r"/api/project/([^/]+)/log", log),     (r"/api/project/([^/]+)/shape", shape_view), (r"/api/project/([^/]+)/run", program_run),
+    (r"/api/project/([^/]+)/pipeline", pipeline_view), (r"/api/project/([^/]+)/pipeline/json", pipeline_json),
     (r"/api/inbox", inbox), (r"/api/bench/runs", bench_runs),
     (r"/api/bench/levels", bench_levels), (r"/api/bench/run/([^/]+)", bench_run), (r"/api/models", models), (r"/api/machine", machine),
     (r"/api/actions", actions_list), (r"/api/action/([^/]+)", action_view), (r"/api/settings", settings_view), (r"/api/notifications", notifications),
@@ -640,6 +770,13 @@ POST = [
     (r"/api/project/([^/]+)/shape/answer", shape_answer), (r"/api/project/([^/]+)/shape/clarify", shape_clarify),
     (r"/api/project/([^/]+)/shape/retry", shape_retry), (r"/api/project/([^/]+)/shape/security", shape_security),
     (r"/api/project/([^/]+)/shape/build", shape_build), (r"/api/project/([^/]+)/run", program_run_do),
+    (r"/api/project/([^/]+)/pipeline/validate", lambda c, b, n: pipeline_validate(c, b, n)),
+    (r"/api/project/([^/]+)/pipeline/save", pipeline_save),
+    (r"/api/project/([^/]+)/pipeline/design", pipeline_design),
+    (r"/api/project/([^/]+)/pipeline/step", pipeline_step),
+    (r"/api/project/([^/]+)/pipeline/run", pipeline_run),
+    (r"/api/project/([^/]+)/pipeline/cancel", pipeline_cancel),
+    (r"/api/project/([^/]+)/delete", project_delete),
     (r"/api/inbox/ack", inbox_ack), (r"/api/bench/start", bench_start), (r"/api/bench/validate", bench_validate),
     (r"/api/bench/run/([^/]+)/(resume|cancel)", lambda c, b, r, w: bench_ctl(c, r, b, w)), (r"/api/models/unload", model_unload), (r"/api/models/delete", model_delete),
     (r"/api/models/default", model_default), (r"/api/models/import", model_import), (r"/api/models/preflight", preflight), (r"/api/machine/doctor", doctor),

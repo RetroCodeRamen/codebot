@@ -128,6 +128,37 @@ class ApiCase(helpers.Sandboxed):
             self.assertEqual(cm.exception.code, 409)
         with open(os.path.join(self.home, "config", "local.env")) as f: self.assertNotIn("DRAFTS_MINUTES", f.read())
 
+    def test_projects_list_includes_title_blurb_and_attention(self):
+        with open(os.path.join(self.state, "SPEC.md"), "w") as f: f.write("# Egg timer\n\nA small timer for boiling eggs.\n")
+        rows = api.projects(self.ctx, {})["projects"]
+        mine = next(p for p in rows if p["name"] == self.name)
+        self.assertEqual(mine["title"], "Egg timer")
+        self.assertIn("boiling eggs", mine["blurb"])
+        self.assertIn("attention", mine)
+
+    def test_delete_project_removes_state_keeps_workdir(self):
+        code = self.code
+        with open(os.path.join(code, "keep.txt"), "w") as f: f.write("safe\n")
+        r = api.project_delete(self.ctx, {"confirm": True}, self.name)
+        self.assertTrue(r["ok"])
+        self.assertFalse(os.path.isdir(self.state))
+        self.assertTrue(os.path.isfile(os.path.join(code, "keep.txt")))
+        with self.assertRaises(api.ApiError): self.ctx.proj_dir(self.name)
+
+    def test_delete_project_refuses_while_running(self):
+        import codebot.projstate as P
+        real = P.state
+        def fake(home, name):
+            s = real(home, name); s["state"] = "running"; return s
+        P.state = fake
+        try:
+            with self.assertRaises(api.ApiError) as cm:
+                api.project_delete(self.ctx, {"confirm": True}, self.name)
+            self.assertEqual(cm.exception.code, 409)
+        finally:
+            P.state = real
+        self.assertTrue(os.path.isdir(self.state))
+
 class JobsCase(helpers.Sandboxed):
     def test_one_model_job_at_a_time(self):
         self.assertIsNone(jobs.owner(self.home))
@@ -156,3 +187,51 @@ class JobsCase(helpers.Sandboxed):
         o = {"kind": "benchmark", "name": "20261022-L1"}
         self.assertTrue(jobs.nested(o, "cap-20261022-l1-level_01-t1"))
         self.assertFalse(jobs.nested(o, "egg"))
+
+
+class PipelineGuiCase(helpers.Sandboxed):
+    """Pipeline JSON round-trip through the GUI API."""
+    def setUp(self):
+        super().setUp(); self.ctx = api.Ctx(self.home)
+        import shutil
+        src = os.path.join(os.path.dirname(__file__), "..", "pipelines", "templates")
+        shutil.copytree(src, os.path.join(self.home, "pipelines", "templates"))
+        from codebot.pipeline import design, load
+        from codebot.config import Project
+        with open(os.path.join(self.state, "project.env"), "a") as f:
+            f.write(f'WORKDIR="{self.code}"\nRUNDIR="{self.code}"\nWORKFLOW="pipeline"\nPIPELINE="pipeline/project.json"\n')
+        with open(os.path.join(self.code, "SPEC.md"), "w") as f: f.write("# T\n\n## Requirements\n\n1. `add(1,1)` is `2`. `m.py` provides `add(a,b)`.\n")
+        bundle = load.load_project(os.path.join(self.home, "pipelines", "templates", "projects", "basic-calculator.json"))
+        design.write_project_pipeline(Project(self.name, self.home), bundle)
+
+    def test_pipeline_view_and_json(self):
+        v = api.pipeline_view(self.ctx, {}, self.name)
+        self.assertIn("bundle", v); self.assertEqual(v["bundle"]["team"]["id"], "solo")
+        j = api.pipeline_json(self.ctx, {}, self.name)
+        self.assertIn("solo-developer", j["json"])
+
+    def test_pipeline_validate_and_save_ui_positions(self):
+        j = json.loads(api.pipeline_json(self.ctx, {}, self.name)["json"])
+        j["ui"] = {"team": {"positions": {"dev": {"x": 100, "y": 120}}}}
+        r = api.pipeline_validate(self.ctx, {"json": j}, self.name)
+        self.assertTrue(r["ok"], r)
+        api.pipeline_save(self.ctx, {"json": j}, self.name)
+        again = json.loads(api.pipeline_json(self.ctx, {}, self.name)["json"])
+        self.assertEqual(again["ui"]["team"]["positions"]["dev"]["x"], 100)
+
+    def test_demo_refuses_pipeline_mutations(self):
+        ctx = api.Ctx(self.home, demo=True)
+        with self.assertRaises(api.ApiError) as cm:
+            api.pipeline_save(ctx, {"json": "{}"}, self.name)
+        self.assertEqual(cm.exception.code, 409)
+        with self.assertRaises(api.ApiError) as cm2:
+            api.pipeline_cancel(ctx, {}, self.name)
+        self.assertEqual(cm2.exception.code, 409)
+
+    def test_pipeline_cancel_api(self):
+        from codebot.config import Project
+        from codebot.pipeline import schedule, runtime as R
+        schedule.step(Project(self.name, self.home))
+        r = api.pipeline_cancel(self.ctx, {}, self.name)
+        self.assertEqual(r["status"], "CANCELLED")
+        self.assertEqual(R.load_run(Project(self.name, self.home))["status"], "CANCELLED")

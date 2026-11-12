@@ -1,0 +1,19 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "agent",
+  "id": "reviewer-ui",
+  "name": "UI reviewer",
+  "role": "review",
+  "description": "Goldfish: interaction and presentation requirements only.",
+  "goal": "Find missing UI/UX requirements and examples for user-visible behavior.",
+  "instructions": "Fresh context. If the SPEC has no UI surface, say so in one FINDING and stop.",
+  "model": {"name": "codebot-model"},
+  "memory": "none",
+  "sees": {
+    "read": ["SPEC.md", "artifacts/**"],
+    "write": ["artifacts/reviews/**"]
+  },
+  "can_talk_to": [],
+  "messages": ["TASK", "FINDING", "QUESTION", "ANSWER"],
+  "limits": {"max_minutes": 20}
+}

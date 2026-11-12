@@ -1,0 +1,27 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "workflow",
+  "id": "pod-build",
+  "name": "Coordinator then two workers then gate",
+  "description": "Sync plans, fan-out to math and UI workers, join, examples gate.",
+  "nodes": [
+    {"id": "start", "type": "start"},
+    {"id": "plan", "type": "run", "agent": "sync", "action": "write_spec"},
+    {"id": "fan", "type": "fan_out"},
+    {"id": "math", "type": "run", "agent": "math-dev", "action": "implement"},
+    {"id": "ui", "type": "run", "agent": "ui-dev", "action": "implement"},
+    {"id": "join", "type": "join"},
+    {"id": "gate", "type": "gate", "check": "examples"},
+    {"id": "done", "type": "end"}
+  ],
+  "edges": [
+    {"from": "start", "to": "plan", "kind": "execution"},
+    {"from": "plan", "to": "fan", "kind": "execution"},
+    {"from": "fan", "to": "math", "kind": "execution"},
+    {"from": "fan", "to": "ui", "kind": "execution"},
+    {"from": "math", "to": "join", "kind": "handoff"},
+    {"from": "ui", "to": "join", "kind": "handoff"},
+    {"from": "join", "to": "gate", "kind": "execution"},
+    {"from": "gate", "to": "done", "kind": "execution", "when": "pass"}
+  ]
+}

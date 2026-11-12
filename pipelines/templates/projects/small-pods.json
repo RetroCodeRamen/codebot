@@ -1,0 +1,15 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "project",
+  "id": "small-pods",
+  "name": "Small pod team",
+  "description": "Coordinator + math/UI pods. Acceptance scenario B shape without requiring a live Team Designer call.",
+  "agents": {
+    "architect": {"$ref": "agents/architect.json"},
+    "solo-developer": {"$ref": "agents/solo-developer.json"}
+  },
+  "team": {"$ref": "teams/small-pods.json"},
+  "workflow": {"$ref": "workflows/pod-build.json"},
+  "workspace": {"root": "."},
+  "limits": {"project_max_minutes": 180}
+}

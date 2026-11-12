@@ -1,0 +1,19 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "workflow",
+  "id": "solo-drafts",
+  "name": "Single developer via drafts",
+  "description": "Compatibility bridge: one run node that will map to today's drafts loop (scheduler Milestone 2).",
+  "nodes": [
+    {"id": "start", "type": "start"},
+    {"id": "build", "type": "run", "agent": "dev", "action": "drafts"},
+    {"id": "check", "type": "gate", "check": "examples"},
+    {"id": "done", "type": "end"}
+  ],
+  "edges": [
+    {"from": "start", "to": "build", "kind": "execution"},
+    {"from": "build", "to": "check", "kind": "execution"},
+    {"from": "check", "to": "done", "kind": "execution", "when": "pass"},
+    {"from": "check", "to": "build", "kind": "execution", "when": "fail"}
+  ]
+}

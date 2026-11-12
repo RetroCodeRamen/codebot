@@ -1,0 +1,49 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "team",
+  "id": "architect-debate",
+  "name": "Architect and debating goldfish",
+  "description": "Goldfish may QUESTION each other before FINDING back to the elephant. Memory stays none so each activation is fresh.",
+  "members": [
+    {
+      "id": "elephant",
+      "agent": "architect",
+      "can_talk_to": ["gf-security", "gf-structure", "gf-ui"],
+      "links": [
+        {"kind": "both", "to": "gf-security"},
+        {"kind": "both", "to": "gf-structure"},
+        {"kind": "both", "to": "gf-ui"}
+      ]
+    },
+    {
+      "id": "gf-security",
+      "agent": "reviewer-security",
+      "can_talk_to": ["elephant", "gf-structure", "gf-ui"],
+      "links": [
+        {"kind": "agent", "to": "elephant"},
+        {"kind": "agent", "to": "gf-structure"},
+        {"kind": "agent", "to": "gf-ui"}
+      ]
+    },
+    {
+      "id": "gf-structure",
+      "agent": "reviewer-structure",
+      "can_talk_to": ["elephant", "gf-security", "gf-ui"],
+      "links": [
+        {"kind": "agent", "to": "elephant"},
+        {"kind": "agent", "to": "gf-security"},
+        {"kind": "agent", "to": "gf-ui"}
+      ]
+    },
+    {
+      "id": "gf-ui",
+      "agent": "reviewer-ui",
+      "can_talk_to": ["elephant", "gf-security", "gf-structure"],
+      "links": [
+        {"kind": "agent", "to": "elephant"},
+        {"kind": "agent", "to": "gf-security"},
+        {"kind": "agent", "to": "gf-structure"}
+      ]
+    }
+  ]
+}

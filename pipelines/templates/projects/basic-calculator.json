@@ -1,0 +1,14 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "project",
+  "id": "basic-calculator",
+  "name": "Basic calculator (single developer)",
+  "description": "Acceptance scenario A: one agent, no review committee. Maps to drafts when the scheduler exists.",
+  "agents": {
+    "solo-developer": {"$ref": "agents/solo-developer.json"}
+  },
+  "team": {"$ref": "teams/solo.json"},
+  "workflow": {"$ref": "workflows/solo-drafts.json"},
+  "workspace": {"root": "."},
+  "limits": {"project_max_minutes": 60}
+}

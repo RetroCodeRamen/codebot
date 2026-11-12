@@ -1,0 +1,42 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "workflow",
+  "id": "spec-review",
+  "name": "Architect then goldfish review rounds",
+  "description": "Draft SPEC, fan-out three reviewers (queued, not parallel inference), join findings, revise with a bounded loop, approve, end. Implementation is a later workflow.",
+  "nodes": [
+    {"id": "start", "type": "start"},
+    {"id": "draft", "type": "run", "agent": "elephant", "action": "write_spec"},
+    {"id": "fan", "type": "fan_out", "description": "queue security, structure, ui reviews"},
+    {"id": "rev-sec", "type": "run", "agent": "gf-security", "action": "review"},
+    {"id": "rev-struct", "type": "run", "agent": "gf-structure", "action": "review"},
+    {"id": "rev-ui", "type": "run", "agent": "gf-ui", "action": "review"},
+    {"id": "join", "type": "join"},
+    {"id": "revise", "type": "run", "agent": "elephant", "action": "merge_findings"},
+    {
+      "id": "again",
+      "type": "loop",
+      "max_iterations": 2,
+      "description": "optional second review round with fresh goldfish memory"
+    },
+    {"id": "approve", "type": "approve", "description": "human or mechanical check-spec coverage gate"},
+    {"id": "gate", "type": "gate", "check": "examples"},
+    {"id": "done", "type": "end"}
+  ],
+  "edges": [
+    {"from": "start", "to": "draft", "kind": "execution"},
+    {"from": "draft", "to": "fan", "kind": "execution"},
+    {"from": "fan", "to": "rev-sec", "kind": "execution"},
+    {"from": "fan", "to": "rev-struct", "kind": "execution"},
+    {"from": "fan", "to": "rev-ui", "kind": "execution"},
+    {"from": "rev-sec", "to": "join", "kind": "handoff"},
+    {"from": "rev-struct", "to": "join", "kind": "handoff"},
+    {"from": "rev-ui", "to": "join", "kind": "handoff"},
+    {"from": "join", "to": "revise", "kind": "execution"},
+    {"from": "revise", "to": "again", "kind": "execution"},
+    {"from": "again", "to": "fan", "kind": "execution", "when": "continue"},
+    {"from": "again", "to": "approve", "kind": "execution", "when": "done"},
+    {"from": "approve", "to": "gate", "kind": "execution"},
+    {"from": "gate", "to": "done", "kind": "execution", "when": "pass"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "project",
+  "id": "spec-with-reviewers",
+  "name": "SPEC with architect and three goldfish",
+  "description": "Planning/review only. Team Designer and implementation pods are later milestones.",
+  "agents": {
+    "architect": {"$ref": "agents/architect.json"},
+    "reviewer-security": {"$ref": "agents/reviewer-security.json"},
+    "reviewer-structure": {"$ref": "agents/reviewer-structure.json"},
+    "reviewer-ui": {"$ref": "agents/reviewer-ui.json"}
+  },
+  "team": {"$ref": "teams/architect-reviewers.json"},
+  "workflow": {"$ref": "workflows/spec-review.json"},
+  "workspace": {"root": "."},
+  "limits": {"project_max_minutes": 120}
+}

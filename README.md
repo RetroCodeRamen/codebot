@@ -82,6 +82,8 @@ codebot modes | tidy | help              # list modes / prune bad lessons / ever
 codebot list | setup | notify-test       # all projects / start the private Ollama / send a test push
 codebot install-service | resume-all     # watchdog timer (restarts loops that die) / what the timer runs
 codebot doctor                           # is this machine ready?
+codebot pipeline validate FILE.json      # modular team/workflow JSON (docs/architecture/modular-agent-orchestration.md)
+codebot pipeline design|step|run|status|cancel NAME  # Team Designer / step / run / monitor / cancel
 codebot re-config                        # rebuild the REA agent config after editing config/rea-tools.txt
 codebot bench --preflight                # prove the context setup against the live model server
 codebot bench run --level 1              # the Capability Ladder Benchmark (docs/BENCHMARK.md)
@@ -208,6 +210,8 @@ whether it passed, and lessons that correlate with failure are pruned (`codebot 
 | `docs/LARGE_MODELS.md` | running a larger model on this laptop: memory, heat, and the 30B results |
 | `docs/dev/REVIEW-2026-10-21.md` | what was tuned on the three measured tasks, and what has not been measured |
 | `docs/dev/GUI_PLAN.md` | design checklist for the window: what to show, what to control, where it comes from |
+| `docs/architecture/modular-agent-orchestration.md` | modular teams / pipeline graph: JSON, scheduler, mailbox, GUI canvas |
+| `pipelines/templates/` | example agent/team/workflow/project JSON (solo, reviewers, debate, pods) |
 | `modes/README.md` | the mode format |
 | `memory/README.md` | the lesson store |
 | `docs/dev/HANDOFF.md` | maintainer notes: current state, file map, gotchas (written to let a person or an AI agent pick the work up cold) |

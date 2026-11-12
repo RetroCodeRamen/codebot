@@ -1,0 +1,16 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "team",
+  "id": "small-pods",
+  "name": "Coordinator and two pods",
+  "description": "A sync manager plus math and UI workers. Pods are declared for ownership; the workflow still queues one run at a time.",
+  "members": [
+    {"id": "sync", "agent": "architect", "can_talk_to": ["math-dev", "ui-dev"]},
+    {"id": "math-dev", "agent": "solo-developer", "can_talk_to": ["sync"]},
+    {"id": "ui-dev", "agent": "solo-developer", "can_talk_to": ["sync"]}
+  ],
+  "pods": [
+    {"id": "math", "manager": "sync", "members": ["math-dev"]},
+    {"id": "ui", "manager": "sync", "members": ["ui-dev"]}
+  ]
+}

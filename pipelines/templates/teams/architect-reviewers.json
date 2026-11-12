@@ -1,0 +1,37 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "team",
+  "id": "architect-reviewers",
+  "name": "Architect and three goldfish reviewers",
+  "description": "Elephant drafts SPEC; security, structure, and UI goldfish review with memory none; findings return to the architect.",
+  "members": [
+    {
+      "id": "elephant",
+      "agent": "architect",
+      "can_talk_to": ["gf-security", "gf-structure", "gf-ui"],
+      "links": [
+        {"kind": "both", "to": "gf-security"},
+        {"kind": "both", "to": "gf-structure"},
+        {"kind": "both", "to": "gf-ui"}
+      ]
+    },
+    {
+      "id": "gf-security",
+      "agent": "reviewer-security",
+      "can_talk_to": ["elephant"],
+      "links": [{"kind": "agent", "to": "elephant"}]
+    },
+    {
+      "id": "gf-structure",
+      "agent": "reviewer-structure",
+      "can_talk_to": ["elephant"],
+      "links": [{"kind": "agent", "to": "elephant"}]
+    },
+    {
+      "id": "gf-ui",
+      "agent": "reviewer-ui",
+      "can_talk_to": ["elephant"],
+      "links": [{"kind": "agent", "to": "elephant"}]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "project",
+  "id": "spec-debate",
+  "name": "SPEC with debating goldfish",
+  "description": "Reviewers may ask each other before reporting. Still one inference at a time.",
+  "agents": {
+    "architect": {"$ref": "agents/architect.json"},
+    "reviewer-security": {"$ref": "agents/reviewer-security.json"},
+    "reviewer-structure": {"$ref": "agents/reviewer-structure.json"},
+    "reviewer-ui": {"$ref": "agents/reviewer-ui.json"}
+  },
+  "team": {"$ref": "teams/architect-debate.json"},
+  "workflow": {"$ref": "workflows/spec-debate.json"},
+  "workspace": {"root": "."},
+  "limits": {"project_max_minutes": 120}
+}

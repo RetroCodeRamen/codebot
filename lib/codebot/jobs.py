@@ -9,7 +9,7 @@ owners use hold(). Probes (owner()) take the lock for microseconds, so acquirers
 import fcntl, json, os, sys, time
 
 LOCK, INFO = "model-job.lock", "model-job.json"
-KINDS = ("project", "benchmark", "preflight", "eval", "thermal", "planning", "tidy")
+KINDS = ("project", "benchmark", "preflight", "eval", "thermal", "planning", "tidy", "pipeline")
 
 class Busy(Exception):
     def __init__(self, owner):
@@ -45,7 +45,7 @@ def owner(home):
 def describe(o):
     if not o: return "nothing"
     what = {"project": "project", "benchmark": "benchmark run", "preflight": "preflight check", "eval": "model evaluation", "thermal": "thermal sweep",
-            "planning": "planning chat", "tidy": "memory tidy"}.get(o.get("kind"), "a job")
+            "planning": "planning chat", "tidy": "memory tidy", "pipeline": "pipeline run"}.get(o.get("kind"), "a job")
     since = f", since {o['started']}" if o.get("started") else ""
     return f"{what} {o.get('name') or ''}".strip() + (f" (pid {o['pid']}{since})" if o.get("pid") else "")
 
