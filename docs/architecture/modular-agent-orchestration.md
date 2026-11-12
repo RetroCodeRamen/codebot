@@ -37,7 +37,7 @@
 |---|---|
 | Scratch + Blockly + node editor + JSON in one go | **Defer GUI to Milestone 6.** Milestone 1–5 are engine + JSON. A thin GUI can load/edit JSON first; Scratch/Blockly is last. |
 | Full Team Designer as an always-on product | Ship as an **optional agent template + workflow**, after planning/review works. |
-| Nested teams, pods, managers in the first scheduler | Schema supports them; **scheduler M2 only needs two agents + blocking QUESTION**. |
+| Nested teams, pods, managers | Supported: `team.teams` + member `"team"` expands to `parent-child` ids and pods; managers get RESULT on worker finish. |
 | Parallel fan-out inference | Fan-out = **queue**, never concurrent model calls (already in the outline; keep it). |
 | Replacing drafts as the default | **No.** Drafts remains the recommended simple path. Pipeline is opt-in per project. |
 | Model self-approval as done | **Forbidden.** Done = examples / frozen checks / user approval gates in the workflow. |

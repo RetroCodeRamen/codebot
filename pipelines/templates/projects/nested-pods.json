@@ -1,0 +1,53 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "project",
+  "id": "nested-pods",
+  "name": "Nested math pod under coordinator",
+  "description": "Coordinator owns a nested team (math-workers) that expands to math-impl / math-check.",
+  "agents": {
+    "architect": {"$ref": "agents/architect.json"},
+    "solo-developer": {"$ref": "agents/solo-developer.json"},
+    "reviewer-structure": {"$ref": "agents/reviewer-structure.json"}
+  },
+  "team": {
+    "schema": "codebot.pipeline/v1",
+    "kind": "team",
+    "id": "nested-coord",
+    "name": "Coordinator with nested math pod",
+    "members": [
+      {"id": "sync", "agent": "architect", "can_talk_to": ["math"]},
+      {"id": "math", "agent": "architect", "team": "math-workers", "can_talk_to": ["sync"]}
+    ],
+    "teams": {
+      "math-workers": {"$ref": "teams/math-workers.json"}
+    }
+  },
+  "workflow": {
+    "schema": "codebot.pipeline/v1",
+    "kind": "workflow",
+    "id": "nested-build",
+    "name": "Plan then nested workers",
+    "nodes": [
+      {"id": "start", "type": "start"},
+      {"id": "plan", "type": "run", "agent": "sync", "action": "write_spec"},
+      {"id": "fan", "type": "fan_out"},
+      {"id": "impl", "type": "run", "agent": "math-impl", "action": "implement"},
+      {"id": "check", "type": "run", "agent": "math-check", "action": "review"},
+      {"id": "join", "type": "join"},
+      {"id": "gate", "type": "gate", "check": "examples"},
+      {"id": "done", "type": "end"}
+    ],
+    "edges": [
+      {"from": "start", "to": "plan", "kind": "execution"},
+      {"from": "plan", "to": "fan", "kind": "execution"},
+      {"from": "fan", "to": "impl", "kind": "execution"},
+      {"from": "fan", "to": "check", "kind": "execution"},
+      {"from": "impl", "to": "join", "kind": "handoff"},
+      {"from": "check", "to": "join", "kind": "handoff"},
+      {"from": "join", "to": "gate", "kind": "execution"},
+      {"from": "gate", "to": "done", "kind": "execution", "when": "pass"}
+    ]
+  },
+  "workspace": {"root": "."},
+  "limits": {"project_max_minutes": 180}
+}

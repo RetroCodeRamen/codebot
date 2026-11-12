@@ -114,6 +114,13 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
         _set_member(run, member_id, state="COMPLETED")
         run["active"] = None
         ev["reason"] = action.get("reason") or action.get("text") or "done"
+        # Pod workers report RESULT to their manager (does not steal the workflow cursor).
+        from .context import manager_of, pod_of
+        mgr = manager_of(bundle, member_id)
+        if mgr:
+            mailbox.send(rd, member_id, mgr, "RESULT",
+                         {"text": ev["reason"], "member": member_id, "pod": (pod_of(bundle, member_id) or {}).get("id")})
+            ev["notified"] = mgr
         return ev
 
     if act == "fail":

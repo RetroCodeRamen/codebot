@@ -5,11 +5,12 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help"):
         print("usage: python3 -m codebot.pipeline validate <file.json>...\n"
+              "       python3 -m codebot.pipeline init <project> [--template NAME] [--force] [--home DIR]\n"
               "       python3 -m codebot.pipeline step <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline run <project> [--home DIR] [--max N]\n"
               "       python3 -m codebot.pipeline status <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline cancel <project> [--home DIR]\n"
-              "       python3 -m codebot.pipeline design <project> [--home DIR] [--spec PATH]", file=sys.stderr)
+              "       python3 -m codebot.pipeline design <project> [--home DIR] [--spec PATH] [--template NAME]", file=sys.stderr)
         return 2
     cmd = argv[0]; args = argv[1:]
     if cmd == "validate":
@@ -30,7 +31,7 @@ def main(argv=None):
     home = None
     if "--home" in args:
         i = args.index("--home"); home = args[i + 1]; del args[i:i + 2]
-    if cmd in ("step", "run", "status", "design", "cancel"):
+    if cmd in ("step", "run", "status", "design", "cancel", "init"):
         if not args: return main(["--help"])
         from codebot.config import Project
         name = args[0]
@@ -47,17 +48,33 @@ def main(argv=None):
         if cmd == "cancel":
             from . import schedule
             print(json.dumps(schedule.cancel(proj), default=str)); return 0
+        if cmd == "init":
+            from . import design
+            from .validate import ValidationError
+            tmpl = "solo"; force = False
+            if "--template" in args:
+                i = args.index("--template"); tmpl = args[i + 1]; del args[i:i + 2]
+            if "--force" in args:
+                force = True; args.remove("--force")
+            try:
+                path, meta = design.init_project(proj, tmpl, force=force)
+            except ValidationError as e:
+                print(json.dumps({"ok": False, "errors": e.errors})); return 1
+            print(json.dumps({"ok": True, "path": path, "meta": meta})); return 0
         if cmd == "design":
             from . import design
-            spec = None
+            spec = None; tmpl = None
             if "--spec" in args:
                 i = args.index("--spec")
                 with open(args[i + 1], encoding="utf-8") as f: spec = f.read()
-            else:
+                del args[i:i + 2]
+            if "--template" in args:
+                i = args.index("--template"); tmpl = args[i + 1]; del args[i:i + 2]
+            if spec is None:
                 for p in (proj.p("SPEC.md"), os.path.join(proj.workdir or "", "SPEC.md")):
                     if p and os.path.isfile(p):
                         with open(p, encoding="utf-8") as f: spec = f.read(); break
-            bundle, meta = design.propose(proj.home, spec or "", proj=proj)
+            bundle, meta = design.propose(proj.home, spec or "", proj=proj, template=tmpl)
             path = design.write_project_pipeline(proj, bundle, template_meta=meta)
             print(json.dumps({"path": path, "meta": meta}))
             return 0

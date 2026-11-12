@@ -351,3 +351,76 @@ class TestLinksMemoryCancel(unittest.TestCase):
             self.assertEqual(schedule.cancel(proj)["status"], "CANCELLED")
         finally:
             shutil.rmtree(home, ignore_errors=True)
+
+class TestInitPodsNested(unittest.TestCase):
+    def test_init_installs_template(self):
+        home = _home()
+        try:
+            # drafts-like project without pipeline yet
+            pd = os.path.join(home, "projects", "up"); os.makedirs(pd)
+            code = os.path.join(home, "code", "up"); os.makedirs(code)
+            with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(SPEC)
+            with open(os.path.join(pd, "project.env"), "w") as f:
+                f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\nWORKFLOW="drafts"\n')
+            with open(os.path.join(pd, "SPEC.md"), "w") as f: f.write(SPEC)
+            proj = Project("up", home)
+            path, meta = design.init_project(proj, "solo")
+            self.assertTrue(os.path.isfile(path))
+            self.assertEqual(meta["template"], "solo")
+            with open(proj.p("project.env")) as ef:
+                self.assertIn('WORKFLOW="pipeline"', ef.read())
+            with self.assertRaises(ValidationError):
+                design.init_project(proj, "solo")  # exists
+            path2, meta2 = design.init_project(proj, "debate", force=True)
+            self.assertEqual(meta2["template"], "debate")
+            self.assertTrue(os.path.isfile(path2))
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_small_pods_run_completes(self):
+        home = _home()
+        try:
+            proj = _proj(home, "pods", os.path.join(home, "pipelines", "templates", "projects", "small-pods.json"), SPEC)
+            script = Script({
+                "sync": [
+                    {"action": "write", "path": "SPEC.md", "content": SPEC},
+                    {"action": "finish"},
+                ],
+                "math-dev": [
+                    {"action": "write", "path": "mathx.py", "content": "def add(a,b): return a+b\n"},
+                    {"action": "finish"},
+                ],
+                "ui-dev": [
+                    {"action": "write", "path": "ui.py", "content": "def show(x): return str(x)\n"},
+                    {"action": "finish"},
+                ],
+            })
+            run, events = schedule.run_until_idle(proj, chat_fn=script, max_steps=80)
+            self.assertEqual(run["status"], "COMPLETED", events[-20:])
+            msgs = list(mailbox.iter_messages(R.pipeline_dir(proj)))
+            self.assertTrue(any(m["type"] == "RESULT" and m["to"] == "sync" for m in msgs), msgs[-10:])
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
+
+    def test_nested_team_expands(self):
+        home = _home()
+        try:
+            bundle = load_project(os.path.join(home, "pipelines", "templates", "projects", "nested-pods.json"))
+            ids = {m["id"] for m in bundle["team"]["members"]}
+            self.assertIn("sync", ids)
+            self.assertIn("math", ids)
+            self.assertIn("math-impl", ids)
+            self.assertIn("math-check", ids)
+            self.assertTrue(any(p.get("manager") == "math" for p in bundle["team"]["pods"]))
+            validate_project(bundle)
+            proj = _proj(home, "nest", os.path.join(home, "pipelines", "templates", "projects", "nested-pods.json"), SPEC)
+            script = Script({
+                "sync": [{"action": "write", "path": "SPEC.md", "content": SPEC}, {"action": "finish"}],
+                "math-impl": [{"action": "write", "path": "mathx.py", "content": "def add(a,b): return a+b\n"}, {"action": "finish"}],
+                "math-check": [{"action": "findings", "findings": [{"where": "mathx.py", "what": "ok", "serious": "low"}]}],
+            })
+            # findings completes check node; impl finish notifies math manager
+            run, events = schedule.run_until_idle(proj, chat_fn=script, max_steps=80)
+            self.assertEqual(run["status"], "COMPLETED", events[-25:])
+        finally:
+            shutil.rmtree(home, ignore_errors=True)

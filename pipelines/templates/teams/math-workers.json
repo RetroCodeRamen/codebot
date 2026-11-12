@@ -1,0 +1,11 @@
+{
+  "schema": "codebot.pipeline/v1",
+  "kind": "team",
+  "id": "math-workers",
+  "name": "Math workers",
+  "description": "Nested under a coordinator; members get prefixed ids when expanded.",
+  "members": [
+    {"id": "impl", "agent": "solo-developer", "can_talk_to": []},
+    {"id": "check", "agent": "reviewer-structure", "can_talk_to": ["impl"]}
+  ]
+}

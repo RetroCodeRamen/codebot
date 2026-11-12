@@ -581,7 +581,7 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
   gui [--port N] [--open]  the local window, on this machine only (describe a project, answer a few questions, then build)
   pipeline validate <file.json>...   validate modular team/workflow JSON (docs/architecture/modular-agent-orchestration.md)
-  pipeline design|step|run|status|cancel <name>   Team Designer / step / run until idle / status / cancel
+  pipeline init|design|step|run|status|cancel <name>   install template / Team Designer / step / run / status / cancel
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)

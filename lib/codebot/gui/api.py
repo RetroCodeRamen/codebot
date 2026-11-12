@@ -687,6 +687,25 @@ def pipeline_cancel(ctx, body, name):
     from ..pipeline import schedule
     return schedule.cancel(Project(name, ctx.home))
 
+def pipeline_init(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    from ..config import Project
+    from ..pipeline import design
+    from ..pipeline.validate import ValidationError
+    tmpl = body.get("template") or "solo"
+    force = bool(body.get("force"))
+    try:
+        path, meta = design.init_project(Project(name, ctx.home), tmpl, force=force)
+    except ValidationError as e:
+        raise ApiError("; ".join(e.errors))
+    return {"ok": True, "path": path, "meta": meta}
+
+def pipeline_templates(ctx, q, name=None):
+    from ..pipeline import design
+    design.ensure_templates(ctx.home)
+    return {"templates": [{"id": k, "path": v} for k, v in design.TEMPLATES.items()]}
+
 # ---------- a design, then a build ----------
 def _shape(ctx):
     from .. import shape
@@ -776,6 +795,8 @@ POST = [
     (r"/api/project/([^/]+)/pipeline/step", pipeline_step),
     (r"/api/project/([^/]+)/pipeline/run", pipeline_run),
     (r"/api/project/([^/]+)/pipeline/cancel", pipeline_cancel),
+    (r"/api/project/([^/]+)/pipeline/init", pipeline_init),
+    (r"/api/pipeline/templates", pipeline_templates),
     (r"/api/project/([^/]+)/delete", project_delete),
     (r"/api/inbox/ack", inbox_ack), (r"/api/bench/start", bench_start), (r"/api/bench/validate", bench_validate),
     (r"/api/bench/run/([^/]+)/(resume|cancel)", lambda c, b, r, w: bench_ctl(c, r, b, w)), (r"/api/models/unload", model_unload), (r"/api/models/delete", model_delete),

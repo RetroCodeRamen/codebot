@@ -235,3 +235,17 @@ class PipelineGuiCase(helpers.Sandboxed):
         r = api.pipeline_cancel(self.ctx, {}, self.name)
         self.assertEqual(r["status"], "CANCELLED")
         self.assertEqual(R.load_run(Project(self.name, self.home))["status"], "CANCELLED")
+
+    def test_pipeline_init_and_templates(self):
+        # wipe existing pipeline from setUp, re-init via API
+        import shutil
+        shutil.rmtree(os.path.join(self.state, "pipeline"))
+        with open(os.path.join(self.state, "project.env"), "w") as f:
+            f.write(f'WORKDIR="{self.code}"\nRUNDIR="{self.code}"\nWORKFLOW="drafts"\n')
+        t = api.pipeline_templates(self.ctx, {})
+        self.assertIn("solo", [x["id"] for x in t["templates"]])
+        r = api.pipeline_init(self.ctx, {"template": "solo"}, self.name)
+        self.assertTrue(r["ok"])
+        self.assertTrue(os.path.isfile(os.path.join(self.state, "pipeline", "project.json")))
+        with open(os.path.join(self.state, "project.env")) as f:
+            self.assertIn('WORKFLOW="pipeline"', f.read())
