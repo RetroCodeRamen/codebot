@@ -126,6 +126,23 @@ a tuning task, and drafts mode builds this spec in one call. Still missing from 
 (agent limits other than max_turns unread, no retry or per-agent timeout, TASK/DECISION/ARTIFACT/ERROR messages never produced, memory policies
 nearly identical, no block editor, read-only workflow canvas, thin monitor, no frozen spec, scenario B never run).
 
+**Design review fixes (2026-11-11, same session; architecture doc section 5c).** A review of the pipeline's design found three holes that
+were confirmed by running them. (1) An agent with write access to `SPEC.md` wrote wrong code, changed the spec's example to match, and the
+examples gate passed: the spec and `verify.sh` are now frozen into `pipeline/spec/` when the build starts (`frozen.py`), the gates and `check`
+read the frozen copy, writes to them are refused and a changed workspace copy is put back. (2) Nothing committed an agent's work or noticed a
+later agent breaking it: after each writing member's node the examples are run, a regression goes back to that member once and is then set
+aside as a patch with the code reset to the last checkpoint, and good states are committed (only in a project `codebot start` prepared).
+(3) After a crash during a model call the wrong member was woken (the asker instead of the agent answering it): the member left RUNNING now
+takes that turn again, and the inference lock is released in a `finally`. Also: one phone push while a run waits for approval, not one every
+30 s. Real model through `codebot start` (project `smoke-team3`, same spec, one run): 19/19, the spec frozen at the start, two commits on branch
+`codebot/smoke-team3`, 25 calls, 9 min 22 s (the first worker wrote an 8,664-character file this time; the earlier run of the same team took
+2 min 45 s, so one run says little about time). All three agents were again stopped by the three-refusals rule rather than finishing.
+Open design points the user has not decided: a project budget and a rule for when a team is worth it (every agent turn re-reads its
+whole prompt; the two-worker trial took 23 calls for what drafts does in one); one model per run versus per-agent models (a model swap costs
+minutes on this machine); how a file too long for one reply (4,000 tokens) gets written (there is no edit action); the user as someone agents
+can ask; a snapshot of the team/workflow at run start and a reset/retry command (editing a node id mid-run fails the run with "missing node");
+how a reviewer's finding becomes something checkable; `fail` is open to every agent.
+
 **Next for whoever picks this up (priority order):**
 1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).
 2. Optional: shape Build → install pipeline template instead of only drafts; richer workflow canvas editing; Scratch/Blockly only if still wanted after SVG+JSON.

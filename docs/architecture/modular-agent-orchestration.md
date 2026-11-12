@@ -120,6 +120,24 @@ gate (fail → integrator, twice) → end`; a spec without runnable examples end
 the solo template (the drafts loop). Every agent uses the machine's configured model; the designer does not assign models, and it is one model
 call, not a member of the team that messages others.
 
+## 5c. What the harness protects (`frozen.py`, `schedule._checkpoint`)
+
+**The spec is frozen before anything is judged by it.** An agent that may write `SPEC.md` could make wrong code pass by changing the examples
+(done in a probe on 2026-11-11: the gate passed). The spec, and `verify.sh` if there is one, are copied to `pipeline/spec/` in the state
+directory when the first run node whose action is not spec work (`write_spec`, `merge_findings`) starts, at the first examples or tests gate or
+`check`, or when a spec-examples gate passes. From then on the gates and `check` read the copy, a write to either file is refused, and the
+workspace's files are put back whenever they differ (a `run` command can still touch them; the run records a warning). A `verify.sh` that did
+not exist at the freeze is never run.
+
+**Checkpoints.** When a member that may write finishes a run node, the harness runs the frozen spec's examples. If an example that passed at
+the last checkpoint fails now, the work goes back to that member once, with what broke; if it breaks them again the code returns to the last
+checkpoint and the changes are kept as a patch artifact (`set-aside-<node>`). Otherwise the state is committed
+(`pipeline: <member> finished <node> (N of M spec examples pass)`) and becomes the checkpoint; `run.json` keeps `progress`. Commits and resets
+happen only in a project `codebot start` prepared (its own branch or worktree); a bare `pipeline run` detects and sends back, but never commits.
+
+**Restart.** A member found RUNNING at the start of a step was in a model call when the process died; it takes that turn again with its turns
+so far. The inference lock is released however a call ends.
+
 ## 6. Execution lifecycle (later milestones)
 
 States: `READY | RUNNING | WAITING | SUSPENDED | COMPLETED | FAILED | CANCELLED`.

@@ -1,6 +1,7 @@
 """Harness-owned sequential scheduler. At most one model invocation per step() call."""
 import json, os
-from . import artifacts, gates, mailbox, scope, invoke, tools, runtime as R
+from codebot import gitops
+from . import artifacts, frozen, gates, mailbox, scope, invoke, tools, runtime as R
 from .context import member_agent, may_talk
 from .validate import ValidationError
 
@@ -109,6 +110,8 @@ def apply_action(bundle, proj, run, member_id, agent, action, node):
     if act == "write":
         path = action.get("path") or action.get("artifact_name") or "ARTIFACT.md"
         content = action.get("content") or action.get("text") or ""
+        if frozen.protected(proj, path):
+            raise ScheduleError(f"{os.path.normpath(path)} is frozen: it is what the result is judged by, and no agent may change it. Change the code instead")
         if path.startswith("artifacts/") or action.get("artifact_name"):
             meta = artifacts.put(rd, action.get("artifact_name") or path, content, producer=member_id, kind="doc")
             ev["artifact"] = meta["id"]
@@ -177,6 +180,12 @@ def step(proj, *, chat_fn=None, bundle=None):
 
     nodes = R.node_map(bundle)
     rd = run_dir(proj); os.makedirs(rd, exist_ok=True)
+
+    # A member still RUNNING here was in a model call when the process died (a step is one process). It takes that turn again, with its turns
+    # so far (turns.jsonl); before 2026-11-11 the cursor's member was woken instead, which for an agent answering a question was the asker.
+    for mid, m in run["members"].items():
+        if m.get("state") == "RUNNING":
+            m["state"] = "READY"; run["active"] = mid; run["recovered"] = int(run.get("recovered") or 0) + 1
 
     # Prefer answering READY members who have pending questions / were set active
     active = run.get("active")
@@ -287,6 +296,10 @@ def step(proj, *, chat_fn=None, bundle=None):
         mid = node.get("agent")
         st = (run["members"].get(mid) or {}).get("state")
         if st == "COMPLETED" and run.get("cursor") == node["id"] and run.get("active") is None:
+            if _checkpoint(bundle, proj, run, node, mid) == "retry":
+                _set_member(run, mid, state="SUSPENDED")           # the next step sends the work back to it, with what it broke
+                run["step_count"] += 1; R.save_run(proj, run)
+                return {"status": run["status"], "event": "regression", "member": mid, "detail": run["feedback"]["detail"][:600], "run": run}
             done = list(run.get("completed_nodes") or [])
             if node["id"] not in done: done.append(node["id"]); run["completed_nodes"] = done
             nxt = _advance(bundle, run, cursor)
@@ -295,6 +308,7 @@ def step(proj, *, chat_fn=None, bundle=None):
                 _set_member(run, mid, state="SUSPENDED")
             run["step_count"] += 1; R.save_run(proj, run)
             return {"status": run["status"], "event": "run_done", "member": mid, "next": nxt, "run": run}
+        if (node.get("action") or "") not in SPEC_WORK: frozen.freeze(proj, R.workspace_of(proj, bundle))      # the build starts: the spec is fixed
         _activate_run_node(bundle, run, node)
         return _invoke_member(bundle, proj, run, mid, node, chat_fn)
 
@@ -305,6 +319,48 @@ def step(proj, *, chat_fn=None, bundle=None):
         return {"status": run["status"], "event": "handoff", "next": nxt, "run": run}
 
     raise ScheduleError(f"unhandled node type {typ}")
+
+SPEC_WORK = ("write_spec", "merge_findings")          # run-node actions that still write the spec; any other action freezes it first
+REGRESSION_RETRIES = 1
+
+def _checkpoint(bundle, proj, run, node, mid):
+    """After a member that may write finishes a run node: run the frozen spec's examples. If an example that passed at the last checkpoint fails
+    now, the work goes back to that member once ("retry") with what broke; if it breaks them again the work is set aside (the code returns to the
+    last checkpoint and the changes are kept as a patch artifact). Otherwise the state is committed and becomes the checkpoint. Git is used only
+    for a project `codebot start` prepared (its own branch or worktree): a bare `pipeline run` never commits to the user's branch."""
+    ws = R.workspace_of(proj, bundle); agent = member_agent(bundle, mid) or {}; rd = run_dir(proj)
+    if not frozen.info(proj) or not (agent.get("sees") or {}).get("write"): return None
+    try: j = gates.judge(proj, ws)
+    except Exception as e:
+        run.setdefault("warnings", []).append(f"no checkpoint after {node['id']}: the examples could not be run ({type(e).__name__}: {e})"); return None
+    if not j["total"]: return None
+    prev = run.get("checkpoint") or {}
+    repo = gitops.is_repo(ws) and os.path.isfile(proj.p(".git-prepped"))
+    if prev.get("failing") is not None and j["failing"] is not None: broke = sorted(set(j["failing"]) - set(prev["failing"]))
+    else: broke = ["?"] * max(0, int(prev.get("passed") or 0) - j["passed"])
+    if broke:
+        what = (f"{len(broke)} of the spec's examples that passed before {mid}'s work on `{node['id']}` fail now "
+                f"({prev.get('passed')} of {j['total']} passed, now {j['passed']}).\n{j['detail'][:2500]}")
+        n = run.setdefault("regressions", {}).get(node["id"], 0); run["regressions"][node["id"]] = n + 1
+        if n < REGRESSION_RETRIES:
+            run["feedback"] = {"gate": "regression", "title": "Your last changes broke examples that passed before. Fix this", "detail": what}
+            return "retry"
+        if repo and prev.get("commit"):
+            gitops.git(ws, "add", "-A")
+            patch = gitops.git(ws, "diff", "--cached", "--binary", prev["commit"]).stdout
+            art = artifacts.put(rd, f"set-aside-{node['id']}", patch, producer=mid, kind="patch")
+            gitops.git(ws, "reset", "-q", "--hard", prev["commit"], check=True); gitops.git(ws, "clean", "-fdq")
+            note = f"{mid}'s work on {node['id']} broke passing examples twice and was set aside (artifact {art['id']}); the code is back at the last checkpoint"
+        else:
+            note = f"{mid}'s work on {node['id']} broke passing examples twice; it was kept, because there is no git checkpoint to go back to"
+        run.setdefault("warnings", []).append(note)
+        run["feedback"] = {"gate": "regression", "title": "Earlier work was a problem", "detail": note + ".\n" + what}
+        return None
+    if (run.get("feedback") or {}).get("gate") == "regression": run.pop("feedback")
+    commit = gitops.commit_all(ws, f"pipeline: {mid} finished {node['id']} ({j['passed']} of {j['total']} spec examples pass)") if repo else None
+    run["checkpoint"] = {"node": node["id"], "member": mid, "passed": j["passed"], "total": j["total"], "failing": j["failing"], "commit": commit}
+    run.setdefault("progress", []).append({k: run["checkpoint"][k] for k in ("node", "member", "passed", "total", "commit")})
+    return None
 
 def _activate_run_node(bundle, run, node):
     mid = node.get("agent")
@@ -367,6 +423,8 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         run["members"][member_id]["steps"] = int(run["members"][member_id].get("steps") or 0) + 1
         R.save_run(proj, run)
         return _drafts_bridge(proj, run, member_id, node)
+    back = frozen.restore(proj, R.workspace_of(proj, bundle))
+    if back: run.setdefault("warnings", []).append(f"{', '.join(back)} had been changed in the code directory after the spec was frozen and was put back")
     task, extra = _task_text(bundle, proj, node, agent, run)
     visit = int(run["members"][member_id].get("visit") or 0)
     asked = [m for m in mailbox.inbox(rd, member_id) if m.get("type") == "QUESTION" and m.get("state") != "read"]
@@ -412,12 +470,11 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         tools.record(rd, member_id, visit, node.get("id"), action, ev.get("result") or ("error: " + ev["error"] if ev.get("error") else ""), sha=sha)
         if len(ev.get("result") or "") > 600: ev["result"] = ev["result"][:600] + " ... (whole in turns.jsonl)"
     except Exception as e:
-        hold.release()
         run["members"][member_id]["state"] = "FAILED"
         run["status"] = "FAILED"; run["error"] = str(e)
         R.save_run(proj, run)
         return {"status": "FAILED", "error": str(e), "run": run}
-    hold.release()
+    finally: hold.release()             # however the call ends, an interrupt included: the lock must not outlive it
     run["step_count"] += 1
     run["steps_done"].append({"id": f"inv-{run['step_count']}", "member": member_id, "action": action.get("action"), "node": node.get("id")})
     run["last"] = ev
@@ -454,7 +511,7 @@ def _task_text(bundle, proj, node, agent, run=None):
     if sees.get("read") and os.path.isdir(ws): bits.append("Files in the code directory:\n" + tools.listing(ws, agent, limit=40))
     fb = (run or {}).get("feedback")
     if fb and sees.get("write"):
-        bits.append(f"The harness checked the result (gate `{fb['gate']}`) and it FAILED. Fix this:\n{fb['detail']}")
+        bits.append((fb.get("title") or f"The harness checked the result (gate `{fb['gate']}`) and it FAILED. Fix this") + f":\n{fb['detail']}")
     rd = run_dir(proj)
     qs = [m for m in mailbox.inbox(rd, agent["member_id"]) if m.get("type") == "QUESTION" and m.get("state") != "read"]
     if qs:

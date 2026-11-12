@@ -718,6 +718,129 @@ class TestTeamDesigner(unittest.TestCase):
         self.assertIn("Source files the SPEC names: mathx.py, ui.py.", got["user"]); self.assertIn("worked examples the harness can run: 2", got["user"])
         self.assertEqual(got["schema"]["properties"]["workers"]["maxItems"], 6)
 
+FINDING = [{"action": "findings", "findings": [{"where": "SPEC", "what": "ok", "serious": "low"}]}]
+CALC = ("pipelines", "templates", "projects", "basic-calculator.json")
+PODS = ("pipelines", "templates", "projects", "small-pods.json")
+
+class TestTheSpecIsFrozen(unittest.TestCase):
+    """No agent can change what its work is judged by."""
+    def _run(self, name, plan, tpl=CALC, check=None, files=None):
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        proj = _proj(home, name, os.path.join(home, *tpl), SPEC, check=check)
+        for n, text in (files or {}).items():
+            with open(os.path.join(proj.workdir, n), "w") as f: f.write(text)
+        s = Rec(plan); run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
+        return proj, run, events, s
+
+    def _spec(self, proj):
+        with open(os.path.join(proj.workdir, "SPEC.md")) as f: return f.read()
+
+    def test_an_agent_cannot_pass_by_rewriting_the_specs_example(self):
+        proj, run, events, s = self._run("f1", {"dev": [BAD, {"action": "write", "path": "./SPEC.md", "content": SPEC.replace("is `5`", "is `-1`")}, FIN]})
+        self.assertEqual(run["status"], "FAILED", events)                       # before the freeze this run ended COMPLETED
+        self.assertIn("error: SPEC.md is frozen: it is what the result is judged by", s.seen[2][2])
+        self.assertEqual(self._spec(proj), SPEC)
+        self.assertIn("0 of 1 spec examples pass", run["error"])
+
+    def test_a_spec_changed_by_a_command_is_put_back_before_anything_reads_it(self):
+        proj, run, events, s = self._run("f2", {"dev": [BAD, {"action": "run", "command": "sed -i 's/is `5`/is `-1`/' SPEC.md"}, {"action": "check"}, FIN]})
+        self.assertEqual(run["status"], "FAILED", events)
+        self.assertIn("3. check\nThe examples do not pass yet: 0 of 1", s.seen[3][2])
+        self.assertEqual(self._spec(proj), SPEC)
+        self.assertIn("SPEC.md had been changed in the code directory after the spec was frozen and was put back", run["warnings"])
+
+    def test_a_verify_sh_written_during_the_build_is_never_run(self):
+        easy = {"action": "write", "path": "verify.sh", "content": "exit 0\n"}
+        proj, run, events, s = self._run("f3", {"sync": [FIN], "math-dev": [easy, FIN], "ui-dev": [FIN]}, tpl=PODS, check="tests")
+        self.assertEqual(run["status"], "FAILED", events[-6:])
+        self.assertIn("there was no verify.sh when the specification was frozen", run["error"])
+        proj, run, events, s = self._run("f4", {"sync": [FIN], "math-dev": [easy, GOOD, FIN], "ui-dev": [FIN]}, tpl=PODS, check="tests",
+                                         files={"verify.sh": "python3 -c 'import mathx; assert mathx.add(2, 3) == 5'\n"})
+        self.assertEqual(run["status"], "COMPLETED", events[-6:])
+        self.assertIn("error: verify.sh is frozen", s.seen[2][2])
+
+    def test_spec_work_may_still_write_the_spec_and_its_gate_freezes_it(self):
+        from codebot.pipeline import frozen
+        better = SPEC + "2. Also `add(0, 0)` is `0`.\n"
+        proj, run, events, s = self._run("f5", {"elephant": [{"action": "write", "path": "SPEC.md", "content": better}, FIN, FIN], "gf-security": FINDING,
+                                                "gf-structure": FINDING, "gf-ui": FINDING}, tpl=("pipelines", "templates", "projects", "spec-with-reviewers.json"))
+        self.assertEqual(run["status"], "COMPLETED", events[-6:])
+        self.assertEqual((frozen.info(proj)["version"], frozen.text(proj, proj.workdir)), (1, better))
+        self.assertIn("frozen as version 1", run["gates"]["gate"]["detail"])
+        self.assertTrue(frozen.protected(proj, "SPEC.md")); self.assertFalse(frozen.protected(proj, "mathx.py"))
+
+class TestCheckpoints(unittest.TestCase):
+    """A member's finished work is committed, and work that breaks examples that passed is sent back once, then set aside."""
+    UI = {"action": "write", "path": "ui.py", "content": "def show(x): return str(x)\n"}
+    ZERO = {"action": "write", "path": "mathx.py", "content": "def add(a, b): return 0\n"}
+
+    def _team(self, name, integrator, git=True):
+        import subprocess
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        bundle, meta = design.propose(home, TWO, chat_fn=lambda proj, messages, **kw: {"content": json.dumps(TestTeamDesigner.PAIR)})
+        pd = os.path.join(home, "projects", name); os.makedirs(pd); code = os.path.join(home, "code", name); os.makedirs(code)
+        with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(TWO)
+        with open(os.path.join(pd, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\n')
+        if git:
+            subprocess.run(["git", "-C", code, "init", "-q"], check=True); open(os.path.join(pd, ".git-prepped"), "w").close()
+        design.write_project_pipeline(Project(name, home), bundle, template_meta=meta)
+        proj = Project(name, home); s = Rec({"math": [GOOD, FIN], "ui": [self.UI, FIN], "integrator": integrator})
+        run, events = schedule.run_until_idle(proj, chat_fn=s, max_steps=120)
+        log = subprocess.run(["git", "-C", code, "log", "--format=%s", "--reverse"], capture_output=True, text=True).stdout.splitlines() if git else []
+        with open(os.path.join(code, "mathx.py")) as f: return proj, run, events, s, log, f.read()
+
+    def test_each_members_finished_work_is_a_commit(self):
+        proj, run, events, s, log, math = self._team("c1", [{"action": "check"}, FIN])
+        self.assertEqual(run["status"], "COMPLETED", events[-6:])
+        self.assertEqual(log, ["pipeline: math finished build-math (0 of 2 spec examples pass)", "pipeline: ui finished build-ui (2 of 2 spec examples pass)"])
+        self.assertEqual([(p["node"], p["passed"]) for p in run["progress"]], [("build-math", 0), ("build-ui", 2), ("integrate", 2)])
+        self.assertNotIn("warnings", run)
+
+    def test_work_that_breaks_a_passing_example_goes_back_once_and_can_be_fixed(self):
+        proj, run, events, s, log, math = self._team("c2", [BAD, FIN, GOOD, FIN])
+        self.assertEqual(run["status"], "COMPLETED", events[-6:])
+        self.assertEqual((run["regressions"], run["gates"]["gate"]["fails"]), ({"integrate": 1}, 0))
+        again = [u for m, _, u, _ in s.seen if m == "integrator"][2]
+        self.assertIn("Your last changes broke examples that passed before. Fix this:\n1 of the spec's examples that passed before integrator's work on `integrate` fail now", again)
+        self.assertIn("add(2, 3)", again); self.assertNotIn("warnings", run); self.assertNotIn("feedback", run)
+
+    def test_work_that_breaks_them_twice_is_set_aside_and_the_code_goes_back(self):
+        proj, run, events, s, log, math = self._team("c3", [BAD, FIN, self.ZERO, FIN])
+        self.assertEqual(run["status"], "COMPLETED", events[-6:])                          # the gate judges the checkpoint, which passes
+        self.assertEqual(math, GOOD["content"])
+        self.assertEqual(run["warnings"], ["integrator's work on integrate broke passing examples twice and was set aside (artifact set-aside-integrate-v1); "
+                                           "the code is back at the last checkpoint"])
+        from codebot.pipeline import artifacts
+        patch = artifacts.read(R.pipeline_dir(proj), [a for a in artifacts.list_artifacts(R.pipeline_dir(proj)) if a["kind"] == "patch"][0])
+        self.assertIn("+def add(a, b): return 0", patch)
+        self.assertEqual(len(log), 2)
+
+    def test_without_a_branch_of_its_own_nothing_is_committed_or_reset(self):
+        proj, run, events, s, log, math = self._team("c4", [BAD, FIN, self.ZERO, FIN], git=False)
+        self.assertEqual(run["status"], "FAILED", events[-6:])                             # the broken work stayed, so the gate fails
+        self.assertIn("it was kept, because there is no git checkpoint to go back to", run["warnings"][0])
+        self.assertFalse(os.path.isdir(os.path.join(proj.workdir, ".git")))
+
+class TestCrashRecovery(unittest.TestCase):
+    def test_the_member_that_was_in_a_call_takes_that_turn_again(self):
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        proj = _proj(home, "cr", os.path.join(home, "pipelines", "templates", "projects", "spec-debate.json"), SPEC)
+        s = Rec({"elephant": [FIN, FIN], "gf-security": [{"action": "ask", "to": "gf-structure", "text": "is auth covered?"}] + FINDING,
+                 "gf-structure": [{"action": "answer", "text": "yes"}] + FINDING, "gf-ui": FINDING})
+        state = {"crashed": False}
+        def chat(p, messages, **kw):
+            if "You are member `gf-structure`" in messages[0]["content"] and not state["crashed"]:
+                state["crashed"] = True; raise KeyboardInterrupt("the process dies in the middle of the call")
+            return s(p, messages, **kw)
+        with self.assertRaises(KeyboardInterrupt): schedule.run_until_idle(proj, chat_fn=chat, max_steps=60)
+        left = R.load_run(proj)["members"]
+        self.assertEqual((left["gf-security"]["state"], left["gf-structure"]["state"]), ("WAITING", "RUNNING"))
+        run, events = schedule.run_until_idle(Project("cr", home), chat_fn=chat, max_steps=80)
+        self.assertEqual(run["status"], "COMPLETED", events[-8:])
+        self.assertEqual(run["recovered"], 1)
+        self.assertEqual(s.calls[:4], ["elephant", "gf-security", "gf-structure", "gf-security"])        # the answer, then the asker: no second question
+        self.assertEqual(len([m for m in mailbox.iter_messages(R.pipeline_dir(proj)) if m["type"] == "QUESTION"]), 1)
+
 class TestPersistentMemory(unittest.TestCase):
     def test_project_memory_packs_lessons(self):
         from codebot.pipeline import context as C

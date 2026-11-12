@@ -165,7 +165,7 @@ cmd_start() {
     [[ -s "$S/PLAN.md" ]] || die "no PLAN.md yet. run: codebot plan $NAME"
   fi
   alive "$S/loop.pid" && die "$NAME is already running"
-  if [[ "${WORKFLOW:-}" != drafts && ! -f "$S/tasks.json" ]] && grep -qE '^[[:space:]]+[-*][[:space:]]*check:' "$S/PLAN.md"; then
+  if [[ "${WORKFLOW:-}" != drafts && "${WORKFLOW:-}" != pipeline && ! -f "$S/tasks.json" ]] && grep -qE '^[[:space:]]+[-*][[:space:]]*check:' "$S/PLAN.md"; then
     echo "plan has per-task checks: freezing them (engine mode)"; "$ENGINE" freeze "$NAME" --home "$CODEBOT_HOME" || die "freeze failed: every task needs a check: line"
   fi
   [[ "${2:-}" == --keep ]] || rm -f "$S/PAUSE" "$S/STATUS"
@@ -173,7 +173,7 @@ cmd_start() {
   if [[ "${2:-}" != --keep || ! -f "$S/env.snap" ]]; then # remember the launching shell's environment (JAVA_HOME, GHIDRA_INSTALL_DIR, PATH...) for the loop
     ( umask 077; export -p | grep -vE '^declare -[a-zA-Z-]+ (INVOCATION_ID|JOURNAL_STREAM|SYSTEMD_EXEC_PID|MANAGERPID|MAINPID|LISTEN_[A-Z]+|NOTIFY_SOCKET|SHLVL|OLDPWD|PWD|_|BASHOPTS|SHELLOPTS|BASH_[A-Z_]+|PPID|UID|EUID|TERM_PROGRAM_VERSION)=' > "$S/env.snap" )
   fi
-  [[ "${WORKFLOW:-}" != drafts && -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
+  [[ "${WORKFLOW:-}" != drafts && "${WORKFLOW:-}" != pipeline && -z "$(verify_script)" ]] && echo "note: no verify.sh found; DONE will be accepted on the agent's word alone"
   ensure_ollama
   if [[ "${RUNDIR:-}" == "$S"/* && -d "$RUNDIR" ]]; then   # older layout: the worktree lived INSIDE the state dir, which the harness protects from the worker
     local moved="$CODEBOT_HOME/workspaces/$NAME"; mkdir -p "$CODEBOT_HOME/workspaces"
@@ -322,7 +322,7 @@ _close_drafts() { # title body tag
 
 # supervisor for WORKFLOW=pipeline: one harness step (at most one model call) per iteration
 loop_pipeline() {
-  local ev st pid rc out="$S/.step.out"
+  local ev st pid rc asked= out="$S/.step.out"
   notify "codebot: $NAME started" "Pipeline run (one model call at a time). status: codebot pipeline status $NAME" low rocket 1
   while [[ $finished == 0 ]]; do
     if [[ -f "$S/PAUSE" ]]; then phone_tick; sleep 5; continue; fi
@@ -339,10 +339,11 @@ loop_pipeline() {
     case "$st" in
       COMPLETED) notify "codebot: $NAME COMPLETE" "Pipeline finished. Review: codebot pipeline status $NAME" default white_check_mark; finished=1; rm -f "$S/.active" ;;
       FAILED) notify "codebot: $NAME failed" "$(jq -r '.error // "pipeline failed"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
-      WAITING_APPROVAL) notify "codebot: $NAME needs approval" "Approve: codebot pipeline approve $NAME (or the Pipeline page)." default hand; sleep 30 ;;
+      WAITING_APPROVAL) [[ -n "$asked" ]] || notify "codebot: $NAME needs approval" "Approve: codebot pipeline approve $NAME (or the Pipeline page)." default hand
+                        asked=1; sleep 30 ;;   # one push, not one every 30 s while it waits
       BUSY) sleep 15 ;;
       CANCELLED) finished=1; rm -f "$S/.active" ;;
-      *) : ;;
+      *) asked= ;;
     esac
   done
 }

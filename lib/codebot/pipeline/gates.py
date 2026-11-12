@@ -1,22 +1,22 @@
 """Mechanical gates: the harness runs the check itself, on a scratch copy of the workspace. No model's word passes a gate.
 
-  examples       the spec's worked examples (and its build command) are run against the code in the workspace, as drafts mode judges a version
-  tests          `verify.sh` in the workspace is run in the sandbox; exit status 0 passes
-  spec-examples  the spec has at least one example codebot can run (a gate for a spec-writing workflow, before any code exists)
+  examples       the frozen spec's worked examples (and its build command) are run against the code in the workspace, as drafts mode judges a version
+  tests          the verify.sh that existed when the spec was frozen is run in the sandbox; exit status 0 passes
+  spec-examples  the spec has at least one example codebot can run (a gate for a spec-writing workflow, before any code exists); passing freezes it
+The spec and verify.sh a result is judged by are the frozen copies (frozen.py), which no agent can write.
   approve        the user's approval (PIPELINE_AUTO_APPROVE=0), else passes
 """
-import copy, json, os, shutil
+import copy, json, os, re, shutil
 from codebot import assertions as A, checkspec as K, drafts, sandbox
-from . import runtime as R
+from . import frozen, runtime as R
 from .validate import GATE_CHECKS as CHECKS
 
 IGNORE = shutil.ignore_patterns(".git", "__pycache__", ".gocache")
 
 def _spec(proj, ws):
-    for p in (os.path.join(ws, "SPEC.md"), proj.p("SPEC.md")):
-        if os.path.isfile(p):
-            with open(p, encoding="utf-8", errors="replace") as f: return f.read()
-    return ""
+    """The spec code is judged by: frozen now if it was not yet (frozen.py)."""
+    frozen.freeze(proj, ws); frozen.restore(proj, ws)
+    return frozen.text(proj, ws)
 
 def _scratch(proj, ws):
     """The project as drafts.evaluate sees it, with its state under pipeline/gate (a drafts bridge's own state is not touched) and the workspace
@@ -27,17 +27,24 @@ def _scratch(proj, ws):
     return q
 
 def examples(proj, ws, only=None):
-    """only = the spec's files one worker writes: then just the examples that call into those files are run (and just those files must exist), so
+    j = judge(proj, ws, only)
+    return j["when"], j["detail"]
+
+def judge(proj, ws, only=None):
+    """{when, detail, passed, total, failing}: failing = the 1-based numbers of the examples that fail (None when the runner could not say; every
+    example when the code does not build), so two judgements of the same frozen spec can be compared example by example.
+    only = the spec's files one worker writes: then just the examples that call into those files are run (and just those files must exist), so
     a worker is not told its part fails because another worker's file is not written yet. Only for specs whose examples are all function calls."""
+    res = lambda when, detail, passed=0, total=0, failing=None: {"when": when, "detail": detail, "passed": passed, "total": total, "failing": failing}
     spec = _spec(proj, ws)
-    if not spec.strip(): return "fail", "there is no SPEC.md in the workspace"
+    if not spec.strip(): return res("fail", "there is no SPEC.md in the workspace")
     build, checks = drafts.examples(spec)
-    if not checks: return "fail", "SPEC.md has no example codebot can run, so there is nothing to judge the code by (codebot check-spec SPEC.md)"
+    if not checks: return res("fail", "SPEC.md has no example codebot can run, so there is nothing to judge the code by (codebot check-spec SPEC.md)")
     names = drafts.spec_files(spec); decl = drafts.declared(spec, names); part = ""
     if only is not None and not build and all(a["type"] == "call" and a.get("module") for a in checks):
         names = [n for n in names if n in only]; decl = {k: v for k, v in decl.items() if v in only}
         checks = [a for a in checks if a["module"] + ".py" in only]; part = f" for your files ({', '.join(only)})"
-        if not checks: return "pass", f"no example in SPEC.md calls into your files ({', '.join(only)}), so there is nothing to run"
+        if not checks: return res("pass", f"no example in SPEC.md calls into your files ({', '.join(only)}), so there is nothing to run")
     q = _scratch(proj, ws); cdir = drafts.dpath(q, "checks"); os.makedirs(cdir, exist_ok=True)
     shutil.copyfile(A.__file__, os.path.join(cdir, K.RUNNER))
     with open(os.path.join(cdir, "checks.json"), "w") as f: json.dump({"asserts": checks}, f, indent=1)
@@ -49,21 +56,28 @@ def examples(proj, ws, only=None):
     built, passed, defined, feedback = drafts.evaluate(q, st, files)
     ok = built and passed == len(checks) and defined == len(decl)
     head = f"{passed} of {len(checks)} spec examples{part} pass" + (f", {defined} of {len(decl)} declared names defined" if decl else "")
-    return ("pass" if ok else "fail"), (head if ok else f"{head}\n{feedback}".strip())
+    m = re.search(r"^failing assertions: ([\d, ]+)$", feedback or "", re.M)
+    failing = [] if passed == len(checks) else list(range(1, len(checks) + 1)) if not built else [int(x) for x in m.group(1).split(",")] if m else None
+    return res("pass" if ok else "fail", head if ok else f"{head}\n{feedback}".strip(), passed, len(checks), failing)
 
 def tests(proj, ws):
-    if not os.path.isfile(os.path.join(ws, "verify.sh")): return "fail", "there is no verify.sh in the workspace"
+    frozen.freeze(proj, ws); frozen.restore(proj, ws); script = frozen.verify_script(proj)
+    if frozen.info(proj) is None: script = frozen._read(os.path.join(ws, "verify.sh"))              # no spec at all: nothing was frozen
+    if script is None: return "fail", "there was no verify.sh when the specification was frozen (one written during the build is not run)"
     q = _scratch(proj, ws); wsc = drafts.dpath(q, "ws"); drafts._reset_ws(wsc, drafts.dpath(q, "baseline"))
+    with open(os.path.join(wsc, "verify.sh"), "w", encoding="utf-8") as f: f.write(script)
     timeout = proj.get("PIPELINE_GATE_TIMEOUT", 600, int)
     rc, out, _ = sandbox.execute(drafts._at(q, wsc), ["bash", "verify.sh"], timeout=timeout, rw=[wsc], cwd=wsc)
     if rc == 0: return "pass", "verify.sh exited with status 0"
     return "fail", f"verify.sh exited with status {rc}:\n{out.strip()[-2000:]}"
 
 def spec_examples(proj, ws):
-    spec = _spec(proj, ws)
+    spec = frozen.text(proj, ws)
     if not spec.strip(): return "fail", "there is no SPEC.md in the workspace"
     n = drafts.coverage(spec).get("examples", 0)
-    return ("pass", f"SPEC.md has {n} examples codebot can run") if n else ("fail", "SPEC.md has no example codebot can run (codebot check-spec SPEC.md)")
+    if not n: return "fail", "SPEC.md has no example codebot can run (codebot check-spec SPEC.md)"
+    cur = frozen.freeze(proj, ws)
+    return "pass", f"SPEC.md has {n} examples codebot can run; frozen as version {cur['version']}"
 
 def run(proj, bundle, node):
     """(\"pass\" | \"fail\", what was run and what it showed). A check that is unknown or cannot be run fails."""
