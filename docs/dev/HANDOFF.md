@@ -173,6 +173,32 @@ three sizes, every expected output printed by the real tool; `bench/toolbox/READ
 standard library as the oracle for re-implemented modules; a public conformance suite (CommonMark's examples) for something larger, which needs
 one download. Do not add a benchmark whose expected values a model wrote.
 
+**Removing what was built on AI-written references (2026-11-12, in progress).** Removed so far: the replay corpus and its test (every label
+in it was "passes or fails on an AI-written reference solution", and its ratchets guarded the task pipeline's screening rules), and the model
+evaluation kit with `codebot eval` (mutant scoring against the same references). Still to do: the drafts tests that pin prompts to the baseline
+loop, the benchmark-runner tests that use ladder level 1 as scaffolding (port to `toolbox_04`), the two old suites, then the ladder's files.
+Harness rules whose only justification was that material and that are therefore unverified now: the screening and repair rules of the task
+pipeline (`grounding.screen`, `checkspec.repair_plan`, `rederive`), and the drafts constants (patience 1, the reply cap, the loop stop).
+
+**STATE CHECKPOINT (2026-11-12 evening; uncommitted work in the tree, read this before touching it).** Last pushed commit: dd19ea4. Two jobs
+are in progress on top of it, both uncommitted:
+(1) *Removing what was built on AI-written references*: the replay corpus, its test, the evaluation kit and `codebot eval` are deleted and the
+docs follow. Not yet done: `tests/test_z_drafts.py` (pins prompts to `bench/baselines/bare_py.py`; uses ladder levels 1, 2, 3 and calc_go),
+`tests/test_v_capbench.py` (ladder level 1 as scaffolding: port to `toolbox_04` with a reference plan generated from the spec's examples),
+`tests/test_o_bench.py` (the `pyutils` / `pyhard` suites), then delete `bench/ladder/catalog/level_*`, `calc_go`, `growing`, `bench/suite`,
+`bench/baselines` and the growing-project code in `capbench`.
+(2) *The reliability brief of 2026-11-12* (from the user's other reviewer, against dd19ea4): implemented and tested with the fake model
+(`tests/test_pipeline_reliability.py`, 32 tests, crashes injected at each persistence boundary of a turn; architecture doc 5c). Summary:
+invocation journal (`pipeline/journal.py`); append-only message read events; approval manual unless `PIPELINE_AUTO_APPROVE=1`, per arrival at a
+node, with `pipeline reject`; run `result` and member `outcome`; wall-clock budgets and status EXHAUSTED; rollback only in a tree codebot owns
+and only after a snapshot ref; symlink-safe file access; token usage per member and `fit_actual`; dependency cycles reported; a rejection or a
+failed gate follows only a `when: fail` edge (an unlabelled edge used to let a failed gate through). The brief's finding D (the first
+regression retry skipped) was not reproduced: the retry did happen; the count is now "times sent back" and `PIPELINE_REGRESSION_RETRIES` sets it.
+Not covered: a shell command cut off half-way leaves whatever it left; anything outside the code directory; none of this has run with the real
+model yet.
+(3) *The toolbox series* has not been run: `bench/teams/compare.py` now has the arms drafts / plan / review / full / auto with one wall-clock
+budget each (`bench/teams/README.md`). Run `tests/run.sh` (not while a model job runs) before committing.
+
 **Next for whoever picks this up (priority order):**
 1. **Real-model A/B:** same SPEC, drafts vs `pipeline init --template solo` (and maybe reviewers), several seeds, held-out tasks — do **not** claim teams improve success rate until measured (`REVIEW-2026-10-21.md` spirit).
 2. Optional: shape Build → install pipeline template instead of only drafts; richer workflow canvas editing; Scratch/Blockly only if still wanted after SVG+JSON.
@@ -250,9 +276,9 @@ Run model jobs **one at a time** and watch `sensors | grep Package`. Use a `Moni
 - **Per-item planning** (`PLAN_PER_ITEM=1`, default when the spec has 2+ numbered items): one small model call per item, so a plan cannot collapse, merge items
   or pad itself (the 1-task plans, and with minItems=8 a plan of 4 two-function tasks + 4 filler tasks, both seen 2026-10-16). goal/context/done come from the
   spec text. Replies kept as `plan.reply.<round>.item<n>.<try>.json`. Not yet measured with the real model.
-- **Replay corpus before real runs.** `tests/corpus/` holds every real assertion a planner/splitter froze (judged against the reference solution) and the raw plan
-  replies; `tests/test_w_corpus.py` replays them in about 2 s. A rule must never reject or change a sound corpus assertion; the ratchet counts (impossible assertions
-  let through, collapsed plans) may only go down. Rebuild with `python3 tests/corpus/build_corpus.py` after every real run. Corpus facts: 105 of 282 real assertions
+- **Replay corpus before real runs.** a replay corpus (removed 2026-11-12) holds every real assertion a planner/splitter froze (judged against the reference solution) and the raw plan
+  replies; the corpus test (removed 2026-11-12) replays them in about 2 s. A rule must never reject or change a sound corpus assertion; the ratchet counts (impossible assertions
+  let through, collapsed plans) may only go down. Rebuild with the corpus builder (removed) after every real run. Corpus facts: 105 of 282 real assertions
   fail on the reference; the splitter is much worse than the planner on level 1 (12/21 unsound vs 11/80).
 - **Structure over wording.** Constraints the harness enforces (schema minItems, required fields, deterministic repair) work; prompt wording changes have side
   effects no test catches (the coverage wording collapsed plans). Change the prompt only with a planning-only probe (3-5 plans, about 10 min each) against the reference.
@@ -264,7 +290,7 @@ MIT `LICENSE`, `install.sh` (pinned Ollama 0.40.3 with sha256, `ornith:9b` -> `c
 
 ### Model evaluation (started 2026-10-16)
 
-Method, scores, candidates and commands: `docs/MODEL_EVAL.md`. 10 candidates pulled into `models/` (the control `ornith:9b` is never updated in place). Per-role settings in `lib/codebot/roles.py`; scorer, mutants, gate and planner probe in `lib/codebot/evalkit/`; `codebot eval ...`. First finding: the control is Ornith 1.0 (Qwen3.5-9B + agentic-coding RL) and codebot runs every call with thinking off; its plans have better coverage than the hand-written reference plan but 1 in 3 tasks carries an impossible assertion.
+Method, scores, candidates and commands: `docs/MODEL_EVAL.md`. 10 candidates pulled into `models/` (the control `ornith:9b` is never updated in place). Per-role settings in `lib/codebot/roles.py`; scorer, mutants, gate and planner probe in the evaluation kit (removed 2026-11-12); `codebot eval ...`. First finding: the control is Ornith 1.0 (Qwen3.5-9B + agentic-coding RL) and codebot runs every call with thinking off; its plans have better coverage than the hand-written reference plan but 1 in 3 tasks carries an impossible assertion.
 
 ### Design review fixes (2026-10-17)
 
@@ -301,7 +327,7 @@ Fixes, in the order they landed:
    the reference, against 21/41 and 14/51 for the two earlier control builds; 4 of 7 tasks fully sound in each. On the replay corpus (rebuilt with the calc_go
    runs: 718 real assertions, 381 impossible) the screen drops 491 uses of impossible calc_go assertions and keeps 105 of 109 correct ones (the 4
    are `python3 calc.py` checks that "hold" only because Python cannot open the missing file); on level 1 and pyutils it drops 39 impossible uses
-   and 4 correct ones, each half of a pair the model contradicted itself with. `tests/test_w_corpus.py` ratchets these numbers per suite.
+   and 4 correct ones, each half of a pair the model contradicted itself with. the corpus test (removed 2026-11-12) ratchets these numbers per suite.
 5. **"Is the check wrong?" before a split** (`rederive.py`). The engine records, per attempt, which assertions of the task's own check failed (the
    runner's numbers). When the ladder reaches the split rung, the assertions that failed in EVERY attempt since the check was set are judged
    against the spec in one model call (the planner's model; "does the specification require exactly this result for exactly this input?") that

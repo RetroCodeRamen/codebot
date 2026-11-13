@@ -1,6 +1,6 @@
 """Declarative checks: the model emits assertions (data); the harness owns paths, interpreter, exit-status contract and PLAN.md. Covers the runner,
 the guard's strict exit-status rule, the native planner (with the scripted fake model, including a repair round) and the splitter."""
-import json, os, subprocess, sys, unittest
+import json, os, shutil, subprocess, sys, unittest
 from helpers import Sandboxed
 from fake_ollama import FakeOllama
 from codebot import assertions as A, checkspec as K, checks as C, engine, grounding as G, guard, planner, planops, planparse, rederive as RD, specdoc, splitter, tasks as T
@@ -377,12 +377,16 @@ class TestGrounding(Sandboxed):
         ex = G.examples(PY_SPEC, items[1])
         self.assertEqual([(a["args"], a.get("expect", a.get("raises"))) for a in ex], [([2], True), ([97], True), ([1], False), ([0], False), ([-7], False), (["7"], "TypeError")])
         self.assertEqual({a["module"] for a in ex}, {"numutil"})
-    def test_the_examples_of_every_catalog_spec_hold_on_its_reference_solution(self):
-        # the property that makes them safe to freeze without asking the model; level_01, level_03 and calc_go have examples in these phrasings
-        from test_w_corpus import judge, REF
-        spec = open(os.path.join(REPO, "bench/ladder/catalog/level_01/SPEC.md")).read()
-        ex = [a for ex in G.by_item(spec) for a in ex]; self.assertGreater(len(ex), 25)
-        self.assertEqual([m for m in judge(ex, REF["level_01"]) if m], [])
+    def test_the_examples_of_a_toolbox_spec_hold_on_its_reference_solution(self):
+        # the property that makes them safe to freeze without asking the model; here the expected values are the real tools' output (bench/toolbox)
+        import json, subprocess, tempfile
+        cat = os.path.join(REPO, "bench", "ladder", "catalog", "toolbox_04"); spec = open(os.path.join(cat, "SPEC.md")).read()
+        ex = [a for ex in G.by_item(spec) for a in ex]; self.assertEqual(len(ex), 13)
+        with tempfile.TemporaryDirectory() as d:
+            for src in ("seed", "reference_solution"): shutil.copytree(os.path.join(cat, src), d, dirs_exist_ok=True)
+            with open(os.path.join(d, "c.json"), "w") as f: json.dump({"asserts": K.prepare(ex)}, f)
+            p = subprocess.run([sys.executable, A.__file__, "c.json"], cwd=d, capture_output=True, text=True)
+        self.assertEqual((p.returncode, p.stdout.strip().splitlines()[-1]), (0, "all 13 assertions hold"), p.stdout[-800:])
     def test_project_kind(self):
         self.assertEqual(G.project_kind(PY_SPEC), "python"); self.assertEqual(G.project_kind(CALC_SPEC), "other")
         self.write_code("go.mod", "module calc\n"); self.assertEqual(G.project_kind("Build a calculator.", self.code), "other")

@@ -337,9 +337,10 @@ loop_pipeline() {
     ev="$(tail -n1 "$out" 2>/dev/null)"; st="$(jq -r '.status // "error"' <<< "$ev" 2>/dev/null || echo error)"
     echo "[pipeline] $(date '+%T') $st $(jq -c 'del(.run)' <<< "$ev" 2>/dev/null)" >> "$S/loop.log"
     case "$st" in
-      COMPLETED) notify "codebot: $NAME COMPLETE" "Pipeline finished. Review: codebot pipeline status $NAME" default white_check_mark; finished=1; rm -f "$S/.active" ;;
+      COMPLETED) notify "codebot: $NAME COMPLETE ($(jq -r '.result // "unverified"' <<< "$ev" 2>/dev/null))" "Pipeline finished. Review: codebot pipeline status $NAME" default white_check_mark; finished=1; rm -f "$S/.active" ;;
+      EXHAUSTED) notify "codebot: $NAME out of time" "$(jq -r '.error // "time budget used up"' <<< "$ev" 2>/dev/null | head -c 300)" high hourglass; finished=1; rm -f "$S/.active" ;;
       FAILED) notify "codebot: $NAME failed" "$(jq -r '.error // "pipeline failed"' <<< "$ev" 2>/dev/null | head -c 300)" high warning; finished=1; rm -f "$S/.active" ;;
-      WAITING_APPROVAL) [[ -n "$asked" ]] || notify "codebot: $NAME needs approval" "Approve: codebot pipeline approve $NAME (or the Pipeline page)." default hand
+      WAITING_APPROVAL) [[ -n "$asked" ]] || notify "codebot: $NAME needs approval" "Approve: codebot pipeline approve $NAME, or reject: codebot pipeline reject $NAME REASON (or the Pipeline page)." default hand
                         asked=1; sleep 30 ;;   # one push, not one every 30 s while it waits
       BUSY) sleep 15 ;;
       CANCELLED) finished=1; rm -f "$S/.active" ;;
@@ -541,7 +542,6 @@ case "$c" in
   check-plan) cmd_check_plan "$@";;
   check-spec) cmd_check_spec "$@";;
   bench) cmd_bench "$@";;
-  eval) exec "$CODEBOT_HOME/bin/codebot-eval" "$@";;
   doctor) exec "$CODEBOT_HOME/bin/codebot-doctor" "$@";;
   notify) cmd_notify "$@";;
   notify-test) cmd_notify_test;;
@@ -579,11 +579,10 @@ codebot - local-only autonomous coding agent for small offline models (run with 
   bench --thermal [--minutes M] [--only substr] [--record]   sweep threads / power profile / GPU configs for sustained speed vs heat
   re-config               rebuild the REA agent config after editing config/rea-tools.txt
   install-service         install the watchdog timer (restarts loops that die; keeps pauses and pending questions)
-  eval mutants|gate|planner   model evaluation: mutant sets, a speed/compatibility gate per model, scored planner probes (docs/MODEL_EVAL.md)
   doctor                  is this machine ready? (prerequisites, Ollama, model, sandbox image, notification settings)
   gui [--port N] [--open]  the local window, on this machine only (describe a project, answer a few questions, then build)
   pipeline validate <file.json>...   validate modular team/workflow JSON (docs/architecture/modular-agent-orchestration.md)
-  pipeline init|design|step|run|status|cancel|approve <name>   install template / design / step / run / status / cancel / approve
+  pipeline init|design|step|run|status|cancel|approve|reject <name>   install template / design / step / run / status / cancel / approve / reject
   resume-all              (watchdog) restart active loops that are not running
   setup | notify-test     start the private Ollama / send a test ntfy message
   notify <title> <msg> [priority] [tags]   push one ntfy message through the normal path (used by `bench run` for completion/timeout/critical alerts)

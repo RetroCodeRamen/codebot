@@ -92,7 +92,6 @@ codebot re-config                        # rebuild the REA agent config after ed
 codebot bench --preflight                # prove the context setup against the live model server
 codebot bench run --level 1              # the Capability Ladder Benchmark (docs/BENCHMARK.md)
 codebot bench --thermal --minutes 4      # sweep threads / power profile / GPU for sustained speed vs heat
-codebot eval gate MODEL                  # model evaluation: speed/compatibility gate, mutant sets, scored planner probes (docs/MODEL_EVAL.md)
 ```
 
 Your code is never edited in place: for an existing git repo codebot works in a separate worktree (`workspaces/<project>/`, branch
@@ -226,8 +225,7 @@ whether it passed, and lessons that correlate with failure are pruned (`codebot 
 
 `tests/run.sh [file]` runs the suite (about 6 minutes, little CPU): a scripted fake Ollama and scripted workers exercise the harness (locking and
 tamper detection, checkpoints, replanning, budgets, the ladder, worker validation, context packing, memory, the sandbox against real Docker, the audit
-chain, modes, reports, the guard, the benchmark and the bash supervisor). `tests/test_r_docs.py` fails when these docs drift from the code;
-`tests/test_w_corpus.py` replays every real assertion a model has written against the harness's repair and validation rules.
+chain, modes, reports, the guard, the benchmark and the bash supervisor). `tests/test_r_docs.py` fails when these docs drift from the code.
 
 ## License
 

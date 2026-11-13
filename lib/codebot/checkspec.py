@@ -80,7 +80,7 @@ def _arities(groups):
 def _same_value(x, want): return x is want if isinstance(want, bool) or isinstance(x, bool) else x == want
 
 def repair(a, arity):
-    """Deterministic repairs of call assertions whose intent is unambiguous, judged on the replay corpus (tests/test_w_corpus.py: 8 of 8 impossible
+    """Deterministic repairs of call assertions whose intent is unambiguous, first judged on a replay corpus of real planner output, removed 2026-11-12 with the AI-written references it was labelled by (8 of 8 impossible
     assertions became sound, 0 sound ones changed). arity: this function's usual number of positional args in the same plan. Returns (assertion, note)."""
     if not isinstance(a, dict) or a.get("type") != "call" or not isinstance(a.get("args"), list) or arity is None: return a, None
     args = a["args"]

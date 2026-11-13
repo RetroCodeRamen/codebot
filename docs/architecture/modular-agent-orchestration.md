@@ -146,8 +146,36 @@ checkpoint and the changes are kept as a patch artifact (`set-aside-<node>`). Ot
 (`pipeline: <member> finished <node> (N of M spec examples pass)`) and becomes the checkpoint; `run.json` keeps `progress`. Commits and resets
 happen only in a project `codebot start` prepared (its own branch or worktree); a bare `pipeline run` detects and sends back, but never commits.
 
-**Restart.** A member found RUNNING at the start of a step was in a model call when the process died; it takes that turn again with its turns
-so far. The inference lock is released however a call ends.
+**A turn is journalled** (`journal.py`, `pipeline/invocations.jsonl`, append-only). Every model turn has an invocation id and goes through
+`prepared` (about to ask) → `decided` (the action, recorded whole) → `applied` (effects done, turn recorded) → `committed` (run.json holds the
+state). run.json is the authority: a member's `done_inv` is the last turn its saved state includes. After a crash the member's last turn is
+looked up before anything else: `prepared` only means the reply was lost, and the model is asked again under a new id; `decided` or `applied`
+means the action is carried out again without the model. That is safe because each effect is keyed by the invocation id: a message, an
+artifact or a turn record that already carries it is not made again, a file write is the same bytes written atomically, and a shell command
+that may have run is never run again (its turn says so, and the run gets a warning). What this does not cover: a command's own side effects
+when it was cut off half-way, and anything outside the code directory.
+
+**Messages are immutable** (`mailbox.py`): the log is append-only, "read" is an appended event, a line cut off by a crash spoils only itself.
+
+**Approval is a person's** unless the project sets `PIPELINE_AUTO_APPROVE=1`. A decision (`codebot pipeline approve|reject NAME`) is recorded
+for one arrival at one node; the next approval node, or the same node reached again, waits again. A rejection, like a failed gate, follows only
+an edge labelled `when: fail`. A finished run says what it can claim (`result`): `verified` (its examples or tests gates passed),
+`approved_unverified` (a person approved; nothing was checked mechanically), `unverified`, `rejected`, `exhausted_time`, `cancelled`.
+
+**How a visit ended** is recorded per member (`outcome`): `completed` (the agent said so), `checked` (its check passed and it had nothing new
+to look at), `exhausted_turns`, `exhausted_refusals`, `exhausted_time`, `skipped`, `failed`, `cancelled`. A manager's RESULT message carries
+it. None of them says the work is right: gates do.
+
+**Time budgets.** An agent's `limits.max_minutes` bounds one visit of a node; the project's `limits.max_minutes` (or `PIPELINE_MINUTES`) bounds
+the run, which then ends `EXHAUSTED`. Time used is saved with every step, so a restart does not refund it; a model call or a command gets no
+more than what is left (a model call at least 30 s, and a minute of grace). A thermal pause counts as time used.
+
+**Rollback** only in a tree codebot owns (`schedule.owned_tree`: prepared by `codebot start` and on the branch `codebot/<name>` or under
+codebot's `workspaces/` or `bench/runs/`), and only after the state being left is saved as a snapshot commit under
+`refs/codebot/set-aside/` (tracked and untracked files) and as a patch artifact. Elsewhere the work is kept and the run says why.
+
+**Files** are reached from the workspace one path component at a time without following a symbolic link (`scope.py`): a link placed in the
+workspace, before or after a path was checked, is not read through and not written through.
 
 ## 6. Execution lifecycle (later milestones)
 

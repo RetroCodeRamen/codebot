@@ -36,16 +36,49 @@ def resolve(workspace, rel):
     if path != root and not path.startswith(root + os.sep): raise ValidationError([f"path escapes workspace: {rel!r}"])
     return path
 
+def _parent(workspace, rel, create=False):
+    """(directory fd, file name) for rel, reached from the workspace one component at a time without following a symbolic link. A check of the
+    path as text followed by an open of the path can be made to disagree (a link put in place in between, or already there); a walk by
+    descriptor cannot: whatever is opened is inside the workspace."""
+    parts = _norm(rel).split("/"); fd = os.open(os.path.realpath(workspace), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            if part in ("", "."): continue
+            try: nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except FileNotFoundError:
+                if not create: raise
+                os.mkdir(part, dir_fd=fd); nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd); fd = nxt
+    except OSError as e:
+        os.close(fd)
+        if isinstance(e, FileNotFoundError): raise
+        raise ValidationError([f"{rel}: a directory on the way is a symbolic link or not a directory"])
+    return fd, parts[-1]
+
 def read_text(workspace, agent, rel, limit=200_000):
     if not can_read(agent, rel): raise ValidationError([f"read denied: {rel}"])
-    path = resolve(workspace, rel)
-    with open(path, encoding="utf-8", errors="replace") as f: return f.read(limit)
+    fd, name = _parent(workspace, rel)
+    try:
+        try: f = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+        except OSError as e:
+            if isinstance(e, FileNotFoundError): raise
+            raise ValidationError([f"{rel} is a symbolic link; a link is not read"])
+        with os.fdopen(f, "r", encoding="utf-8", errors="replace") as fh: return fh.read(limit)
+    finally: os.close(fd)
 
 def write_text(workspace, agent, rel, text):
+    """Atomic: the new text is written beside the file and renamed over it (a link of that name is replaced, never followed)."""
     if not can_write(agent, rel): raise ValidationError([f"write denied: {rel}"])
-    path = resolve(workspace, rel)
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f: f.write(text)
-    os.replace(tmp, path)
+    fd, name = _parent(workspace, rel, create=True)
+    try:
+        tmp = f".{name}.{os.getpid()}.tmp"
+        f = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=fd)
+        try:
+            with os.fdopen(f, "w", encoding="utf-8") as fh: fh.write(text); fh.flush(); os.fsync(fh.fileno())
+            os.replace(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)
+        except BaseException:
+            try: os.unlink(tmp, dir_fd=fd)
+            except OSError: pass
+            raise
+    finally: os.close(fd)
     return rel

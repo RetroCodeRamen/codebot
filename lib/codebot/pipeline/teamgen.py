@@ -83,15 +83,22 @@ def clean(choice, spec):
         notes.append(f"{w['id']}: dropped, it had no file to write")
     out = [w for w in out if w["files"]]; ids = {w["id"] for w in out}
     for w in out: w["needs"] = [rename.get(n, n) for n in w["needs"] if rename.get(n, n) in ids and rename.get(n, n) != w["id"]]
-    return _ordered(out), notes
+    out, cycle = _ordered(out)
+    if cycle: notes.append(f"{', '.join(cycle)} need each other in a circle, which no build order satisfies: their `needs` were dropped and they are built in the order given")
+    return out, notes
 
 def _ordered(parts):
-    """Parts after the ones they need (the given order where it is free; a cycle keeps the given order)."""
-    done, out, left = set(), [], list(parts)
+    """(parts after the ones they need, the ids caught in a dependency cycle). Where the order is free it is the given one. Parts in a cycle
+    (or waiting on one) lose their `needs` and keep the given order: the caller says so."""
+    done, out, left, cycle = set(), [], list(parts), []
     while left:
-        ready = [w for w in left if all(n in done for n in w["needs"])] or left[:1]
+        ready = [w for w in left if all(n in done for n in w["needs"])]
+        if not ready:
+            cycle = [w["id"] for w in left]
+            for w in left: w["needs"] = []
+            ready = left[:1]
         w = ready[0]; out.append(w); done.add(w["id"]); left.remove(w)
-    return out
+    return out, cycle
 
 def fit(spec, parts, num_ctx=None, reply_tokens=None):
     """Does the whole program fit in one agent's context window? One agent must hold the spec, the whole program as it is and the whole
@@ -136,8 +143,9 @@ def _final(has_examples):
     return ({"id": "gate", "type": "gate", "check": "examples", "max_retries": 2} if has_examples else
             {"id": "gate", "type": "approve", "description": "SPEC.md has no example the harness can run: a person decides"})
 
-def small_team(spec, meta, name="designed"):
-    """plan -> build -> review -> fix: a planner, a builder (the drafts loop builds; the same member fixes) and a reviewer with a fresh context."""
+def small_team(spec, meta, name="designed", review=True):
+    """plan -> build -> review -> fix: a planner, a builder (the drafts loop builds; the same member fixes) and a reviewer with a fresh context.
+    review=False stops after the build (plan -> build): a comparison arm, not something the designer chooses."""
     has_examples = drafts.coverage(spec or "")["examples"] > 0
     agents = {
         "planner": _agent("planner", "Planner", "plan", "Plan how the program in SPEC.md will be built.", PLANNER, ["**"], ["PLAN.md"], ["read", "list"], memory="none", turns=6, reply=1500),
@@ -150,6 +158,12 @@ def small_team(spec, meta, name="designed"):
              {"id": "fix", "type": "run", "agent": "builder", "action": "fix"}, _final(has_examples), {"id": "done", "type": "end"}]
     edges = _wire(["start", "plan", "build", "review", "fix", "gate", "done"], has_examples, "fix", meta)
     meta["template"] = "designed"; meta["shape"] = "plan-build-review-fix"
+    if not review:
+        agents.pop("reviewer"); members = [x for x in members if x["id"] != "reviewer"]; nodes = [n for n in nodes if n["id"] not in ("review", "fix")]
+        if has_examples: nodes[-2] = {"id": "gate", "type": "gate", "check": "examples", "max_retries": 0}
+        edges = _wire(["start", "plan", "build", "gate", "done"], False, None, {"notes": []})
+        if has_examples: edges[-1]["when"] = "pass"
+        meta["shape"] = "plan-build"
     return _bundle(name, agents, members, None, nodes, edges, 120)
 
 def large_team(parts, spec, meta, name="designed"):
@@ -214,8 +228,9 @@ def _bundle(name, agents, members, pods, nodes, edges, max_steps, reserved=None)
     return bundle
 
 def compile_team(choice, spec, name="designed", num_ctx=None, reply_tokens=None, shape=None):
-    """(bundle, meta). shape forces "small" or "large" (PIPELINE_SHAPE); otherwise the estimate decides. A program with fewer than two usable
-    parts is always the small team: there is nothing to hand to separate teams."""
+    """(bundle, meta). shape forces "small", "large" or "plan" (PIPELINE_SHAPE; "plan" is plan -> build with no review, for comparisons);
+    otherwise the estimate decides. A program with fewer than two usable parts is always the small team: there is nothing to hand to separate
+    teams. meta["fit"] is the prediction; a finished run's `fit_actual` is what it turned out to be."""
     parts, notes = clean(choice, spec)
     meta = {"summary": str((choice or {}).get("summary") or "")[:400], "notes": notes, "workers": [p["id"] for p in parts]}
     meta["fit"] = f = fit(spec, parts, num_ctx, reply_tokens)
@@ -223,4 +238,5 @@ def compile_team(choice, spec, name="designed", num_ctx=None, reply_tokens=None,
     if not large and not f["fits"] and shape != "small":
         notes.append("the program is estimated not to fit one context, but it was not split into two or more parts: built as one")
     meta["reason"] = ("forced " + shape + ": " if shape else "") + f["why"]
-    return (large_team(parts, spec, meta, name) if large else small_team(spec, meta, name)), meta
+    if large: return large_team(parts, spec, meta, name), meta
+    return small_team(spec, meta, name, review=shape != "plan"), meta

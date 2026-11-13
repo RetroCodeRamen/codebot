@@ -11,6 +11,7 @@ def main(argv=None):
               "       python3 -m codebot.pipeline status <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline cancel <project> [--home DIR]\n"
               "       python3 -m codebot.pipeline approve <project> [--home DIR]\n"
+              "       python3 -m codebot.pipeline reject <project> [REASON...] [--home DIR]\n"
               "       python3 -m codebot.pipeline design <project> [--home DIR] [--spec PATH] [--template NAME]", file=sys.stderr)
         return 2
     cmd = argv[0]; args = argv[1:]
@@ -32,7 +33,7 @@ def main(argv=None):
     home = None
     if "--home" in args:
         i = args.index("--home"); home = args[i + 1]; del args[i:i + 2]
-    if cmd in ("step", "run", "status", "design", "cancel", "init", "approve"):
+    if cmd in ("step", "run", "status", "design", "cancel", "init", "approve", "reject"):
         if not args: return main(["--help"])
         from codebot.config import Project
         name = args[0]
@@ -49,9 +50,10 @@ def main(argv=None):
         if cmd == "cancel":
             from . import schedule
             print(json.dumps(schedule.cancel(proj), default=str)); return 0
-        if cmd == "approve":
+        if cmd in ("approve", "reject"):
             from . import schedule, runtime as R
-            ev = schedule.approve(proj)
+            ev = schedule.approve(proj) if cmd == "approve" else schedule.reject(proj, reason=" ".join(args[1:]))
+            if ev.get("error"): print(json.dumps({"ok": False, "error": ev["error"], "status": ev.get("status")})); return 1
             out = {k: v for k, v in ev.items() if k != "run"}; out["run"] = ev.get("run") or R.load_run(proj)
             print(json.dumps(out, default=str)); return 0
         if cmd == "init":
@@ -93,8 +95,8 @@ def main(argv=None):
         if "--max" in args:
             i = args.index("--max"); max_steps = int(args[i + 1])
         run, events = schedule.run_until_idle(proj, max_steps=max_steps)
-        print(json.dumps({"status": (run or {}).get("status"), "steps": (run or {}).get("step_count"),
-                          "error": (run or {}).get("error"), "events": events[-30:]}, default=str))
+        print(json.dumps({"status": (run or {}).get("status"), "result": (run or {}).get("result"), "steps": (run or {}).get("step_count"),
+                          "error": (run or {}).get("error"), "warnings": (run or {}).get("warnings") or [], "events": events[-30:]}, default=str))
         return 0 if (run or {}).get("status") == "COMPLETED" else 1
     print(f"unknown command {cmd}", file=sys.stderr); return 2
 

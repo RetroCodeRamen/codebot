@@ -61,7 +61,7 @@ def listing(ws, agent, limit=LIST_MAX):
         dirs[:] = sorted(d for d in dirs if d not in SKIP and not d.startswith("."))
         for f in sorted(files):
             rel = os.path.relpath(os.path.join(root, f), ws).replace(os.sep, "/")
-            if f.startswith(".") or f.endswith(".tmp"): continue
+            if f.startswith(".") or f.endswith(".tmp") or os.path.islink(os.path.join(root, f)): continue
             try:
                 if not scope.can_read(agent, rel): continue
             except ValidationError: continue
@@ -91,10 +91,11 @@ def read(ws, rd, agent, path):
     if len(text) > READ_CHARS: text = text[:READ_CHARS] + f"\n... (cut after {READ_CHARS} characters)"
     return f"{path}:\n```\n{text}\n```" if text else f"{path} is empty"
 
-def run(proj, ws, agent, member, command):
+def run(proj, ws, agent, member, command, cap_s=None):
     command = (command or "").strip()
     if not command: raise ToolError("run needs a command")
     timeout = int((agent.get("limits") or {}).get("run_seconds") or proj.get("PIPELINE_RUN_TIMEOUT", 120, int))
+    if cap_s is not None: timeout = max(1, min(timeout, int(cap_s)))             # never past the visit's or the run's time budget
     try: rc, out = sandbox.run(drafts._at(proj, ws), command, timeout=timeout, task=member)
     except sandbox.Denied as e: raise ToolError(f"that command is not allowed: {e}")
     return f"exit status {rc}\n{out.strip()}".strip()
@@ -174,11 +175,16 @@ def summary(action):
     if a == "answer": return f"answer: {(action.get('text') or '')[:200]}"
     return a or "?"
 
-def record(rd, member, visit, node, action, result, sha=None):
+def record(rd, member, visit, node, action, result, sha=None, inv=None):
+    """One turn. A turn already recorded for this invocation (the action was carried out again after a crash) is returned, not added."""
     os.makedirs(rd, exist_ok=True)
-    row = {"member": member, "visit": visit, "node": node, "action": action.get("action"), "summary": summary(action), "path": action.get("path"), "sha": sha,
+    if inv:
+        for r in turns(rd, member, visit):
+            if r.get("inv") == inv: return r
+    row = {**({"inv": inv} if inv else {}), "member": member, "visit": visit, "node": node, "action": action.get("action"), "summary": summary(action), "path": action.get("path"), "sha": sha,
            "key": json.dumps({k: v for k, v in action.items() if k != "reason"}, sort_keys=True), "result": (result or "")[:RESULT_CHARS]}
-    with open(_path(rd), "a", encoding="utf-8") as f: f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    from .journal import append_line
+    append_line(_path(rd), json.dumps(row, ensure_ascii=False))
     return row
 
 def turns(rd, member, visit=None):

@@ -15,13 +15,12 @@ harness, not the model, makes the decisions. Contributions that make that measur
   change an acceptance criterion after it is frozen.
 - **Tests with every change**, and a commit only when the suite passes (check the test command's own exit status, not a piped `tail`).
 - **Real-model evidence beats fake-model tests.** If a change is meant to make the agent better, say how you measured it (`docs/BENCHMARK.md`,
-  `docs/MODEL_EVAL.md`), with numbers, including what got worse. A change to how assertions are repaired or validated must keep
-  `tests/test_w_corpus.py` green: no rule may reject or change an assertion that holds on the reference solution.
+  `docs/MODEL_EVAL.md`), with numbers, including what got worse. Measure on a benchmark whose expected outcome is known
+  independently (`bench/toolbox/README.md`), never on tests or reference solutions a model wrote.
 - **Docs follow the code.** `tests/test_r_docs.py` fails when a command, config key or path is missing from the docs.
 - Standard library Python only in `lib/`; match the surrounding style (dense, commented where a decision is not obvious).
 
 ## Good first contributions
 
 - A `codebot plan-auto` command that runs the unattended planner on your own spec.
-- More benchmark levels' mutant sets and splitter replies for the replay corpus (`tests/corpus/build_corpus.py`).
-- Running `codebot eval gate` / `codebot eval planner` on hardware we do not have and reporting the numbers.
+- More tools for the toolbox benchmark (`bench/toolbox/tools.py`): the real tool is the oracle, so a new tool needs only its description and cases.

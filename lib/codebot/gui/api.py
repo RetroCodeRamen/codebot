@@ -707,7 +707,17 @@ def pipeline_approve(ctx, body, name):
     from ..config import Project
     from ..pipeline import schedule, runtime as R
     ev = schedule.approve(Project(name, ctx.home))
+    if ev.get("error"): raise ApiError(ev["error"], 409)
     return {"ok": True, "status": ev.get("status"), "event": ev.get("event"), "run": ev.get("run") or R.load_run(Project(name, ctx.home))}
+
+def pipeline_reject(ctx, body, name):
+    if ctx.demo: raise ApiError("demo mode: actions are disabled", 409)
+    ctx.proj_dir(name)
+    from ..config import Project
+    from ..pipeline import schedule, runtime as R
+    ev = schedule.reject(Project(name, ctx.home), reason=str(body.get("reason") or "")[:500])
+    if ev.get("error"): raise ApiError(ev["error"], 409)
+    return {"ok": True, "status": ev.get("status"), "run": ev.get("run") or R.load_run(Project(name, ctx.home))}
 
 def pipeline_templates(ctx, q, name=None):
     from ..pipeline import design
@@ -805,6 +815,7 @@ POST = [
     (r"/api/project/([^/]+)/pipeline/cancel", pipeline_cancel),
     (r"/api/project/([^/]+)/pipeline/init", pipeline_init),
     (r"/api/project/([^/]+)/pipeline/approve", pipeline_approve),
+    (r"/api/project/([^/]+)/pipeline/reject", pipeline_reject),
     (r"/api/pipeline/templates", pipeline_templates),
     (r"/api/project/([^/]+)/delete", project_delete),
     (r"/api/inbox/ack", inbox_ack), (r"/api/bench/start", bench_start), (r"/api/bench/validate", bench_validate),

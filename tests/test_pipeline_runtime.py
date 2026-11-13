@@ -601,7 +601,8 @@ class TestAgentsDoWork(unittest.TestCase):
         proj, run, events, s = self._run("w6", loop, steps=200)
         self.assertEqual(run["status"], "FAILED", events[-5:])
         self.assertIn("gate check failed 3 times", run["error"])
-        self.assertEqual(run["warnings"], ["dev used all 16 turns on node build without finishing"] * 2)       # the third visit ends the script
+        self.assertEqual(run["warnings"], ["dev on node build: it used all 16 turns without finishing"] * 2)       # the third visit ends the script
+        self.assertEqual([o["outcome"] for o in run["outcomes"]], ["exhausted_turns", "exhausted_turns", "completed"])
         self.assertEqual(len(s.seen), 41)                          # 16 + 16, then the 8 left of the script and its "finish"
 
     def test_looking_again_at_what_has_not_changed_is_refused(self):
@@ -626,7 +627,8 @@ class TestAgentsDoWork(unittest.TestCase):
     def test_three_refused_turns_in_a_row_end_the_node_with_a_warning(self):
         proj, run, events, s = self._run("w11", [BAD, {"action": "check"}] + [{"action": "check"}] * 5)
         self.assertEqual(run["status"], "FAILED", events[-4:])
-        self.assertEqual(run["warnings"][0], "dev was stopped after 3 refused turns in a row on node build without finishing")
+        self.assertEqual(run["warnings"][0], "dev on node build: it was stopped after 3 refused turns in a row without finishing")
+        self.assertEqual(run["outcomes"][0]["outcome"], "exhausted_refusals")
         self.assertEqual([m for m, *_ in s.seen[:5]], ["dev"] * 5); self.assertIn("gate check failed", run["error"])
 
     def test_a_workers_check_is_about_its_own_files(self):
@@ -677,7 +679,9 @@ def _project(home, name, bundle, meta, spec=TWO, git=False):
     pd = os.path.join(home, "projects", name); os.makedirs(pd); code = os.path.join(home, "code", name); os.makedirs(code)
     with open(os.path.join(code, "SPEC.md"), "w") as f: f.write(spec)
     with open(os.path.join(pd, "project.env"), "w") as f: f.write(f'WORKDIR="{code}"\nRUNDIR="{code}"\n')
-    if git: subprocess.run(["git", "-C", code, "init", "-q"], check=True); open(os.path.join(pd, ".git-prepped"), "w").close()
+    if git:             # as `codebot start` leaves a new folder: a repository on the project's own branch
+        subprocess.run(["git", "-C", code, "init", "-q"], check=True); subprocess.run(["git", "-C", code, "checkout", "-q", "-b", f"codebot/{name}"], check=True)
+        open(os.path.join(pd, ".git-prepped"), "w").close()
     design.write_project_pipeline(Project(name, home), bundle, template_meta=meta)
     return Project(name, home)
 
@@ -903,7 +907,7 @@ class TestCheckpoints(unittest.TestCase):
     def test_without_a_branch_of_its_own_nothing_is_committed_or_reset(self):
         proj, run, events, s, log, math = self._team("c4", [BAD, FIN, self.ZERO, FIN], git=False)
         self.assertEqual(run["status"], "FAILED", events[-6:])                             # the broken work stayed, so the gate fails
-        self.assertIn("it was kept, because there is no git checkpoint to go back to", run["warnings"][0])
+        self.assertEqual(run["warnings"][0], "builder's work on fix was kept although it broke passing examples twice: no rollback, because the code directory is not a git repository")
         self.assertFalse(os.path.isdir(os.path.join(proj.workdir, ".git")))
 
 class TestCrashRecovery(unittest.TestCase):

@@ -42,6 +42,8 @@ def empty_run(bundle, *, pipeline_ref=None):
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "updated": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "error": None,
+        "fit": ((bundle.get("project") or {}).get("generated") or {}).get("fit"),      # the Team Designer's size estimate, to hold against fit_actual
+        "used_s": 0.0,
         "last": None
     }
 

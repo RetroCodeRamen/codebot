@@ -74,7 +74,7 @@ def main():
                         model=roles.model(proj, "splitter"), think=roles.think(proj, "splitter"), role="splitter")
         raw = r.get("content") or ""; subs = json.loads(raw)["subtasks"]
     except Exception as e: subs = None; why = f"no usable reply: {type(e).__name__}: {str(e)[:200]}"
-    if raw is not None:                                    # kept for the replay corpus (tests/corpus/build_corpus.py)
+    if raw is not None:                                    # kept as evidence of what the model proposed
         with open(proj.p(f"split.reply.{task['id']}.json"), "w") as f: f.write(raw)
     kids, fx = build(proj, task["id"], subs, task.get("files"), parent, notes, d.get("avoid"), done) if subs else ([], {})
     if subs and not kids: why = "every proposed child was unusable"
