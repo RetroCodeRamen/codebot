@@ -591,7 +591,7 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         m["state"] = "READY"
         R.save_run(proj, run)
         return {"status": "BUSY", "owner": e.owner, "run": run}
-    t0 = time.time(); left = _left_s(proj, bundle, run, m, agent)
+    t0 = time.time(); left = _left_s(proj, bundle, run, m, agent); given = ()
     try:
         if not replay:
             journal.event(rd, inv, "prepared", member=member_id, node=node.get("id"), visit=visit)
@@ -600,10 +600,10 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
                 action = {"action": "end", "outcome": forced, "reason": ENDED[forced].format(turns=limit, minutes=minutes)}
                 if forced != "checked": run.setdefault("warnings", []).append(f"{member_id} on node {node.get('id')}: {action['reason']}")
             else:
-                task, extra = _task_text(bundle, proj, node, agent, run)
+                task, extra = _task_text(bundle, proj, node, agent, run); given = tuple(extra)
                 try:
                     action, agent, raw, used = invoke.invoke(bundle, rd, member_id, task, proj=proj, chat_fn=chat_fn, extra_files=extra or None, acts=acts,
-                                                             history=tools.history(rd, member_id, visit, agent.get("memory") or "task"),
+                                                             history=tools.history(rd, member_id, visit, agent.get("memory") or "task", given),
                                                              timeout=None if left is None else max(30, min(900, left + 60)))
                     _usage(run, member_id, used)
                 except invoke.InvokeError as e: action = {"action": "invalid", "problem": f"your reply could not be used: {e}"}
@@ -614,7 +614,7 @@ def _invoke_member(bundle, proj, run, member_id, node, chat_fn):
         act = action.get("action"); ev = {"member": member_id, "action": act, "node": node.get("id")}
         prior = next((r for r in tools.turns(rd, member_id, visit) if r.get("inv") == inv), None) if replay else None
         sha = tools.fingerprint(ws, agent, action) if act not in ("end", "invalid") else None
-        same = tools.unchanged(rd, ws, agent, member_id, visit, action, sha) if not replay and act not in ("end", "invalid") else None
+        same = tools.unchanged(rd, ws, agent, member_id, visit, action, sha, given) if not replay and act not in ("end", "invalid") else None
         if act == "invalid": ev["error"] = action.get("problem") or "your reply could not be used"
         elif act == "end": ev = apply_action(bundle, proj, run, member_id, agent, action, node, inv=inv)
         elif act not in acts and act != "noop": ev["error"] = f"you may not use {act!r} here; your actions are: {', '.join(acts)}"

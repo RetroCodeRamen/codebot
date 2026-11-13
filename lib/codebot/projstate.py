@@ -146,6 +146,7 @@ def drafts_info(state_dir, env):
     b, settings = st.get("best") or None, st.get("settings") or {}
     try: budget = float(env.get("DRAFTS_MINUTES")) if env.get("DRAFTS_MINUTES") else None
     except ValueError: budget = None
+    if budget == 0: budget = None                         # no time cap
     return {"started": True, "round": st.get("round", 0), "draft": st.get("draft", 0), "fresh_next": st.get("fresh"),
             "best": {"round": b.get("round"), "draft": b.get("draft"), "examples": b.get("examples"), "declared": b.get("declared", 0),
                      "commit": b.get("commit"), "files": b.get("files")} if b else None,

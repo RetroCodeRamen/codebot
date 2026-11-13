@@ -234,8 +234,8 @@ def compile_team(choice, spec, name="designed", num_ctx=None, reply_tokens=None,
     parts, notes = clean(choice, spec)
     meta = {"summary": str((choice or {}).get("summary") or "")[:400], "notes": notes, "workers": [p["id"] for p in parts]}
     meta["fit"] = f = fit(spec, parts, num_ctx, reply_tokens)
-    large = (shape == "large" or (shape != "small" and not f["fits"])) and len(parts) >= 2
-    if not large and not f["fits"] and shape != "small":
+    large = (shape == "large" or (shape not in ("small", "plan") and not f["fits"])) and len(parts) >= 2
+    if not large and not f["fits"] and shape not in ("small", "plan"):
         notes.append("the program is estimated not to fit one context, but it was not split into two or more parts: built as one")
     meta["reason"] = ("forced " + shape + ": " if shape else "") + f["why"]
     if large: return large_team(parts, spec, meta, name), meta

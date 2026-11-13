@@ -192,11 +192,17 @@ class TestRounds(Proj):
         self.assertEqual((r["content"], r["done_reason"], r["gen_tokens"]), ("a\nb\n", "enough", 2))
         r = ollama.chat(self.proj(), msgs, stop_if=lambda t: None)
         self.assertEqual((r["content"], r["done_reason"], r["gen_tokens"], r["prompt_tokens"]), ("a\nb\n", "stop", 20, 100))
-        self.fake.script = ["whole"]; self.assertEqual(ollama.chat(self.proj(), msgs)["content"], "whole"); self.assertFalse(self.fake.requests[-1]["stream"])
+        # every call is streamed, so the timeout is a stall timeout, not a cap on how long a reply may take (2026-11-13)
+        self.fake.script = ["whole"]; self.assertEqual(ollama.chat(self.proj(), msgs)["content"], "whole"); self.assertTrue(self.fake.requests[-1]["stream"])
     def test_the_time_cap_counts_only_rounds_and_settings_apply_at_once(self):
-        self.set_env(DRAFTS_MINUTES="0"); self.fake.script = [HALF, HALF]
+        self.set_env(DRAFTS_MINUTES="0.00001"); self.fake.script = [HALF, HALF]
         evs = self.run_until_done()
         self.assertEqual([e["event"] for e in evs], ["round", "finished_incomplete"]); self.assertEqual(evs[-1]["stop"], "time cap")
+    def test_no_time_budget_means_no_time_cap(self):
+        # 0 (the default) is no limit: a real build may run for days; only a benchmark sets a budget (2026-11-13)
+        self.set_env(DRAFTS_MINUTES="0"); self.fake.script = [HALF, HALF, GOOD]
+        evs = self.run_until_done()
+        self.assertEqual(evs[-1]["event"], "all_done"); self.assertGreaterEqual(len(evs), 3)
     def test_a_model_error_does_not_count_a_round(self):
         def boom(*a, **k): raise ollama.ModelError("cannot reach the local model server")
         real = D.ollama.chat; D.ollama.chat = boom
@@ -245,6 +251,30 @@ class TestLoopWatch(unittest.TestCase):
         mod = "".join(f"def {n}(graph):\n{body}    return _{n}(graph, {i})\n\n" for i, n in enumerate(("resolve", "groups", "find_cycle", "transitive_deps", "dependents", "resolve_subset")))
         self.assertIsNone(self.feed("```python\n" + mod + "```\n"))
         self.assertIsNotNone(self.feed("```python\n" + body * 4 + "```\n"))      # the check alone, over and over, is a loop
+    RUNAWAY_BODY = "".join(f"    {l}\n" for l in ("lines = []", "for i, filename in enumerate(files):", "    try:", "        with open(filename) as f:",
+                                                  "            file_lines = f.readlines()", "        if i > 0:", "            lines.append('\\n')",
+                                                  "        lines.append(f'==> {filename} <==\\n')", "        for j, line in enumerate(file_lines, 1):",
+                                                  "            lines.append(f'{j}\\t{line}')", "    except IOError:", "        print(filename, file=sys.stderr)", "return lines"))
+    def runaway(self, n):
+        # 2026-11-13, a team builder's common.py: one function written again and again, each copy a new name and docstring and the same body
+        name = "get_lines_with_numbers"; out = []
+        for i in range(n):
+            name += f"_and_part{i}"; out.append(f'def {name}(files):\n    """Get lines with part {i}."""\n{self.RUNAWAY_BODY}\n')
+        return "".join(out)
+    def test_one_function_copied_under_new_names_is_a_loop(self):
+        text = "```python\nimport sys\n\n" + self.runaway(26) + "```\n"
+        at = self.feed(text); self.assertIsNotNone(at); self.assertLess(at, len(text) / 2)
+        self.assertIsNone(self.feed("```python\nimport sys\n\n" + self.runaway(7) + "```\n"))           # a few copies may be real code
+    def test_the_same_code_in_many_files_is_not_a_loop(self):
+        # toolbox_20 round 1 (2026-11-13): 20 tool files each reading their input with the same lines
+        files = "".join(f"### tool{i}.py\n```python\nimport sys\n\ndef main(files):\n{self.RUNAWAY_BODY}\nmain(sys.argv[1:])  # tool {i}\n```\n" for i in range(20))
+        self.assertIsNone(self.feed(files))
+    def test_a_file_inside_a_json_action_is_watched_line_by_line(self):
+        reply = json.dumps({"action": "write", "path": "common.py", "content": "import sys\n\n" + self.runaway(26)})
+        w = D.loop_watch(json_text=True); at = next((i for i in range(0, len(reply), 20) if w(reply[:i])), None)
+        self.assertIsNotNone(at); self.assertLess(at, len(reply) / 2)
+        short = json.dumps({"action": "write", "path": "common.py", "content": "import sys\n\n" + self.runaway(3)})
+        w = D.loop_watch(json_text=True); self.assertIsNone(next((i for i in range(0, len(short) + 20, 20) if w(short[:i])), None))
 
 class TestQuoteLines(unittest.TestCase):
     def test_a_compiler_error_gets_the_line_it_names(self):

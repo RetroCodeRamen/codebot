@@ -554,7 +554,8 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertIn('{"action": "check"}', system); self.assertIn('{"action": "run", "command"', system)
         self.assertIn("Files in the code directory:\nSPEC.md", first); self.assertNotIn("Your turns on this task", first)
         self.assertIn("1. list\nSPEC.md (", s.seen[1][2])
-        self.assertIn("2. read SPEC.md\nSPEC.md:\n```\n# Calc", s.seen[2][2])
+        self.assertIn('2. read SPEC.md\nerror: the text of SPEC.md is shown whole in your task, under "### file SPEC.md". You have everything you need: '
+                      "write your files now", s.seen[2][2])                        # the task shows it; a second copy is not added
         self.assertIn("3. write mathx.py (28 characters)\nwrote mathx.py", s.seen[3][2])
         after_check = s.seen[4][2]
         self.assertIn("4. check\nThe examples do not pass yet: 0 of 1 spec examples pass", after_check); self.assertIn("add(2, 3)", after_check)
@@ -596,6 +597,17 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertEqual(run["status"], "COMPLETED", events)
         self.assertIn("your reply was cut off after 4000 tokens", shown[1]); self.assertIn("your reply could not be used: not JSON", shown[2])
 
+    def test_a_reply_stopped_as_a_loop_is_a_turn_that_says_so(self):
+        home = _home(); self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        proj = _proj(home, "w5b", os.path.join(home, *self.CALC), SPEC)
+        replies = [{"content": '{"action": "write", "path": "mathx.py", "content": "def add(a, b', "done_reason": "loop"},
+                   {"content": json.dumps(GOOD)}, {"content": json.dumps(FIN)}]
+        shown = []
+        def chat(p, messages, **kw): shown.append(messages[-1]["content"]); return replies.pop(0)
+        run, events = schedule.run_until_idle(proj, chat_fn=chat, max_steps=40)
+        self.assertEqual(run["status"], "COMPLETED", events)
+        self.assertIn("your reply was stopped because it kept writing the same lines again", shown[1])
+
     def test_an_agent_that_never_finishes_runs_out_of_turns_and_the_gate_decides(self):
         loop = [{"action": "run", "command": f"echo {i}"} for i in range(40)]
         proj, run, events, s = self._run("w6", loop, steps=200)
@@ -620,7 +632,7 @@ class TestAgentsDoWork(unittest.TestCase):
     def test_after_a_passing_check_the_first_refused_turn_ends_the_node(self):
         proj, run, events, s = self._run("w9", [GOOD, {"action": "check"}, {"action": "read", "path": "SPEC.md"}, {"action": "check"}, {"action": "list"}, FIN])
         self.assertEqual(run["status"], "COMPLETED", events)
-        self.assertEqual(len(s.seen), 4)                               # write, check, read, the refused check: no fifth call
+        self.assertEqual(len(s.seen), 3)                               # write, check, the refused read of SPEC.md (in its task): no fourth call
         self.assertNotIn("warnings", run)                              # its part was done; nothing to warn about
         self.assertEqual(events[[e.get("event") for e in events].index("run_done") - 1]["result"]["reason"], "its check passed and it had nothing new to look at")
 
@@ -630,6 +642,27 @@ class TestAgentsDoWork(unittest.TestCase):
         self.assertEqual(run["warnings"][0], "dev on node build: it was stopped after 3 refused turns in a row without finishing")
         self.assertEqual(run["outcomes"][0]["outcome"], "exhausted_refusals")
         self.assertEqual([m for m, *_ in s.seen[:5]], ["dev"] * 5); self.assertIn("gate check failed", run["error"])
+
+    def test_a_read_cut_from_the_history_may_be_read_again(self):
+        # 2026-11-13: the budget cut a builder's read of SPEC.md mid-sentence, the read again was refused as "its text is above", and the builder
+        # was stopped after three refusals having written nothing. Only a read that the history still shows whole is refused.
+        from codebot.pipeline import tools
+        rd = tempfile.mkdtemp(prefix="cb-turns-"); ws = tempfile.mkdtemp(prefix="cb-ws-")
+        self.addCleanup(shutil.rmtree, rd, ignore_errors=True); self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
+        agent = {"sees": {"read": ["**"], "write": ["b.py"]}}
+        for name, ch in (("A.md", "a"), ("B.md", "b")):
+            with open(os.path.join(ws, name), "w") as f: f.write((ch * 99 + "\n") * 110)          # 11000 characters each: both do not fit
+        for name in ("A.md", "B.md"):
+            act = {"action": "read", "path": name}
+            tools.record(rd, "dev", 1, "build", act, tools.read(ws, rd, agent, name), sha=tools.fingerprint(ws, agent, act))
+        shown = tools.history(rd, "dev", 1)
+        self.assertIn("1. read A.md", shown); self.assertIn("(cut)", shown.split("2. read B.md")[0]); self.assertNotIn("(cut)", shown.split("2. read B.md")[1])
+        again = lambda name: tools.unchanged(rd, ws, agent, "dev", 1, {"action": "read", "path": name}, tools.fingerprint(ws, agent, {"action": "read", "path": name}))
+        self.assertIsNone(again("A.md"))                                   # cut: it may see it again
+        self.assertEqual(again("B.md"), "you read B.md on turn 2 and it has not changed since: its text is above. You have everything you need: "
+                                        "write your file (b.py) now, the whole text, one file per turn")
+        self.assertIn("is shown whole in your task", tools.unchanged(rd, ws, agent, "dev", 1, {"action": "read", "path": "A.md"}, None, given=("A.md",)))
+        self.assertIn('2. read B.md\n(the text of B.md is shown whole in your task, under "### file B.md")', tools.history(rd, "dev", 1, given=("B.md",)))
 
     def test_a_workers_check_is_about_its_own_files(self):
         from codebot.pipeline import tools

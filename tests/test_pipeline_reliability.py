@@ -311,5 +311,9 @@ class TestTeamSizing(unittest.TestCase):
         home, bundle, meta = T._design(self, T.PAIR, PIPELINE_SHAPE="plan")
         self.assertEqual((meta["shape"], [m["id"] for m in bundle["team"]["members"]], [n["id"] for n in bundle["workflow"]["nodes"]]),
                          ("plan-build", ["planner", "builder"], ["start", "plan", "build", "gate", "done"]))
+        # 2026-11-13: forcing "plan" on a program estimated not to fit gave the manager's teams, so the toolbox series' plan arm on 10 and 20
+        # tools was a second copy of the full arm. A forced shape is the shape.
+        home, bundle, meta = T._design(self, T.BIG, NUM_CTX=16384, PIPELINE_SHAPE="plan")
+        self.assertFalse(meta["fit"]["fits"]); self.assertEqual(meta["shape"], "plan-build")
 
 if __name__ == "__main__": unittest.main()

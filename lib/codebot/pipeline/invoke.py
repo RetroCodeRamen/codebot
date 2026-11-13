@@ -40,8 +40,10 @@ def call_model(proj, messages, schema, model=None, temperature=0.2, num_predict=
     if chat_fn is not None:
         return chat_fn(proj, messages, schema=schema, model=model, temperature=temperature, num_predict=num_predict)
     from codebot import ollama
-    if timeout: return ollama.chat(proj, messages, schema=schema, model=model, temperature=temperature, num_predict=num_predict, timeout=timeout, retries=1)
-    return ollama.chat(proj, messages, schema=schema, model=model, temperature=temperature, num_predict=num_predict)
+    from codebot import drafts
+    watch = drafts.loop_watch(json_text=True)          # a file written over and over inside the JSON is stopped, not run to the cap
+    if timeout: return ollama.chat(proj, messages, schema=schema, model=model, temperature=temperature, num_predict=num_predict, timeout=timeout, retries=1, stop_if=watch)
+    return ollama.chat(proj, messages, schema=schema, model=model, temperature=temperature, num_predict=num_predict, stop_if=watch)
 
 def parse_action(content):
     try: obj = json.loads(content)
@@ -68,6 +70,9 @@ def invoke(bundle, run_dir, member_id, task_text, *, proj=None, chat_fn=None, ex
     if isinstance(agent.get("model"), dict) and agent["model"].get("num_predict"): cap = int(agent["model"]["num_predict"])
     out = call_model(proj, messages, schema_for(acts), model=model, temperature=temp, num_predict=cap, chat_fn=chat_fn, timeout=timeout)
     usage = {k: out.get(k) or 0 for k in ("prompt_tokens", "gen_tokens", "secs")}
+    if out.get("done_reason") == "loop":
+        raise InvokeError("your reply was stopped because it kept writing the same lines again (the same code over and over with new names); "
+                          "write the file once, each function once, only what SPEC.md asks for")
     if out.get("done_reason") == "length":
         raise InvokeError(f"your reply was cut off after {cap} tokens before the JSON object ended; reply with one short action: a shorter command, fewer findings, or a smaller file")
     action = parse_action(out.get("content") or "")

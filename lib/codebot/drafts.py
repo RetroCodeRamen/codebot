@@ -45,6 +45,7 @@ MAX_TREE_FILES, MAX_TREE_BYTES = 2000, 50 * 1024 ** 2   # the code dir is copied
 GO_BIN = "/usr/local/go/bin"
 RUNAWAY_FACTOR, RUNAWAY_FLOOR = 3, 3000                 # the output cap of a reply once a complete reply has built (see the module docstring)
 LOOP_LINES, LOOP_REPEATS, LOOP_NEW = 8, 2, 0.10         # when a reply is stopped as a loop (loop_watch)
+LOOP_HEAVY = 8                                          # ... or when one file repeats the same run of lines this many times (loop_watch)
 EXC = re.compile(r"`([A-Z]\w*(?:Error|Exception))`")
 
 class DraftsError(Exception):
@@ -55,7 +56,7 @@ def dpath(proj, *a): return proj.p(D, *a)
 
 def settings(proj):
     g = proj.get
-    return {"minutes": g("DRAFTS_MINUTES", 60.0, float), "patience": g("DRAFTS_PATIENCE", 1, int), "max_rounds": g("DRAFTS_MAX_ROUNDS", 60, int),
+    return {"minutes": g("DRAFTS_MINUTES", 0.0, float), "patience": g("DRAFTS_PATIENCE", 1, int), "max_rounds": g("DRAFTS_MAX_ROUNDS", 60, int),
             "num_predict": g("DRAFTS_NUM_PREDICT", 6000, int), "temperature": g("DRAFTS_TEMPERATURE", 0.2, float), "seed": g("DRAFTS_SEED", 1, int)}
 
 # ---------- what the spec asks for ----------
@@ -403,16 +404,26 @@ def output_cap(st, cfg):
     m = st.get("max_complete") or 0
     return min(cfg["num_predict"], max(RUNAWAY_FLOOR, RUNAWAY_FACTOR * m)) if m else cfg["num_predict"]
 
-def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS, new=LOOP_NEW):
+def _unescape(text):
+    """The text of a JSON string as far as it has arrived (a write action's file), so its lines can be watched like a reply's own lines."""
+    return text.replace("\\\\", "\0").replace("\\n", "\n").replace('\\"', '"').replace("\\t", "\t").replace("\0", "\\")
+
+def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS, new=LOOP_NEW, heavy=LOOP_HEAVY, json_text=False):
     """A stop_if for ollama.chat: "loop" once the reply's last `lines` non-blank lines (stripped) have already appeared, as the same run of lines,
     `repeats` times before it without overlapping, and at most a share `new` of the lines since the last time are lines the reply had not written
     before. All 22 replies that ran to the token cap in the recorded runs (2026-10-18..20) were loops: the same dozen comment lines about operator
     precedence 28 times over, or the same file again and again. The first version of this rule had no `new` test, and it also cut good code:
     level_03 checks its input the same way in every function, and 6 of the 8 replies of one run (2026-10-20) were stopped at the third copy of that
     check. On the 428 recorded replies this rule stops 20 of the 22 runaways (at a median 38% of their length), 2 of the 390 replies that ended on
-    their own (both writing their file for the third time) and none of those 6."""
-    seen, done, fresh, at, known = {}, [], [], [0], set()
+    their own (both writing their file for the third time) and none of those 6.
+    `heavy`: also "loop" once the same run of lines has appeared `heavy` times before in the same file (since the last ``` fence or ### heading),
+    however many new lines are between the copies. A team builder's common.py (2026-11-13) wrote get_lines_with_numbers_and_headers_and_prefix...
+    26 times, each copy 15 lines the same and a new name and docstring, so the `new` test never held, until the 8000-token cap after 16 minutes.
+    Counted in the whole reply instead of per file it stops a 20-tool reply whose files each read their input the same way.
+    `json_text`: the reply is a JSON action whose file arrives escaped inside a string; its lines are watched as the file's lines."""
+    seen, done, fresh, at, known, start = {}, [], [], [0], set(), [0]
     def check(text):
+        if json_text: text = _unescape(text)
         k = text.rfind("\n")
         if k < at[0]: return None
         add, at[0] = text[at[0]:k], k + 1
@@ -420,14 +431,16 @@ def loop_watch(lines=LOOP_LINES, repeats=LOOP_REPEATS, new=LOOP_NEW):
             s = raw.strip()
             if not s: continue
             done.append(s); fresh.append(s not in known); known.add(s)
+            if s.startswith(("```", "### ")): start[0] = len(done)
             if len(done) < lines: continue
             ends = seen.setdefault(tuple(done[-lines:]), []); occ, last = [], len(done)
             for e in reversed(ends):
                 if e <= last - lines:
                     occ.append(e); last = e
-                    if len(occ) == repeats: break
+                    if len(occ) == max(repeats, heavy or 0): break
             ends.append(len(done))
-            if len(occ) == repeats and sum(fresh[occ[0]:]) <= new * (len(done) - occ[0]): return "loop"
+            if len(occ) >= repeats and sum(fresh[occ[0]:]) <= new * (len(done) - occ[0]): return "loop"
+            if heavy and sum(1 for e in occ if e - lines >= start[0]) >= heavy: return "loop"
         return None
     return check
 
@@ -444,7 +457,7 @@ def step(proj):
     except DraftsError as e: return {"event": "error", "error": str(e)}
     if st["finished"]: return final_event(st)
     cfg = st["settings"] = settings(proj); spec = _spec(proj); base_shown, named = _listing(dpath(proj, "baseline"))     # settings are read every round: a longer DRAFTS_MINUTES applies at once
-    if st["used_s"] > cfg["minutes"] * 60: return finish(proj, st, "time cap")
+    if cfg["minutes"] and st["used_s"] > cfg["minutes"] * 60: return finish(proj, st, "time cap")      # 0: no time cap (the default)
     if st["round"] >= cfg["max_rounds"]: return finish(proj, st, "round cap")
     t0 = time.time(); rnd = st["round"] + 1
     if st["fresh"]: draft, stale, dbest = st["draft"] + 1, 0, None; user = first_prompt(spec, st["names"], base_shown, named, st["language"])

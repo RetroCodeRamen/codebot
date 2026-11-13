@@ -17,7 +17,7 @@ def _streamed(r, stop_if, t0):
         o = json.loads(line.decode()); m = o.get("message") or {}
         parts.append(m.get("content") or ""); thought.append(m.get("thinking") or ""); pieces += 1
         if o.get("done"): o["message"] = {"role": "assistant", "content": "".join(parts), "thinking": "".join(thought)}; return o
-        if "\n" in parts[-1]:
+        if "\n" in parts[-1] or "\\n" in parts[-1]:          # a new line of the reply, or of a file inside a JSON string
             text = "".join(parts); why = stop_if(text)
             if why: return {"message": {"role": "assistant", "content": text, "thinking": "".join(thought)}, "eval_count": pieces, "done_reason": why,
                             "eval_duration": int((time.time() - t0) * 1e9)}
@@ -31,7 +31,9 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
     from . import roles
     thermal.wait(proj)
     if think and num_predict: num_predict = int(num_predict) + roles.think_budget(proj)
-    body = {"model": model or proj.get("CODEBOT_MODEL", "codebot-model"), "messages": messages, "stream": bool(stop_if), "think": think,
+    # Always streamed: `timeout` is then how long the server may go without sending anything (a stall), not how long a reply may take. A slow
+    # machine writing a long reply is not a failure; until 2026-11-13 a reply that took more than 15 minutes was dropped and asked for again.
+    body = {"model": model or proj.get("CODEBOT_MODEL", "codebot-model"), "messages": messages, "stream": True, "think": think,
             "keep_alive": proj.get("KEEP_ALIVE", "30m"), "options": {"num_ctx": tokens.num_ctx(proj)}}   # explicit on every request: a different value would reload the model
     if schema is not None: body["format"] = schema
     if temperature is not None: body["options"]["temperature"] = float(temperature)
@@ -44,7 +46,7 @@ def chat(proj, messages, schema=None, model=None, temperature=None, num_predict=
         t0 = time.time()
         req = urllib.request.Request(base_url(proj) + "/api/chat", data=data, headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r: out = _streamed(r, stop_if, t0) if stop_if else json.loads(r.read().decode())
+            with urllib.request.urlopen(req, timeout=timeout) as r: out = _streamed(r, stop_if or (lambda text: None), t0)
             msg = out.get("message") or {}
             ms = lambda k: round(out.get(k, 0) / 1e6)                     # Ollama reports nanoseconds
             st = {"prompt_tokens": out.get("prompt_eval_count", 0), "gen_tokens": out.get("eval_count", 0), "prompt_ms": ms("prompt_eval_duration"),

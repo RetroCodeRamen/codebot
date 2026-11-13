@@ -131,20 +131,36 @@ def fingerprint(ws, agent, action):
     except (ValidationError, OSError, UnicodeError): pass
     return None
 
-def unchanged(rd, ws, agent, member, visit, action, sha):
+def _next_step(agent, prev):
+    """What to do instead, for a refusal: an agent that may write and has written nothing this visit is told to write."""
+    mine = (agent.get("sees") or {}).get("write") or []
+    wrote = any(r.get("action") == "write" and not (r.get("result") or "").startswith("error:") for r in prev)
+    named = [p for p in mine if not any(c in p for c in "*?[")]
+    if mine and not wrote:
+        return f"You have everything you need: write {'your file (' + ', '.join(named) + ')' if named else 'your files'} now, the whole text, one file per turn"
+    return "Do something else, or finish"
+
+def unchanged(rd, ws, agent, member, visit, action, sha, given=()):
     """Why this action would show the agent nothing new, or None. The 30B model's first real run (2026-11-11) wrote both files correctly on its
-    first write, then spent 49 of 52 calls reading the same file and running the same passing check in turn until its turns ran out."""
+    first write, then spent 49 of 52 calls reading the same file and running the same passing check in turn until its turns ran out.
+    A read is refused only when what it would show is in front of the agent: the task's own files (`given`), or an earlier read of the same text
+    that its history still shows uncut (_rows)."""
     a = action.get("action"); prev = turns(rd, member, visit)
     if a == "write":
         try: now = scope.read_text(ws, agent, action.get("path") or "", limit=2_000_000)
         except (ValidationError, OSError, UnicodeError): return None
         return f"{action.get('path')} already has exactly this text, so there is nothing to write; if your part is done, finish" if _sha(now) == sha else None
+    if a == "read" and action.get("path") in given:
+        return f"the text of {action.get('path')} is shown whole in your task, under \"### file {action.get('path')}\". {_next_step(agent, prev)}"
     if sha is None or a not in ("read", "list", "check"): return None
+    whole = _rows(prev, given)[1] if a == "read" else None
     for n, r in reversed(list(enumerate(prev, 1))):
         if r.get("action") != a or r.get("sha") != sha or (r.get("result") or "").startswith("error:"): continue
         if a == "read" and r.get("path") != action.get("path"): continue
-        if a == "read": return f"you read {action.get('path')} on turn {n} and it has not changed since: its text is above. Do something else, or finish"
-        if a == "list": return f"no file has changed since you listed them on turn {n}. Do something else, or finish"
+        if a == "read":
+            if n not in whole: return None          # it was cut to fit: reading it again is the only way to see it
+            return f"you read {action.get('path')} on turn {n} and it has not changed since: its text is above. {_next_step(agent, prev)}"
+        if a == "list": return f"no file has changed since you listed them on turn {n}. {_next_step(agent, prev)}"
         return f"no file has changed since your check on turn {n}, so the result is the same: {(r.get('result') or '').splitlines()[0][:300]}"
     return None
 
@@ -176,13 +192,17 @@ def summary(action):
     return a or "?"
 
 def record(rd, member, visit, node, action, result, sha=None, inv=None):
-    """One turn. A turn already recorded for this invocation (the action was carried out again after a crash) is returned, not added."""
+    """One turn. A turn already recorded for this invocation (the action was carried out again after a crash) is returned, not added.
+    A read is kept whole (tools.read already stops at READ_CHARS): until 2026-11-13 every result was cut to RESULT_CHARS without a mark, so a
+    9020-character SPEC.md was shown cut mid-sentence while a second read was refused as "its text is above"."""
+    cap = READ_CHARS + 200 if action.get("action") == "read" else RESULT_CHARS
     os.makedirs(rd, exist_ok=True)
     if inv:
         for r in turns(rd, member, visit):
             if r.get("inv") == inv: return r
     row = {**({"inv": inv} if inv else {}), "member": member, "visit": visit, "node": node, "action": action.get("action"), "summary": summary(action), "path": action.get("path"), "sha": sha,
-           "key": json.dumps({k: v for k, v in action.items() if k != "reason"}, sort_keys=True), "result": (result or "")[:RESULT_CHARS]}
+           "key": json.dumps({k: v for k, v in action.items() if k != "reason"}, sort_keys=True), "result": (result or "")[:cap]}
+    if len(result or "") > cap: row["cut"] = True
     from .journal import append_line
     append_line(_path(rd), json.dumps(row, ensure_ascii=False))
     return row
@@ -204,23 +224,35 @@ def repeated(rd, member, visit, action):
     key = json.dumps({k: v for k, v in action.items() if k != "reason"}, sort_keys=True)
     return bool(prev) and prev[-1].get("key") == key and action.get("action") == "run"
 
-def history(rd, member, visit, memory="task"):
-    """The agent's own turns as text for its next call: this visit's turns (the last three results whole, and the latest read of each file and the
-    latest check, since asking for those again is refused while nothing has changed; older ones shortened); with project or persistent memory also
-    one line for each turn of its earlier visits."""
+def _given_note(path): return f"(the text of {path} is shown whole in your task, under \"### file {path}\")"
+
+def _rows(now, given=()):
+    """(rows, whole): this visit's turns as prompt text, newest first, and the turn numbers whose result is shown uncut. The newest results and
+    the latest read of each file are kept whole while the budget lasts; a file the task already shows whole is not shown a second time.
+    In the 2026-11-13 toolbox series a builder read PLAN.md, INTERFACES.md and SPEC.md (also in its task): the budget cut SPEC.md mid-sentence,
+    its read again was refused as "its text is above", and the builder was stopped after three refusals without writing anything."""
+    rows, whole, budget, kept = [], set(), TURNS_CHARS, set()
+    for i, r in reversed(list(enumerate(now, 1))):
+        res = r.get("result") or ""; full = not r.get("cut")
+        if r.get("cut"): res += " ... (cut)"
+        what = (r.get("action"), r.get("path")) if r.get("action") in ("read", "check", "list") and not res.startswith("error:") else None
+        if what and what[0] == "read" and what[1] in given: res = _given_note(what[1])
+        if len(now) - i >= 3 and what in kept | {None} and len(res) > 300: res, full = res[:300] + " ... (cut)", False
+        kept.add(what)
+        if len(res) > budget: res, full = res[:max(budget, 0)] + " ... (cut)", False
+        budget -= len(res)
+        if full: whole.add(i)
+        rows.append(f"{i}. {r['summary']}" + (f"\n{res}" if res else ""))
+    return rows, whole
+
+def history(rd, member, visit, memory="task", given=()):
+    """The agent's own turns as text for its next call (_rows); with project or persistent memory also one line for each turn of its earlier
+    visits. `given`: the files its task already shows whole."""
     now = turns(rd, member, visit); parts = []
     if memory in ("project", "persistent"):
         old = [r for r in turns(rd, member) if r.get("visit") != visit]
         if old: parts.append("What you did earlier in this project:\n" + "\n".join(f"- {r['summary']}" for r in old[-20:]))
     if now:
-        rows, budget, kept = [], TURNS_CHARS, set()
-        for i, r in reversed(list(enumerate(now, 1))):
-            res = r.get("result") or ""
-            what = (r.get("action"), r.get("path")) if r.get("action") in ("read", "check", "list") and not res.startswith("error:") else None
-            if len(now) - i >= 3 and what in kept | {None} and len(res) > 300: res = res[:300] + " ... (cut)"
-            kept.add(what)
-            if len(res) > budget: res = res[:max(budget, 0)] + " ... (cut)"
-            budget -= len(res)
-            rows.append(f"{i}. {r['summary']}" + (f"\n{res}" if res else ""))
+        rows, _ = _rows(now, given)
         parts.append(f"Your turns on this task so far ({len(now)}, oldest first):\n" + "\n\n".join(reversed(rows)))
     return "\n\n".join(parts)

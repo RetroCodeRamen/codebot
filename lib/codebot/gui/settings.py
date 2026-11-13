@@ -18,7 +18,7 @@ META = {
     "KEEP_ALIVE": ("model", "text", r"^\d+[smh]$", "next round", _A, "how long the model stays loaded between requests"),
     "OLLAMA_PORT": ("model", "int", (1024, 65535), "next run", _M, "the private model server's port"),
     "THINK": ("model", "choice", ("off", "on"), "next run", _A, "legacy opencode loop only"),
-    "DRAFTS_MINUTES": ("drafts", "float", (1, 1440), "next round", _A, "the whole drafts run's budget (not the benchmark's per-task minutes)"),
+    "DRAFTS_MINUTES": ("drafts", "float", (0, 10_000_000), "next round", _A, "the whole drafts run's time budget; 0 = no limit (benchmarks set their own)"),
     "DRAFTS_PATIENCE": ("drafts", "int", (1, 10), "next round", _A, ""),
     "DRAFTS_MAX_ROUNDS": ("drafts", "int", (1, 1000), "next round", _A, ""),
     "DRAFTS_NUM_PREDICT": ("drafts", "int", (500, 32000), "next round", _A, ""),
@@ -58,7 +58,7 @@ META = {
 }
 # keys codebot itself writes into project.env: shown, never edited here
 STRUCTURAL = {"WORKDIR", "RUNDIR", "WORKFLOW", "MODE", "MEMORY_DIR", "TARGETS", "BENCH", "CAPBENCH", "SANDBOX_PATH", "SANDBOX_SETENV"}
-CODE_DEFAULTS = {"DRAFTS_MINUTES": "60", "DRAFTS_PATIENCE": "1", "DRAFTS_MAX_ROUNDS": "60", "DRAFTS_NUM_PREDICT": "6000", "DRAFTS_TEMPERATURE": "0.2",
+CODE_DEFAULTS = {"DRAFTS_MINUTES": "0", "DRAFTS_PATIENCE": "1", "DRAFTS_MAX_ROUNDS": "60", "DRAFTS_NUM_PREDICT": "6000", "DRAFTS_TEMPERATURE": "0.2",
                  "DRAFTS_SEED": "1", "NUM_CTX": "32768", "SANDBOX": "none", "THERMAL_GUARD": "0", "NTFY_ENABLED": "1", "PHONE_CONTROL": "1"}
 
 class SettingError(ValueError): pass

@@ -180,7 +180,26 @@ loop, the benchmark-runner tests that use ladder level 1 as scaffolding (port to
 Harness rules whose only justification was that material and that are therefore unverified now: the screening and repair rules of the task
 pipeline (`grounding.screen`, `checkspec.repair_plan`, `rederive`), and the drafts constants (patience 1, the reply cap, the loop stop).
 
-**STATE CHECKPOINT (2026-11-12 evening; uncommitted work in the tree, read this before touching it).** Last pushed commit: dd19ea4. Two jobs
+**STATE CHECKPOINT (2026-11-13).** Pushed: e68b3db (job (2) below is in it). The toolbox series `tb1` ran (seed 1; results in
+`bench/teams/results/tb1.jsonl`, log `logs/compare-tb1.log`). Hidden tests passed, drafts / plan / review / full: toolbox_04 34 / 0 / 0 / 0 of 80;
+toolbox_10 0 / 23 / 0 / 5 of 197; toolbox_20 214 / 31 / did not start (the forced small team does not fit 16k) / 15 of 335. **The team numbers
+measure harness bugs, not the team design:** (a) `tools.record` cut every turn result to 6000 characters without a mark, so a 9020-character
+SPEC.md read was shown cut mid-sentence while reading it again was refused as "its text is above"; builders read PLAN/INTERFACES/SPEC, were
+refused three times and were stopped having written nothing (`wc`: 111 tokens in 8 calls); (b) SPEC.md was in the task and again in the history;
+(c) a forced `PIPELINE_SHAPE=plan` became the manager's teams when the program was estimated not to fit, so on 10 and 20 tools the plan arm was
+a second full arm. Fixed after the series (tools._rows / unchanged / record; teamgen.compile_team): reads are recorded whole, a cut result is
+marked and may be read again, a file the task shows is not read twice, a refused writer that has not written is told to write. **Drafts** is
+luck about the 6000-token reply cap: a 10- or 20-tool program does not fit one reply; on 20 tools partial repair rounds pieced it together by
+round 4, on 10 tools they never did. One seed: noise. Replaying the stalled builder's prompt with those fixes (one call, 8000-token cap): it
+writes, and runs away, the same function 26 times under ever longer names (get_lines_with_numbers_and_headers_and_prefix...), 16 minutes to the
+cap. The toolbox_04 plan/review build replies were the same kind of runaway (`total_chars = sum(...)` 25 times), not merely long code.
+`drafts.loop_watch` gained `heavy` (LOOP_HEAVY=8: the same 8-line run 8 times in one file stops the reply; on the 445 recorded replies: 13 of 28
+cut-off replies caught instead of 9, none of the 371 that ended on their own) and `json_text`; pipeline agent calls now use it (a stopped loop
+is a turn with an error). **No time limits in production (the user, 2026-11-13: a build may run a week):** DRAFTS_MINUTES defaults to 0 = no
+cap; every model call is streamed, so `timeout` is a stall timeout (before, a reply over 15 minutes was dropped and asked for again, 3 times).
+Benchmarks keep their budgets. Next: rerun the team arms on toolbox_10 / _20, then more seeds.
+
+**Earlier checkpoint (2026-11-12 evening). uncommitted work in the tree, read this before touching it).** Last pushed commit: dd19ea4. Two jobs
 are in progress on top of it, both uncommitted:
 (1) *Removing what was built on AI-written references*: the replay corpus, its test, the evaluation kit and `codebot eval` are deleted and the
 docs follow. Not yet done: `tests/test_z_drafts.py` (pins prompts to `bench/baselines/bare_py.py`; uses ladder levels 1, 2, 3 and calc_go),
